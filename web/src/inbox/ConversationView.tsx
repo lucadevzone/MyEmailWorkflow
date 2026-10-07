@@ -6,7 +6,12 @@ import { colorFor, fileSize, initials, longDate, personLabel, shortDate } from '
 
 export function ConversationView({ id }: { id: string }) {
   const qc = useQueryClient();
-  const { data, isLoading, error } = useQuery({ queryKey: ['conversation', id], queryFn: () => api.conversation(id) });
+  const { data, isLoading, error } = useQuery({ queryKey: ['conversation', id], queryFn: () => api.conversation(id), retry: false });
+
+  // Conversazione sparita (unita a un'altra, o elenco non aggiornato): si riallinea l'elenco.
+  useEffect(() => {
+    if (error) qc.invalidateQueries({ queryKey: ['conversations'] });
+  }, [error, qc]);
   const noise = useMutation({
     mutationFn: (isNoise: boolean) => api.setNoise(id, isNoise),
     onSuccess: () => {

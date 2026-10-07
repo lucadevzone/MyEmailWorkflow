@@ -7,6 +7,13 @@ export function useServerEvents() {
   const qc = useQueryClient();
   useEffect(() => {
     const es = new EventSource('/api/events');
+    // Alla (ri)connessione i dati possono essere cambiati mentre eravamo scollegati
+    // (riavvio del server, rete assente): si ricarica tutto.
+    let connectedOnce = false;
+    es.onopen = () => {
+      if (connectedOnce) qc.invalidateQueries();
+      connectedOnce = true;
+    };
     es.onmessage = (msg) => {
       const event = JSON.parse(msg.data) as ServerEvent;
       if (event.type === 'sync') {
