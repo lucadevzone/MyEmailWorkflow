@@ -3,6 +3,7 @@ import { openDb } from './db/client.ts';
 import { runMigrations } from './db/migrate.ts';
 import { buildApp } from './app.ts';
 import { buildServices } from './services.ts';
+import { enqueueMissingSummaries } from './ai/summarize.ts';
 
 const { db, sqlite } = openDb();
 runMigrations(db);
@@ -12,6 +13,7 @@ const app = buildApp({ ...services, port: config.port });
 
 const shutdown = async () => {
   services.runner.stop();
+  services.jobs.stop();
   await services.sync.stopAll();
   await app.close();
   sqlite.close();
@@ -23,4 +25,6 @@ process.on('SIGTERM', shutdown);
 await app.listen({ host: config.host, port: config.port });
 
 services.runner.start();
+services.jobs.start();
+enqueueMissingSummaries(db);
 for (const account of services.accounts.list()) services.sync.start(account);

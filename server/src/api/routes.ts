@@ -20,6 +20,10 @@ import { ActionError, composeSchema, type MailActions } from '../actions/mail-ac
 import type { ActivityQueueDto, ConversationView } from '@mmw/shared';
 import { ZodError, type ZodType } from 'zod';
 
+import { PeopleError, contactInputSchema, groupInputSchema, type PeopleService } from '../people/service.ts';
+import { NotesError, noteInputSchema, type NotesService } from '../notes/service.ts';
+import type { PeopleScope } from '../people/service.ts';
+
 export interface RouteDeps {
   db: Db;
   sqlite: Database.Database;
@@ -28,6 +32,8 @@ export interface RouteDeps {
   activities: ActivityService;
   runner: ActivityRunner;
   actions: MailActions;
+  people: PeopleService;
+  notes: NotesService;
 }
 
 function parse<T>(schema: ZodType<T>, body: unknown): T {
@@ -43,7 +49,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   // Errori di validazione e di dominio → 400 con messaggio leggibile.
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ZodError) return reply.code(400).send({ error: err.issues.map((i) => i.message).join('; ') });
-    if (err instanceof ProjectError || err instanceof ActivityError || err instanceof ActionError) {
+    if (
+      err instanceof ProjectError ||
+      err instanceof ActivityError ||
+      err instanceof ActionError ||
+      err instanceof PeopleError ||
+      err instanceof NotesError
+    ) {
       return reply.code(400).send({ error: err.message });
     }
     app.log.error(err);
@@ -106,14 +118,18 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
 
   // ─── Conversazioni ─────────────────────────────────────────────────────────
 
-  app.get<{ Querystring: { view?: string; projectId?: string; archived?: string; before?: string; limit?: string } }>(
+  app.get<{
+    Querystring: { view?: string; projectId?: string; person?: string; archived?: string; before?: string; limit?: string };
+  }>(
     '/api/conversations',
     async (req, reply) => {
       const view = (req.query.view ?? 'inbox') as ConversationView;
-      if (!['inbox', 'noise', 'project'].includes(view)) return reply.code(400).send({ error: 'view non valida' });
+      if (!['inbox', 'noise', 'project', 'person'].includes(view)) return reply.code(400).send({ error: 'view non valida' });
       return conversationsSvc.list({
         view,
         projectId: req.query.projectId,
+        person: req.query.person,
+        personAddressIds: req.query.person ? deps.people.addressIdsFor(req.query.person) : undefined,
         archived: req.query.archived === '1',
         before: req.query.before ? Number(req.query.before) : undefined,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
@@ -246,5 +262,127 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   app.post('/api/activities/run', async () => {
     void deps.runner.run();
     return { ok: true };
+  });
+
+  // ─── Persone ───────────────────────────────────────────────────────────────
+
+  app.get<{ Querystring: { view?: string; projectId?: string } }>('/api/people', async (req, reply) => {
+    const v = req.query.view ?? 'all';
+    let scope: PeopleScope;
+    if (v === 'project') {
+      if (!req.query.projectId) return reply.code(400).send({ error: 'projectId mancante' });
+      scope = { view: 'project', projectId: req.query.projectId };
+    } else if (v === 'inbox' || v === 'noise' || v === 'all') scope = { view: v };
+    else return reply.code(400).send({ error: 'view non valida' });
+    return deps.people.inScope(scope);
+  });
+
+  app.get('/api/people/directory', async () => deps.people.directory());
+
+  app.get<{ Querystring: { emails?: string } }>('/api/people/suggest-project', async (req) =>
+    deps.people.suggestProjects((req.query.emails ?? '').split(',')),
+  );
+
+  app.post('/api/contacts', async (req, reply) => {
+    const person = deps.people.createContact(parse(contactInputSchema, req.body));
+    bus.publish({ type: 'people' });
+    return reply.code(201).send(person);
+  });
+
+  app.patch<{ Params: { id: string } }>('/api/contacts/:id', async (req) => {
+    const person = deps.people.updateContact(req.params.id, parse(contactInputSchema.partial(), req.body));
+    bus.publish({ type: 'people' });
+    return person;
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/contacts/:id', async (req, reply) => {
+    deps.people.deleteContact(req.params.id);
+    bus.publish({ type: 'people' });
+    return reply.code(204).send();
+  });
+
+  app.post<{ Params: { id: string }; Body: { contactId?: string; name?: string; email?: string } }>(
+    '/api/projects/:id/contacts',
+    async (req, reply) => {
+      const person = deps.people.addToProject(req.params.id, req.body ?? {});
+      bus.publish({ type: 'people' });
+      return reply.code(201).send(person);
+    },
+  );
+
+  app.delete<{ Params: { id: string; contactId: string } }>('/api/projects/:id/contacts/:contactId', async (req, reply) => {
+    deps.people.removeFromProject(req.params.id, req.params.contactId);
+    bus.publish({ type: 'people' });
+    return reply.code(204).send();
+  });
+
+  app.post('/api/groups', async (req, reply) => {
+    const id = deps.people.saveGroup(null, parse(groupInputSchema, req.body));
+    bus.publish({ type: 'people' });
+    return reply.code(201).send({ id });
+  });
+
+  app.put<{ Params: { id: string } }>('/api/groups/:id', async (req) => {
+    deps.people.saveGroup(req.params.id, parse(groupInputSchema, req.body));
+    bus.publish({ type: 'people' });
+    return { id: req.params.id };
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/groups/:id', async (req, reply) => {
+    deps.people.deleteGroup(req.params.id);
+    bus.publish({ type: 'people' });
+    return reply.code(204).send();
+  });
+
+  // ─── Note e risorse ────────────────────────────────────────────────────────
+
+  const touched = (conversationId: string | null) => {
+    if (conversationId) bus.publish({ type: 'conversations', ids: [conversationId] });
+  };
+
+  app.post('/api/notes', async (req, reply) => {
+    const note = deps.notes.createNote(parse(noteInputSchema, req.body));
+    touched(note.conversationId);
+    return reply.code(201).send(note);
+  });
+
+  app.patch<{ Params: { id: string }; Body: { body?: string } }>('/api/notes/:id', async (req) => {
+    const note = deps.notes.updateNote(req.params.id, req.body?.body ?? '');
+    touched(note.conversationId);
+    return note;
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/notes/:id', async (req, reply) => {
+    touched(deps.notes.deleteNote(req.params.id));
+    return reply.code(204).send();
+  });
+
+  // Caricamento file: corpo binario, nome nel parametro "filename".
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 50 * 1024 * 1024 }, (_req, body, done) =>
+    done(null, body),
+  );
+
+  app.post<{ Params: { id: string }; Querystring: { filename?: string } }>('/api/conversations/:id/resources', async (req, reply) => {
+    const filename = (req.query.filename ?? 'file').slice(0, 255);
+    const mime = (req.headers['x-file-type'] as string | undefined) || null;
+    const resource = deps.notes.addFile({ conversationId: req.params.id }, filename, req.body as Buffer, mime);
+    touched(req.params.id);
+    return reply.code(201).send(resource);
+  });
+
+  app.get<{ Params: { id: string } }>('/api/resources/:id', async (req, reply) => {
+    const r = deps.notes.getResource(req.params.id);
+    if (!r?.blobSha) return reply.code(404).send({ error: 'Risorsa non trovata' });
+    const filename = r.title.replace(/["\\\r\n]/g, '_');
+    return reply
+      .header('content-type', 'application/octet-stream')
+      .header('content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`)
+      .header('x-content-type-options', 'nosniff')
+      .send(deps.blobs.read(r.blobSha));
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/resources/:id', async (req, reply) => {
+    touched(deps.notes.deleteResource(req.params.id));
+    return reply.code(204).send();
   });
 }

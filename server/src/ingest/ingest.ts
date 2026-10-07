@@ -22,6 +22,7 @@ import type { BlobStore } from '../store/blobs.ts';
 import { cleanBody, makeSnippet, normalizeSubject } from './clean-text.ts';
 import { detectNoise } from './noise.ts';
 import { pendingSeenIntent } from '../activities/service.ts';
+import { enqueueSummary } from '../ai/summarize.ts';
 
 export interface RawFetched {
   uid: number | null;
@@ -106,7 +107,7 @@ export async function ingestMessage(
   const t = now();
 
   // 3. Scrittura atomica
-  return ctx.db.transaction((tx) => {
+  const result = ctx.db.transaction((tx) => {
     const conversationId = resolveConversation(tx as unknown as Db, {
       gmThreadId: raw.gmThreadId ?? null,
       rfcMessageId,
@@ -198,6 +199,15 @@ export async function ingestMessage(
 
     return { messageId, conversationId, created: true };
   });
+
+  // Ogni nuovo messaggio aggiorna la sintesi della conversazione (non per il rumore).
+  const conv = ctx.db
+    .select({ isNoise: conversations.isNoise })
+    .from(conversations)
+    .where(eq(conversations.id, result.conversationId))
+    .get();
+  if (conv && !conv.isNoise) enqueueSummary(ctx.db, result.conversationId);
+  return result;
 }
 
 // ─── Threading ───────────────────────────────────────────────────────────────

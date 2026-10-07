@@ -38,7 +38,7 @@ export class ProjectService {
       .groupBy(conversations.projectId)
       .all();
     const unread = this.db
-      .select({ projectId: conversations.projectId, n: sql<number>`count(distinct ${conversations.id})` })
+      .select({ projectId: conversations.projectId, n: sql<number>`count(${messages.id})` })
       .from(conversations)
       .innerJoin(messages, eq(messages.conversationId, conversations.id))
       .where(

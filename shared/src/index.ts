@@ -99,7 +99,8 @@ export type ServerEvent =
   | { type: 'sync'; status: SyncStatusDto }
   | { type: 'conversations'; ids: string[] }
   | { type: 'projects' }
-  | { type: 'activities' };
+  | { type: 'activities' }
+  | { type: 'people' };
 
 // ─── Conversazioni ───────────────────────────────────────────────────────────
 
@@ -111,11 +112,18 @@ export interface PersonRef {
 export interface ConversationListItem {
   id: string;
   subject: string | null;
+  /** Sintesi breve generata dall'LLM (null finché non è pronta). */
+  summary: string | null;
+  summaryDetailed: string | null;
   snippet: string | null;
   lastMessageAt: number;
   messageCount: number;
+  /** Messaggi non letti (in arrivo). */
   unreadCount: number;
   hasAttachments: boolean;
+  attachmentCount: number;
+  noteCount: number;
+  resourceCount: number;
   isNoise: boolean;
   projectId: string | null;
   archived: boolean;
@@ -134,6 +142,8 @@ export interface AttachmentDto {
 
 export interface MessageDto {
   id: string;
+  /** Messaggio a cui risponde (nella stessa conversazione): base dell'albero. */
+  parentId: string | null;
   accountId: string;
   direction: 'in' | 'out';
   from: PersonRef | null;
@@ -157,14 +167,93 @@ export interface ConversationDetail {
   isNoise: boolean;
   archived: boolean;
   summary: string | null;
+  summaryDetailed: string | null;
   messages: MessageDto[];
+  /** Allegati di tutti i messaggi (esclusi quelli inline). */
+  attachments: (AttachmentDto & { messageId: string; date: number; from: PersonRef | null })[];
+  notes: NoteDto[];
+  resources: ResourceDto[];
 }
 
-export type ConversationView = 'inbox' | 'noise' | 'project';
+export interface NoteDto {
+  id: string;
+  conversationId: string | null;
+  projectId: string | null;
+  body: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ResourceDto {
+  id: string;
+  conversationId: string | null;
+  projectId: string | null;
+  kind: 'file' | 'link';
+  title: string;
+  url: string | null;
+  size: number | null;
+  mime: string | null;
+  createdAt: number;
+}
+
+// ─── Persone e gruppi ────────────────────────────────────────────────────────
+
+/**
+ * Una persona è un contatto confermato (con uno o più indirizzi) oppure un indirizzo
+ * visto nelle email e non ancora associato a un contatto.
+ * key: "c:<contactId>" oppure "a:<addressId>".
+ */
+export interface PersonDto {
+  key: string;
+  contactId: string | null;
+  name: string | null;
+  emails: string[];
+  conversationCount: number;
+  lastSeenAt: number | null;
+  /** Associato esplicitamente al progetto (solo nelle viste di progetto). */
+  member?: boolean;
+}
+
+export interface GroupDto {
+  id: string;
+  name: string;
+  members: PersonDto[];
+}
+
+export interface PeopleDirectoryDto {
+  contacts: PersonDto[];
+  /** Indirizzi frequenti non ancora confermati come contatti. */
+  suggested: PersonDto[];
+  groups: GroupDto[];
+}
+
+export interface ContactInput {
+  name: string;
+  emails: string[];
+}
+
+export interface ProjectSuggestion {
+  projectId: string;
+  name: string;
+  conversations: number;
+}
+
+export type ConversationView = 'inbox' | 'noise' | 'project' | 'person';
+
+export interface UnreadCountsDto {
+  inbox: number;
+  noise: number;
+  inboxUnread: number;
+  noiseUnread: number;
+  /** Messaggi non letti fuori dal rumore (Da smistare + progetti attivi). */
+  totalUnread: number;
+}
 
 export interface ConversationQuery {
   view: ConversationView;
   projectId?: string;
+  /** Filtra le conversazioni in cui compare questa persona (PersonDto.key). */
+  person?: string;
   archived?: boolean;
   before?: number;
 }
@@ -179,6 +268,7 @@ export interface ProjectDto {
   color: string | null;
   archived: boolean;
   conversationCount: number;
+  /** Messaggi non letti nelle conversazioni attive del progetto. */
   unreadCount: number;
   lastMessageAt: number | null;
 }

@@ -9,7 +9,8 @@
     "check:imap": "tsx --env-file-if-exists=../.env.local scripts/check-imap.ts",
     "typecheck": "tsc -p .",
     "test": "vitest run",
-    "db:reset-mail": "tsx --env-file-if-exists=../.env.local scripts/reset-mail.ts"
+    "db:reset-mail": "tsx --env-file-if-exists=../.env.local scripts/reset-mail.ts",
+    "try:summary": "tsx --env-file-if-exists=../.env.local scripts/try-summary.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",

@@ -84,7 +84,10 @@ export const conversations = sqliteTable(
     /** NULL = "Da smistare". */
     projectId: text('project_id').references(() => projects.id),
     subject: text('subject'),
+    /** Sintesi breve (una riga), generata dall'LLM a ogni nuovo messaggio. */
     summary: text('summary'),
+    /** Sintesi un po' più dettagliata (4-5 righe), mostrata espandendo la conversazione. */
+    summaryDetailed: text('summary_detailed'),
     summaryUpdatedAt: integer('summary_updated_at'),
     lastMessageAt: integer('last_message_at').notNull(),
     gmThreadId: text('gm_thread_id'),
@@ -196,6 +199,17 @@ export const groupMembers = sqliteTable(
     contactId: text('contact_id').notNull().references(() => contacts.id),
   },
   (t) => [primaryKey({ columns: [t.groupId, t.contactId] })],
+);
+
+/** Contatti associati esplicitamente a un progetto (oltre a quelli che vi compaiono nelle email). */
+export const projectContacts = sqliteTable(
+  'project_contacts',
+  {
+    projectId: text('project_id').notNull().references(() => projects.id),
+    contactId: text('contact_id').notNull().references(() => contacts.id),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.contactId] })],
 );
 
 // ─── Allegati, risorse, versioni ─────────────────────────────────────────────

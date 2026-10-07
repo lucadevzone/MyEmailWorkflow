@@ -12,10 +12,15 @@ import { MailActions } from './actions/mail-actions.ts';
 import { createProvider } from './mail/factory.ts';
 import { sendViaSmtp, type SmtpSender } from './mail/smtp.ts';
 import type { MailProviderClient } from './mail/provider.ts';
+import { PeopleService } from './people/service.ts';
+import { NotesService } from './notes/service.ts';
+import { JobRunner } from './jobs/runner.ts';
+import { ollamaSummarizer, summarizeConversation, type Summarizer } from './ai/summarize.ts';
 
 export interface ServiceOverrides {
   createProvider?: (account: AccountDto) => MailProviderClient;
   sendSmtp?: SmtpSender;
+  summarizer?: Summarizer;
 }
 
 export function buildServices(db: Db, sqlite: Database.Database, blobDir: string, o: ServiceOverrides = {}) {
@@ -35,5 +40,10 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
     batchMinutes: () => settings.get().activityBatchMinutes,
   });
   const actions = new MailActions({ db, sqlite, activities, runner, getAccount: (id) => accounts.get(id) });
-  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions };
+  const people = new PeopleService(db, sqlite);
+  const notes = new NotesService(db, blobs);
+  const jobs = new JobRunner(db);
+  const summarizer = o.summarizer ?? ollamaSummarizer;
+  jobs.register('summarize', (p) => summarizeConversation(db, (p as { conversationId: string }).conversationId, summarizer));
+  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs };
 }

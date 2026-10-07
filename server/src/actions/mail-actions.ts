@@ -14,6 +14,7 @@ import { cleanBody, makeSnippet, normalizeSubject } from '../ingest/clean-text.t
 import { upsertAddress } from '../ingest/ingest.ts';
 import type { ActivityService, SendPayload } from '../activities/service.ts';
 import type { ActivityRunner } from '../activities/runner.ts';
+import { enqueueSummary } from '../ai/summarize.ts';
 
 export const composeSchema = z
   .object({
@@ -207,6 +208,7 @@ export class MailActions {
 
     bus.publish({ type: 'conversations', ids: [result.conversationId] });
     bus.publish({ type: 'projects' });
+    enqueueSummary(db, result.conversationId);
     if (input.urgent) void this.deps.runner.run([result.activityId]);
     return result;
   }
