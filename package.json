@@ -1,0 +1,16 @@
+{
+  "name": "my-mail-workflow",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @mmw/server --filter @mmw/web dev",
+    "db:generate": "pnpm --filter @mmw/server db:generate",
+    "db:migrate": "pnpm --filter @mmw/server db:migrate",
+    "check:imap": "pnpm --filter @mmw/server check:imap",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

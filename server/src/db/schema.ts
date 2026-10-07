@@ -1,0 +1,375 @@
+// Schema del database. Vedi docs/02-system-design.md §5.
+//
+// Convenzioni:
+// - ID: ULID (text).
+// - Timestamp: millisecondi epoch (integer).
+// - Le entità applicative hanno created_at / updated_at / deleted_at (tombstone)
+//   per predisporre la sincronizzazione cloud futura.
+// - Il progetto di un messaggio NON è salvato sul messaggio: si ricava sempre da
+//   conversations.project_id, così tutte le email di una conversazione stanno
+//   nello stesso progetto per costruzione.
+//
+// Le tabelle virtuali (FTS5, sqlite-vec) sono create in una migrazione SQL custom.
+
+import { sql } from 'drizzle-orm';
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  primaryKey,
+  index,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
+
+const meta = () => ({
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+  deletedAt: integer('deleted_at'),
+});
+
+// ─── Account e sync ──────────────────────────────────────────────────────────
+
+export const accounts = sqliteTable('accounts', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  email: text('email').notNull(),
+  provider: text('provider', { enum: ['gmail', 'imap'] }).notNull(),
+  imapHost: text('imap_host').notNull(),
+  imapPort: integer('imap_port').notNull(),
+  imapSecure: integer('imap_secure', { mode: 'boolean' }).notNull(),
+  smtpHost: text('smtp_host').notNull(),
+  smtpPort: integer('smtp_port').notNull(),
+  smtpSecure: integer('smtp_secure', { mode: 'boolean' }).notNull(),
+  username: text('username').notNull(),
+  authType: text('auth_type', { enum: ['password', 'oauth2'] }).notNull(),
+  credentialRef: text('credential_ref').notNull(),
+  color: text('color'),
+  ...meta(),
+});
+
+export const syncState = sqliteTable(
+  'sync_state',
+  {
+    accountId: text('account_id').notNull().references(() => accounts.id),
+    mailbox: text('mailbox').notNull(),
+    uidValidity: text('uid_validity'),
+    lastUid: integer('last_uid'),
+    highestModseq: text('highest_modseq'),
+    oldestSyncedDate: integer('oldest_synced_date'),
+    backfillDone: integer('backfill_done', { mode: 'boolean' }).notNull().default(false),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.mailbox] })],
+);
+
+// ─── Progetti e conversazioni ────────────────────────────────────────────────
+
+export const projects = sqliteTable('projects', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  outgoingAccountId: text('outgoing_account_id').notNull().references(() => accounts.id),
+  archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+  color: text('color'),
+  ...meta(),
+});
+
+export const conversations = sqliteTable(
+  'conversations',
+  {
+    id: text('id').primaryKey(),
+    /** NULL = "Da smistare". */
+    projectId: text('project_id').references(() => projects.id),
+    subject: text('subject'),
+    summary: text('summary'),
+    summaryUpdatedAt: integer('summary_updated_at'),
+    lastMessageAt: integer('last_message_at').notNull(),
+    gmThreadId: text('gm_thread_id'),
+    /** Newsletter/notifiche: escluse da Da smistare, embedding e task. */
+    isNoise: integer('is_noise', { mode: 'boolean' }).notNull().default(false),
+    ...meta(),
+  },
+  (t) => [
+    index('conversations_project_last').on(t.projectId, t.lastMessageAt),
+    index('conversations_gm_thread').on(t.gmThreadId),
+  ],
+);
+
+export const messages = sqliteTable(
+  'messages',
+  {
+    id: text('id').primaryKey(),
+    conversationId: text('conversation_id').notNull().references(() => conversations.id),
+    accountId: text('account_id').notNull().references(() => accounts.id),
+    direction: text('direction', { enum: ['in', 'out'] }).notNull(),
+    rfcMessageId: text('rfc_message_id'),
+    inReplyTo: text('in_reply_to'),
+    /** JSON: string[] dell'header References. */
+    references: text('references'),
+    gmMsgid: text('gm_msgid'),
+    gmThreadId: text('gm_thread_id'),
+    mailbox: text('mailbox'),
+    uid: integer('uid'),
+    fromAddress: text('from_address'),
+    fromName: text('from_name'),
+    subject: text('subject'),
+    date: integer('date').notNull(),
+    snippet: text('snippet'),
+    bodyText: text('body_text'),
+    /** Testo senza parti quotate e firma: base per embedding e riassunti. */
+    bodyTextClean: text('body_text_clean'),
+    rawBlobSha: text('raw_blob_sha'),
+    htmlBlobSha: text('html_blob_sha'),
+    /** JSON: string[] dei flag IMAP. */
+    flags: text('flags'),
+    analyzedAt: integer('analyzed_at'),
+    ...meta(),
+  },
+  (t) => [
+    index('messages_conversation_date').on(t.conversationId, t.date),
+    index('messages_rfc_id').on(t.rfcMessageId),
+    uniqueIndex('messages_account_gm_msgid').on(t.accountId, t.gmMsgid),
+    index('messages_account_mailbox_uid').on(t.accountId, t.mailbox, t.uid),
+  ],
+);
+
+// ─── Contatti e gruppi ───────────────────────────────────────────────────────
+
+export const contacts = sqliteTable('contacts', {
+  id: text('id').primaryKey(),
+  displayName: text('display_name').notNull(),
+  avatarBlobSha: text('avatar_blob_sha'),
+  notes: text('notes'),
+  ...meta(),
+});
+
+export const contactAddresses = sqliteTable(
+  'contact_addresses',
+  {
+    id: text('id').primaryKey(),
+    /** NULL = indirizzo visto ma non ancora associato a un contatto. */
+    contactId: text('contact_id').references(() => contacts.id),
+    email: text('email').notNull(),
+    displayName: text('display_name'),
+    lastSeenAt: integer('last_seen_at'),
+    ...meta(),
+  },
+  (t) => [uniqueIndex('contact_addresses_email').on(t.email), index('contact_addresses_contact').on(t.contactId)],
+);
+
+export const messageAddresses = sqliteTable(
+  'message_addresses',
+  {
+    messageId: text('message_id').notNull().references(() => messages.id),
+    contactAddressId: text('contact_address_id').notNull().references(() => contactAddresses.id),
+    role: text('role', { enum: ['from', 'to', 'cc', 'bcc'] }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.messageId, t.contactAddressId, t.role] }),
+    index('message_addresses_address').on(t.contactAddressId),
+  ],
+);
+
+export const contactGroups = sqliteTable('contact_groups', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  ...meta(),
+});
+
+export const groupMembers = sqliteTable(
+  'group_members',
+  {
+    groupId: text('group_id').notNull().references(() => contactGroups.id),
+    contactId: text('contact_id').notNull().references(() => contacts.id),
+  },
+  (t) => [primaryKey({ columns: [t.groupId, t.contactId] })],
+);
+
+// ─── Allegati, risorse, versioni ─────────────────────────────────────────────
+
+/** Storage content-addressed: il file sta in data/blobs/<sha[0:2]>/<sha>. */
+export const blobs = sqliteTable('blobs', {
+  sha256: text('sha256').primaryKey(),
+  size: integer('size').notNull(),
+  mime: text('mime'),
+  createdAt: integer('created_at').notNull(),
+});
+
+export const versionChains = sqliteTable('version_chains', {
+  id: text('id').primaryKey(),
+  conversationId: text('conversation_id').notNull().references(() => conversations.id),
+  logicalName: text('logical_name').notNull(),
+  ...meta(),
+});
+
+export const attachments = sqliteTable(
+  'attachments',
+  {
+    id: text('id').primaryKey(),
+    messageId: text('message_id').notNull().references(() => messages.id),
+    blobSha: text('blob_sha').notNull().references(() => blobs.sha256),
+    filename: text('filename'),
+    mime: text('mime'),
+    size: integer('size').notNull(),
+    contentId: text('content_id'),
+    isInline: integer('is_inline', { mode: 'boolean' }).notNull().default(false),
+    versionChainId: text('version_chain_id').references(() => versionChains.id),
+    versionNo: integer('version_no'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [index('attachments_message').on(t.messageId), index('attachments_chain').on(t.versionChainId)],
+);
+
+export const resources = sqliteTable(
+  'resources',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').references(() => projects.id),
+    conversationId: text('conversation_id').references(() => conversations.id),
+    kind: text('kind', { enum: ['file', 'link'] }).notNull(),
+    blobSha: text('blob_sha').references(() => blobs.sha256),
+    url: text('url'),
+    title: text('title').notNull(),
+    ...meta(),
+  },
+  (t) => [index('resources_project').on(t.projectId)],
+);
+
+// ─── Note, annotazioni, task ─────────────────────────────────────────────────
+
+/** Ancoraggio stile W3C Web Annotation (TextQuoteSelector + TextPositionSelector). */
+export const annotations = sqliteTable(
+  'annotations',
+  {
+    id: text('id').primaryKey(),
+    messageId: text('message_id').notNull().references(() => messages.id),
+    quoteExact: text('quote_exact').notNull(),
+    quotePrefix: text('quote_prefix'),
+    quoteSuffix: text('quote_suffix'),
+    startOffset: integer('start_offset'),
+    endOffset: integer('end_offset'),
+    label: text('label'),
+    comment: text('comment'),
+    ...meta(),
+  },
+  (t) => [index('annotations_message').on(t.messageId)],
+);
+
+export const notes = sqliteTable(
+  'notes',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').references(() => projects.id),
+    conversationId: text('conversation_id').references(() => conversations.id),
+    annotationId: text('annotation_id').references(() => annotations.id),
+    body: text('body').notNull(),
+    ...meta(),
+  },
+  (t) => [index('notes_project').on(t.projectId), index('notes_conversation').on(t.conversationId)],
+);
+
+export const tasks = sqliteTable(
+  'tasks',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').references(() => projects.id),
+    conversationId: text('conversation_id').references(() => conversations.id),
+    messageId: text('message_id').references(() => messages.id),
+    annotationId: text('annotation_id').references(() => annotations.id),
+    title: text('title').notNull(),
+    details: text('details'),
+    status: text('status', { enum: ['open', 'done'] }).notNull().default('open'),
+    /** Fractional index: ordinamento manuale della coda. */
+    rank: text('rank').notNull(),
+    priority: integer('priority'),
+    dueDate: integer('due_date'),
+    completedAt: integer('completed_at'),
+    ...meta(),
+  },
+  (t) => [index('tasks_status_rank').on(t.status, t.rank), index('tasks_project').on(t.projectId)],
+);
+
+// ─── Analizzatore, code, impostazioni ────────────────────────────────────────
+
+export const suggestions = sqliteTable(
+  'suggestions',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind', {
+      enum: ['project', 'new_project', 'conversation', 'contact', 'group', 'task', 'action', 'noise'],
+    }).notNull(),
+    subjectType: text('subject_type').notNull(),
+    subjectId: text('subject_id').notNull(),
+    /** JSON specifico per kind. */
+    payload: text('payload').notNull(),
+    confidence: real('confidence'),
+    status: text('status', { enum: ['pending', 'accepted', 'rejected', 'auto_applied'] })
+      .notNull()
+      .default('pending'),
+    model: text('model'),
+    createdAt: integer('created_at').notNull(),
+    resolvedAt: integer('resolved_at'),
+  },
+  (t) => [index('suggestions_subject').on(t.subjectType, t.subjectId), index('suggestions_status').on(t.status)],
+);
+
+/** Coda attività visibile all'utente: operazioni con effetti esterni, annullabili. */
+export const activities = sqliteTable(
+  'activities',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind', { enum: ['send', 'trash', 'archive', 'set_flags'] }).notNull(),
+    accountId: text('account_id').references(() => accounts.id),
+    payload: text('payload').notNull(),
+    status: text('status', { enum: ['pending', 'running', 'done', 'failed', 'cancelled'] })
+      .notNull()
+      .default('pending'),
+    urgent: integer('urgent', { mode: 'boolean' }).notNull().default(false),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    executedAt: integer('executed_at'),
+  },
+  (t) => [index('activities_status').on(t.status, t.createdAt)],
+);
+
+/** Coda interna di lavori in background (parsing, analisi, embedding, backfill). */
+export const jobs = sqliteTable(
+  'jobs',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').notNull(),
+    payload: text('payload').notNull(),
+    priority: integer('priority').notNull().default(0),
+    status: text('status', { enum: ['pending', 'running', 'done', 'failed'] }).notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    runAfter: integer('run_after').notNull(),
+    lastError: text('last_error'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [index('jobs_pick').on(t.status, t.priority, t.runAfter)],
+);
+
+/** Chunk di testo pulito per gli embedding; i vettori stanno nella tabella virtuale chunk_vec. */
+export const chunks = sqliteTable(
+  'chunks',
+  {
+    id: text('id').primaryKey(),
+    messageId: text('message_id').notNull().references(() => messages.id),
+    ord: integer('ord').notNull(),
+    text: text('text').notNull(),
+    model: text('model').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [index('chunks_message').on(t.messageId)],
+);
+
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  /** JSON. */
+  value: text('value').notNull(),
+  updatedAt: integer('updated_at').notNull().default(sql`(unixepoch() * 1000)`),
+});
