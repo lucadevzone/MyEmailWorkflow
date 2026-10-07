@@ -4,13 +4,26 @@
     {
       "name": "server",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@mmw/server", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@mmw/server",
+        "dev"
+      ],
       "port": 4310
     },
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@mmw/web", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@mmw/web",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "web-attach",
+      "url": "http://localhost:5173",
       "port": 5173
     }
   ]

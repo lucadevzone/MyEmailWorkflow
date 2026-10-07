@@ -186,6 +186,7 @@ describe('composizione e invio', () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]!.to).toEqual(['anna@y.it', 'nascosto@z.it']);
     expect(sent[0]!.raw).toContain(`Message-ID: ${msg().rfcMessageId}`);
+    expect(sent[0]!.raw).toContain('From: Prova <me@gmail.com>');
     expect(sent[0]!.raw).not.toMatch(/^Bcc:/im);
     expect(msg().outgoingStatus).toBe('sent');
 

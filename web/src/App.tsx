@@ -53,7 +53,8 @@ export function App() {
         isActive(n) ? 'bg-stone-200 font-medium dark:bg-stone-800' : 'hover:bg-stone-100 dark:hover:bg-stone-900'
       }`}
     >
-      {color && <span className="size-2 shrink-0 rounded-full" style={{ background: color }} />}
+      {/* Quadratino del colore del progetto: diverso dal pallino blu dei non letti. */}
+      {color && <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: color }} />}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {badge ? <span className="text-xs tabular-nums text-stone-500">{badge}</span> : null}
     </button>

@@ -151,7 +151,7 @@ export class MailActions {
           inReplyTo: parent?.rfcMessageId ?? null,
           references: JSON.stringify(references),
           fromAddress: account.email.toLowerCase(),
-          fromName: null,
+          fromName: account.name,
           subject,
           date: t,
           snippet: makeSnippet(bodyTextClean || input.body),
@@ -191,7 +191,8 @@ export class MailActions {
         conversationId,
         messageId,
         createdConversation,
-        fromName: null,
+        // Il nome dell'account è il nome visibile del mittente ("Luca <lucadevzone@gmail.com>").
+        fromName: account.name,
         to: input.to,
         cc: input.cc,
         bcc: input.bcc,

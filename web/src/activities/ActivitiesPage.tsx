@@ -68,7 +68,7 @@ export function ActivitiesPage() {
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-500">Da eseguire</h2>
         {open.length === 0 && <p className="text-sm text-stone-500">Nessuna attività in attesa.</p>}
-        <ul className="divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white dark:divide-stone-800 dark:border-stone-800 dark:bg-stone-900">
+        <ul hidden={open.length === 0} className="divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white dark:divide-stone-800 dark:border-stone-800 dark:bg-stone-900">
           {open.map((a) => (
             <Row key={a.id} a={a}>
               {a.status === 'pending' && (
@@ -98,8 +98,8 @@ export function ActivitiesPage() {
 
       {closed.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-500">Recenti</h2>
-          <ul className="divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white opacity-80 dark:divide-stone-800 dark:border-stone-800 dark:bg-stone-900">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-500">Eseguite di recente</h2>
+          <ul className="divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white dark:divide-stone-800 dark:border-stone-800 dark:bg-stone-900">
             {closed.map((a) => (
               <Row key={a.id} a={a} />
             ))}
@@ -111,14 +111,18 @@ export function ActivitiesPage() {
 }
 
 function Row({ a, children }: { a: ActivityDto; children?: React.ReactNode }) {
-  const s = STATUS[a.status];
+  const s = a.kind === 'send' && a.status === 'done' ? { ...STATUS.done, label: 'Inviata' } : STATUS[a.status];
   return (
     <li className="flex items-center gap-3 px-4 py-2.5">
       <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium ${s.cls}`}>{s.label}</span>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm">
-          {a.urgent && a.status === 'pending' && <span className="mr-1 text-rose-600">●</span>}
-          {a.label}
+        <div className="flex items-center gap-1.5 text-sm">
+          <span className="truncate">{a.label}</span>
+          {a.urgent && (
+            <span className="shrink-0 rounded bg-rose-100 px-1 text-[10px] font-medium uppercase text-rose-700 dark:bg-rose-900/40 dark:text-rose-300">
+              urgente
+            </span>
+          )}
         </div>
         {a.lastError && <div className="truncate text-xs text-rose-600">{a.lastError}</div>}
       </div>

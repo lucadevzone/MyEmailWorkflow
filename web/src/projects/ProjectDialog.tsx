@@ -80,7 +80,7 @@ export function ProjectDialog({ project, onClose, onSaved }: { project?: Project
                 type="button"
                 key={c}
                 onClick={() => setColor(c)}
-                className={`size-6 rounded-full ${color === c ? 'ring-2 ring-stone-900 ring-offset-2 dark:ring-stone-100' : ''}`}
+                className={`size-6 rounded-md ${color === c ? 'ring-2 ring-stone-900 ring-offset-2 dark:ring-stone-100' : ''}`}
                 style={{ background: c }}
                 aria-label={`Colore ${c}`}
               />
