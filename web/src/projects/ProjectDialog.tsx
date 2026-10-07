@@ -4,8 +4,6 @@ import type { ProjectDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { input, button, primary } from '../ui/styles.ts';
 
-const COLORS = ['#2563eb', '#059669', '#d97706', '#db2777', '#7c3aed', '#0891b2', '#65a30d', '#dc2626'];
-
 /** Creazione o modifica di un progetto. */
 export function ProjectDialog({ project, onClose, onSaved }: { project?: ProjectDto; onClose: () => void; onSaved?: (p: ProjectDto) => void }) {
   const qc = useQueryClient();
@@ -13,12 +11,11 @@ export function ProjectDialog({ project, onClose, onSaved }: { project?: Project
   const [name, setName] = useState(project?.name ?? '');
   const [description, setDescription] = useState(project?.description ?? '');
   const [accountId, setAccountId] = useState(project?.outgoingAccountId ?? '');
-  const [color, setColor] = useState(project?.color ?? COLORS[0]!);
   const effectiveAccount = accountId || accounts[0]?.id || '';
 
   const save = useMutation({
     mutationFn: () => {
-      const body = { name, description: description || null, outgoingAccountId: effectiveAccount, color };
+      const body = { name, description: description || null, outgoingAccountId: effectiveAccount };
       return project ? api.updateProject(project.id, body) : api.createProject(body);
     },
     onSuccess: (p) => {
@@ -72,21 +69,6 @@ export function ProjectDialog({ project, onClose, onSaved }: { project?: Project
           </select>
           <span className="block text-xs text-stone-500">Tutte le email del progetto partono da questo account.</span>
         </label>
-        <div className="space-y-1 text-sm">
-          <span className="text-stone-500">Colore</span>
-          <div className="flex gap-2">
-            {COLORS.map((c) => (
-              <button
-                type="button"
-                key={c}
-                onClick={() => setColor(c)}
-                className={`size-6 rounded-md ${color === c ? 'ring-2 ring-stone-900 ring-offset-2 dark:ring-stone-100' : ''}`}
-                style={{ background: c }}
-                aria-label={`Colore ${c}`}
-              />
-            ))}
-          </div>
-        </div>
         {(save.error || archive.error) && (
           <div className="text-sm text-rose-600">{((save.error || archive.error) as Error).message}</div>
         )}

@@ -5,7 +5,14 @@ import type {
   ConversationDetail,
   ConversationListItem,
   ConversationQuery,
+  ContactInput,
+  NoteDto,
+  PeopleDirectoryDto,
+  PersonDto,
   ProjectDto,
+  ProjectSuggestion,
+  ResourceDto,
+  UnreadCountsDto,
   ProjectInput,
   SyncStatusDto,
   ConnectionTestResult,
@@ -38,13 +45,15 @@ export const api = {
   conversations: (q: ConversationQuery) => {
     const p = new URLSearchParams({ view: q.view });
     if (q.projectId) p.set('projectId', q.projectId);
+    if (q.person) p.set('person', q.person);
     if (q.archived) p.set('archived', '1');
     if (q.before) p.set('before', String(q.before));
     return request<ConversationListItem[]>('GET', `/api/conversations?${p}`);
   },
-  conversationCounts: () => request<{ inbox: number; noise: number; inboxUnread: number }>('GET', '/api/conversations/counts'),
+  conversationCounts: () => request<UnreadCountsDto>('GET', '/api/conversations/counts'),
   conversation: (id: string) => request<ConversationDetail>('GET', `/api/conversations/${id}`),
   setNoise: (id: string, isNoise: boolean) => request<{ ok: true }>('POST', `/api/conversations/${id}/noise`, { isNoise }),
+  markMessageRead: (id: string) => request<{ activityIds: string[] }>('POST', `/api/messages/${id}/read`),
   markRead: (id: string) => request<{ activityIds: string[] }>('POST', `/api/conversations/${id}/read`),
   markUnread: (id: string) => request<{ activityIds: string[] }>('POST', `/api/conversations/${id}/unread`),
   archive: (id: string) => request<{ activityIds: string[] }>('POST', `/api/conversations/${id}/archive`),
@@ -66,4 +75,34 @@ export const api = {
   retryActivity: (id: string) => request<unknown>('POST', `/api/activities/${id}/retry`),
   runAllActivities: () => request<unknown>('POST', '/api/activities/run'),
   updateSettings: (patch: Partial<SettingsDto>) => request<SettingsDto>('PUT', '/api/settings', patch),
+
+  people: (scope: { view: 'inbox' | 'noise' | 'project' | 'all'; projectId?: string }) =>
+    request<PersonDto[]>('GET', `/api/people?view=${scope.view}${scope.projectId ? `&projectId=${scope.projectId}` : ''}`),
+  peopleDirectory: () => request<PeopleDirectoryDto>('GET', '/api/people/directory'),
+  suggestProject: (emails: string[]) =>
+    request<ProjectSuggestion[]>('GET', `/api/people/suggest-project?emails=${encodeURIComponent(emails.join(','))}`),
+  createContact: (input: ContactInput) => request<PersonDto>('POST', '/api/contacts', input),
+  updateContact: (id: string, input: Partial<ContactInput>) => request<PersonDto>('PATCH', `/api/contacts/${id}`, input),
+  deleteContact: (id: string) => request<void>('DELETE', `/api/contacts/${id}`),
+  addProjectContact: (projectId: string, input: { contactId?: string; name?: string; email?: string }) =>
+    request<PersonDto>('POST', `/api/projects/${projectId}/contacts`, input),
+  removeProjectContact: (projectId: string, contactId: string) =>
+    request<void>('DELETE', `/api/projects/${projectId}/contacts/${contactId}`),
+  createGroup: (name: string, contactIds: string[]) => request<{ id: string }>('POST', '/api/groups', { name, contactIds }),
+  updateGroup: (id: string, name: string, contactIds: string[]) => request<{ id: string }>('PUT', `/api/groups/${id}`, { name, contactIds }),
+  deleteGroup: (id: string) => request<void>('DELETE', `/api/groups/${id}`),
+
+  createNote: (conversationId: string, body: string) => request<NoteDto>('POST', '/api/notes', { conversationId, body }),
+  updateNote: (id: string, body: string) => request<NoteDto>('PATCH', `/api/notes/${id}`, { body }),
+  deleteNote: (id: string) => request<void>('DELETE', `/api/notes/${id}`),
+  uploadResource: async (conversationId: string, file: File): Promise<ResourceDto> => {
+    const res = await fetch(`/api/conversations/${conversationId}/resources?filename=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      headers: { 'x-mmw': '1', 'content-type': 'application/octet-stream', 'x-file-type': file.type || '' },
+      body: file,
+    });
+    if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
+    return (await res.json()) as ResourceDto;
+  },
+  deleteResource: (id: string) => request<void>('DELETE', `/api/resources/${id}`),
 };

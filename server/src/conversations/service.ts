@@ -87,7 +87,6 @@ export class ConversationService {
         count: sql<number>`count(*)`,
         unread: sql<number>`sum(case when ${messages.seen} = 0 and ${messages.direction} = 'in' then 1 else 0 end)`,
         attachments: sql<number>`max(${messages.hasAttachments})`,
-        attachmentCount: sql<number>`(select count(*) from attachments a where a.message_id in (select id from messages m2 where m2.conversation_id = ${messages.conversationId} and m2.deleted_at is null) and a.is_inline = 0)`,
         accountIds: sql<string>`group_concat(distinct ${messages.accountId})`,
       })
       .from(messages)
@@ -96,6 +95,16 @@ export class ConversationService {
       .all();
     const statsById = new Map(stats.map((s) => [s.conversationId, s]));
 
+    const attachmentCounts = new Map(
+      this.db
+        .select({ c: messages.conversationId, n: sql<number>`count(*)` })
+        .from(attachments)
+        .innerJoin(messages, eq(messages.id, attachments.messageId))
+        .where(and(inArray(messages.conversationId, ids), isNull(messages.deletedAt), eq(attachments.isInline, false)))
+        .groupBy(messages.conversationId)
+        .all()
+        .map((r) => [r.c, r.n]),
+    );
     const noteCounts = new Map(
       this.db
         .select({ c: notes.conversationId, n: sql<number>`count(*)` })
@@ -159,7 +168,7 @@ export class ConversationService {
         messageCount: s?.count ?? 0,
         unreadCount: s?.unread ?? 0,
         hasAttachments: !!s?.attachments,
-        attachmentCount: s?.attachmentCount ?? 0,
+        attachmentCount: attachmentCounts.get(r.id) ?? 0,
         noteCount: noteCounts.get(r.id) ?? 0,
         resourceCount: resourceCounts.get(r.id) ?? 0,
         isNoise: r.isNoise,

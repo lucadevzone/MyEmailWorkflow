@@ -54,6 +54,20 @@ export class MailActions {
     return ids;
   }
 
+  /** Messaggio aperto nel pannello di lettura: letto subito nell'app, su Gmail al prossimo batch. */
+  markMessageRead(messageId: string): string[] {
+    const msg = this.deps.db
+      .select({ conversationId: messages.conversationId })
+      .from(messages)
+      .where(and(eq(messages.id, messageId), isNull(messages.deletedAt)))
+      .get();
+    if (!msg) throw new ActionError('Messaggio non trovato');
+    const changed = this.conv.setSeen([messageId], true);
+    const ids = this.enqueueFlags(msg.conversationId, changed, { add: ['\\Seen'] }, 'Segna come letto');
+    if (changed.length) bus.publish({ type: 'conversations', ids: [msg.conversationId] });
+    return ids;
+  }
+
   markUnread(conversationId: string): string[] {
     const last = this.conv.lastIncoming(conversationId);
     const changed = last ? this.conv.setSeen([last], false) : [];

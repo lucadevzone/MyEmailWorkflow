@@ -132,6 +132,15 @@ describe('letto / non letto', () => {
     expect(s.db.select().from(messages).where(eq(messages.id, messageId)).get()!.seen).toBe(true);
   });
 
+  it('aprire un singolo messaggio segna letto solo quello', async () => {
+    const a = await incoming('<1@x>', 7, { gmThreadId: 'T' });
+    await incoming('<2@x>', 8, { gmThreadId: 'T' });
+    s.actions.markMessageRead(a.messageId);
+    expect(conv().list({ view: 'inbox' })[0]!.unreadCount).toBe(1);
+    await s.runner.run();
+    expect(calls).toEqual([{ op: 'addFlags', mailbox: '[Gmail]/Tutti i messaggi', uids: [7], flags: ['\\Seen'] }]);
+  });
+
   it('annullare ripristina il non letto', async () => {
     const { conversationId } = await incoming('<1@x>', 7);
     const [activityId] = s.actions.markRead(conversationId);

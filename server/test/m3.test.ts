@@ -128,6 +128,26 @@ describe('note e risorse', () => {
   });
 });
 
+describe('conteggio allegati', () => {
+  it('conta solo gli allegati della propria conversazione', async () => {
+    const withAtt = (id: string, subject: string) =>
+      Buffer.from(
+        [
+          `Message-ID: ${id}`, 'From: mario@x.it', 'To: me@gmail.com', `Subject: ${subject}`,
+          'Date: Wed, 07 Oct 2026 10:00:00 +0200', 'MIME-Version: 1.0', 'Content-Type: multipart/mixed; boundary="B"', '',
+          '--B', 'Content-Type: text/plain', '', 'vedi allegato', '--B',
+          'Content-Type: application/pdf; name="a.pdf"', 'Content-Disposition: attachment; filename="a.pdf"', 'Content-Transfer-Encoding: base64', '',
+          'JVBERg==', '--B--', '',
+        ].join('\r\n'),
+      );
+    const ing = (src: Buffer) => ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, { uid: uid++, mailbox: 'All', source: src, flags: [], labels: [] });
+    await ing(withAtt('<a1@x>', 'Uno'));
+    await ing(withAtt('<a2@x>', 'Due'));
+    const list = new ConversationService(s.db).list({ view: 'inbox' });
+    expect(list.map((c) => c.attachmentCount)).toEqual([1, 1]);
+  });
+});
+
 describe('albero dei messaggi', () => {
   it('ricostruisce chi risponde a chi; senza riferimenti si aggancia alla radice', () => {
     const tree = buildTree([

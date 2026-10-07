@@ -194,20 +194,40 @@ pending ──(batch tick | esegui ora | urgent)──► running ──► done
 - Il tick parte ogni N minuti (N si imposta nelle impostazioni) e all'avvio dell'app.
 - Le operazioni locali, come spostare, creare note o riordinare, **non** passano dalla coda: sono immediate e hanno un "annulla" nell'interfaccia.
 
-## 7. Interfaccia (MVP)
+## 7. Interfaccia
 
 ```
-┌──────────────┬────────────────────────────┬──────────────────────────────┐
-│ Da smistare  │  elenco conversazioni      │  conversazione / dettaglio   │
-│ Progetti ▸   │  (del contesto scelto)     │  albero email, riassunto,    │
-│ Persone ◉◉◉  │                            │  allegati, note, task,       │
-│ Task         │                            │  suggerimenti (accetta/scarta)│
-│ Attività (3) │                            │                              │
-└──────────────┴────────────────────────────┴──────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│ (3) Da smistare (1) · PNRR (2) · Corso · Rumore (38) · +                   │  barra superiore
+├────────────────────────────────────────────────────────────────────────────┤
+│ PNRR                                                    [⚙] [Nuova email]  │  titolo della voce
+├────┬─────────────────────────────┬─┬──────────────────────────────────────┤
+│ MR │ (2) Sintesi breve…    10:02 │║│ messaggio selezionato                │
+│ AB │     Mario Rossi, Anna B.    │║│   oppure compositore                 │
+│ LV │     📎2  🗒1  📦1            │║│   oppure editor della nota           │
+│ +  │     [Rispondi] [AI…] [Arch.]│║│                                      │
+│    │       ├ Mario   …     09:10 │║│                                      │
+│    │       │ └ Io    …     09:40 │║│                                      │
+├────┴─────────────────────────────┴─┴──────────────────────────────────────┤
+│ ⚙ 👤 📋                                           ● Luca   ● Ollama       │  barra di stato
+└────────────────────────────────────────────────────────────────────────────┘
 ```
-- **Vista progetto**: schede Conversazioni, Risorse, Note, Task, Persone.
-- **Vista persona/gruppo**: conversazioni trasversali ai progetti, raggruppate per progetto, con il pulsante "Scrivi" che suggerisce il progetto.
-- **Spostamenti**: drag & drop o comando "Sposta in…" (con scorciatoia da tastiera).
+
+- **Barra superiore**:
+  - badge rosso con i messaggi da leggere, escluso il rumore;
+  - Da smistare, progetti e Rumore, ciascuno con un badge azzurro dei non letti;
+  - + per creare un nuovo progetto.
+- **Barra di stato**: Impostazioni, Contatti, Attività; a destra lo stato di account e Ollama (verde = online, arancione = offline).
+- **Pagina di una voce**:
+  - a sinistra le bolle delle persone (clic = filtra; + aggiunge al progetto);
+  - due colonne ridimensionabili: conversazioni | pannello di destra.
+- **Scheda conversazione**:
+  - badge rosso dei non letti;
+  - sintesi AI (clic = versione di 4-5 righe);
+  - persone (clic = nuova email);
+  - allegati, note e risorse espandibili;
+  - azioni: Rispondi (a tutti), azioni AI (M4), Archivia, menu ⋯.
+- **Albero dei messaggi** sotto la conversazione espansa: dalla radice alle foglie, con badge blu sui non letti. Il clic apre il messaggio a destra e lo segna come letto.
 
 ## 8. Sicurezza
 

@@ -10,6 +10,7 @@
   "dependencies": {
     "@mmw/shared": "workspace:^",
     "@tanstack/react-query": "^5.104.1",
+    "material-symbols": "^0.47.6",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
