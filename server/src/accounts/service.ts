@@ -4,8 +4,9 @@ import type { AccountDto, ConnectionTestResult } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
 import { accounts } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
-import { isValidCredentialRef, resolveImapAuth } from '../mail/credentials.ts';
-import { ImapProvider } from '../mail/imap-provider.ts';
+import { isValidCredentialRef } from '../mail/credentials.ts';
+import { createProvider, type ProviderAccount } from '../mail/factory.ts';
+import type { MailProviderClient } from '../mail/provider.ts';
 
 const GMAIL_DEFAULTS = {
   imapHost: 'imap.gmail.com',
@@ -120,17 +121,10 @@ export class AccountService {
   }
 }
 
-export async function testImapConnection(
-  account: Pick<AccountDto, 'imapHost' | 'imapPort' | 'imapSecure' | 'username' | 'authType' | 'credentialRef'>,
-): Promise<ConnectionTestResult> {
-  let provider: ImapProvider | undefined;
+export async function testImapConnection(account: ProviderAccount): Promise<ConnectionTestResult> {
+  let provider: MailProviderClient | undefined;
   try {
-    provider = new ImapProvider({
-      host: account.imapHost,
-      port: account.imapPort,
-      secure: account.imapSecure,
-      auth: resolveImapAuth(account),
-    });
+    provider = createProvider(account);
     await provider.connect();
     const [mailboxes, syncMailbox] = [await provider.listMailboxes(), await provider.syncMailbox()];
     return { ok: true, syncMailbox, mailboxes, capabilities: provider.capabilities() };
@@ -141,7 +135,7 @@ export async function testImapConnection(
   }
 }
 
-function describeImapError(err: unknown): string {
+export function describeImapError(err: unknown): string {
   const e = err as { message?: string; authenticationFailed?: boolean; responseText?: string };
   if (e.authenticationFailed) {
     return `Autenticazione fallita${e.responseText ? `: ${e.responseText}` : ''}. Per Gmail serve una app password (con verifica in due passaggi attiva).`;

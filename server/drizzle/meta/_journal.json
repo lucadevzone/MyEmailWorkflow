@@ -15,6 +15,13 @@
       "when": 1791384360084,
       "tag": "0001_virtual_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791385754645,
+      "tag": "0002_sync_fields",
+      "breakpoints": true
     }
   ]
 }

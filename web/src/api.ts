@@ -1,5 +1,9 @@
 import type {
   AccountDto,
+  ConversationDetail,
+  ConversationListItem,
+  ConversationView,
+  SyncStatusDto,
   ConnectionTestResult,
   CreateAccountInput,
   HealthDto,
@@ -26,5 +30,11 @@ export const api = {
   deleteAccount: (id: string) => request<void>('DELETE', `/api/accounts/${id}`),
   testAccount: (id: string) => request<ConnectionTestResult>('POST', `/api/accounts/${id}/test`),
   settings: () => request<SettingsDto>('GET', '/api/settings'),
+  syncStatus: () => request<SyncStatusDto[]>('GET', '/api/sync/status'),
+  conversations: (view: ConversationView, before?: number) =>
+    request<ConversationListItem[]>('GET', `/api/conversations?view=${view}${before ? `&before=${before}` : ''}`),
+  conversationCounts: () => request<{ inbox: number; noise: number; inboxUnread: number }>('GET', '/api/conversations/counts'),
+  conversation: (id: string) => request<ConversationDetail>('GET', `/api/conversations/${id}`),
+  setNoise: (id: string, isNoise: boolean) => request<{ ok: true }>('POST', `/api/conversations/${id}/noise`, { isNoise }),
   updateSettings: (patch: Partial<SettingsDto>) => request<SettingsDto>('PUT', '/api/settings', patch),
 };

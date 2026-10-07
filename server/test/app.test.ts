@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDb } from '../src/db/client.ts';
 import { runMigrations } from '../src/db/migrate.ts';
 import { buildApp } from '../src/app.ts';
+import { BlobStore } from '../src/store/blobs.ts';
+import { SyncManager } from '../src/sync/manager.ts';
+import os from 'node:os';
+import path from 'node:path';
+import fs from 'node:fs';
 
 const PORT = 4310;
 const HOST = { host: `127.0.0.1:${PORT}` };
@@ -10,13 +15,20 @@ const WRITE = { ...MUTATE, 'content-type': 'application/json' };
 
 let ctx: ReturnType<typeof openDb>;
 let app: ReturnType<typeof buildApp>;
+let sync: SyncManager;
 
 beforeEach(() => {
   ctx = openDb(':memory:');
   runMigrations(ctx.db);
-  app = buildApp({ ...ctx, port: PORT });
+  const blobs = new BlobStore(ctx.db, fs.mkdtempSync(path.join(os.tmpdir(), 'mmw-blobs-')));
+  // Provider finto: i test API non devono aprire connessioni IMAP.
+  sync = new SyncManager({ ...ctx, blobs }, () => 90, () => {
+    throw new Error('IMAP disabilitato nei test');
+  });
+  app = buildApp({ ...ctx, blobs, sync, port: PORT });
 });
 afterEach(async () => {
+  await sync.stopAll();
   await app.close();
   ctx.sqlite.close();
 });

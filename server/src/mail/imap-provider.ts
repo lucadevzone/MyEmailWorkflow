@@ -1,6 +1,6 @@
-import { ImapFlow } from 'imapflow';
+import { ImapFlow, type FetchMessageObject } from 'imapflow';
 import type { MailboxInfo } from '@mmw/shared';
-import type { MailProviderClient } from './provider.ts';
+import type { MailProviderClient, MailboxState, FetchedMessage, FlagUpdate, MailboxEvents } from './provider.ts';
 import type { ImapAuth } from './credentials.ts';
 
 export interface ImapConnectionOptions {
@@ -63,4 +63,84 @@ export class ImapProvider implements MailProviderClient {
     }
     return 'INBOX';
   }
+
+  async openMailbox(path: string): Promise<MailboxState> {
+    const mb = await this.client.mailboxOpen(path);
+    return {
+      path: mb.path,
+      uidValidity: mb.uidValidity.toString(),
+      uidNext: mb.uidNext,
+      highestModseq: mb.highestModseq != null ? mb.highestModseq.toString() : null,
+      exists: mb.exists,
+    };
+  }
+
+  async searchUidsSince(since: Date): Promise<number[]> {
+    const res = await this.client.search({ since }, { uid: true });
+    return (res || []).sort((a, b) => a - b);
+  }
+
+  async searchUidRange(range: string): Promise<number[]> {
+    const res = await this.client.search({ uid: range }, { uid: true });
+    return (res || []).sort((a, b) => a - b);
+  }
+
+  async *fetchUids(uids: number[] | string): AsyncIterable<FetchedMessage> {
+    const range = typeof uids === 'string' ? uids : uids.join(',');
+    if (!range) return;
+    for await (const m of this.client.fetch(
+      range,
+      { uid: true, source: true, flags: true, labels: true, threadId: true, internalDate: true },
+      { uid: true },
+    )) {
+      if (!m.source) continue;
+      yield toFetched(m);
+    }
+  }
+
+  async fetchFlagsChangedSince(modseq: string): Promise<FlagUpdate[]> {
+    const out: FlagUpdate[] = [];
+    for await (const m of this.client.fetch(
+      '1:*',
+      { uid: true, flags: true, labels: true },
+      { uid: true, changedSince: BigInt(modseq) },
+    )) {
+      out.push({ uid: m.uid, flags: [...(m.flags ?? [])], labels: [...(m.labels ?? [])], gmMsgid: m.emailId ?? null });
+    }
+    return out;
+  }
+
+  on(events: MailboxEvents): () => void {
+    const exists = () => events.onNewMessages();
+    const flags = (e: { uid?: number; flags?: Set<string> }) => {
+      if (e.uid != null) events.onFlags({ uid: e.uid, flags: [...(e.flags ?? [])], labels: null, gmMsgid: null });
+    };
+    const expunge = () => events.onExpunge();
+    const close = () => events.onClose();
+    const error = (err: Error) => events.onError(err);
+    this.client.on('exists', exists);
+    this.client.on('flags', flags);
+    this.client.on('expunge', expunge);
+    this.client.on('close', close);
+    this.client.on('error', error);
+    return () => {
+      this.client.off('exists', exists);
+      this.client.off('flags', flags);
+      this.client.off('expunge', expunge);
+      this.client.off('close', close);
+      this.client.off('error', error);
+    };
+  }
+}
+
+function toFetched(m: FetchMessageObject): FetchedMessage {
+  return {
+    uid: m.uid,
+    source: m.source!,
+    flags: [...(m.flags ?? [])],
+    labels: [...(m.labels ?? [])],
+    gmMsgid: m.emailId ?? null,
+    gmThreadId: m.threadId ?? null,
+    internalDate: m.internalDate ? new Date(m.internalDate) : null,
+  };
 }

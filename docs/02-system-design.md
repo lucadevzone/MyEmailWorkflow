@@ -83,7 +83,8 @@ interface MailProvider {
    - Non generano suggerimenti di task: un task di tre anni fa è rumore.
    - Lo storico smistato in blocco è il terreno della modalità *organizza tu*.
 3. **Incrementale**: IMAP IDLE per i nuovi messaggi, CONDSTORE/MODSEQ per i flag cambiati altrove.
-4. Lo stato di avanzamento per account e cartella (`uidvalidity`, `last_uid`, `oldest_synced_date`, `modseq`) vive nel DB. Il sync riprende da dove si era fermato.
+4. Le cancellazioni fatte altrove (expunge) non sono ancora riflesse: arrivano con la coda attività (M2).
+5. Lo stato di avanzamento per account e cartella (`uidvalidity`, `last_uid`, `oldest_synced_date`, `modseq`) vive nel DB. Il sync riprende da dove si era fermato.
 
 Il server di posta resta la **fonte di verità per i messaggi grezzi**. L'app è la fonte di verità per progetti, note, task e annotazioni, che non vengono mai scritti sul server.
 
@@ -146,7 +147,9 @@ chunk(id, message_id, ord, text) ; chunk_vec (sqlite-vec, dim 1024)
 ### 6.1 Email in arrivo
 ```
 IDLE/fetch → salva raw (blob) → parse → dedup (gm_msgid / Message-ID)
-  → threading: gm_thread_id, poi In-Reply-To/References, poi oggetto normalizzato + partecipanti
+  → threading: gm_thread_id, poi In-Reply-To/References, poi figli arrivati prima (backfill
+     fuori ordine); se più conversazioni risultano collegate vengono unite.
+     Nessun aggancio per solo oggetto: rischia di unire conversazioni diverse.
      ├─ conversazione esistente → eredita il progetto (nessuna AI necessaria)
      └─ conversazione nuova    → project_id = NULL (Da smistare)
   → risoluzione contatti (indirizzi sconosciuti → contact_address senza contatto)

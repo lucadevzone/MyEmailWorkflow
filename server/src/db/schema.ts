@@ -55,6 +55,8 @@ export const syncState = sqliteTable(
     mailbox: text('mailbox').notNull(),
     uidValidity: text('uid_validity'),
     lastUid: integer('last_uid'),
+    /** UID più basso già importato: il backfill prosegue da qui verso il basso. */
+    lowestUid: integer('lowest_uid'),
     highestModseq: text('highest_modseq'),
     oldestSyncedDate: integer('oldest_synced_date'),
     backfillDone: integer('backfill_done', { mode: 'boolean' }).notNull().default(false),
@@ -123,6 +125,10 @@ export const messages = sqliteTable(
     htmlBlobSha: text('html_blob_sha'),
     /** JSON: string[] dei flag IMAP. */
     flags: text('flags'),
+    /** JSON: string[] delle etichette Gmail (X-GM-LABELS). */
+    labels: text('labels'),
+    seen: integer('seen', { mode: 'boolean' }).notNull().default(false),
+    hasAttachments: integer('has_attachments', { mode: 'boolean' }).notNull().default(false),
     analyzedAt: integer('analyzed_at'),
     ...meta(),
   },
