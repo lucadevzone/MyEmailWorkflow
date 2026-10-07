@@ -227,6 +227,16 @@ pending ──(batch tick | esegui ora | urgent)──► running ──► done
 | POST | Annotazioni → note/task, versioni degli allegati, ricerca semantica, *organizza tu*, gruppi suggeriti, bozze di risposta, OAuth, Electron |
 | FUT | Calendario/scheduling, sync cloud, mobile |
 
+### Note di implementazione (stato attuale)
+
+- **M2, rimandato**:
+  - spostamento di una *singola* email (con distacco in una nuova conversazione). Il threading per References la ricollegherebbe alla conversazione d'origine, quindi serve un vincolo esplicito di "separazione".
+  - Allegati e HTML in composizione: per ora solo testo semplice.
+  - Modifica di un invio già in coda: per ora si annulla e si riscrive.
+  - "Ripristina dall'archivio" è solo locale: su Gmail resta archiviata finché non arriva posta nuova.
+- **Letto su Gmail**: aprire una conversazione la segna letta subito nell'app; l'attività `set_flags` va al batch. Finché è in coda, il sync non sovrascrive lo stato locale con quello del server.
+- **Risposta da Da smistare**: si sceglie il progetto nel compositore e la conversazione viene spostata lì all'invio.
+
 ## 10. Decisioni prese
 
 1. **Effetti sul server**: cestino, archivio e letto/non letto si propagano a Gmail, passando dalla activity queue. I progetti restano sempre locali.

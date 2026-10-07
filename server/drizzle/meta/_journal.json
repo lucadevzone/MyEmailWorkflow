@@ -22,6 +22,13 @@
       "when": 1791385754645,
       "tag": "0002_sync_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791387383754,
+      "tag": "0003_m2_fields",
+      "breakpoints": true
     }
   ]
 }

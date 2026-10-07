@@ -24,7 +24,12 @@ export function useServerEvents() {
       } else if (event.type === 'conversations') {
         qc.invalidateQueries({ queryKey: ['conversations'] });
         qc.invalidateQueries({ queryKey: ['counts'] });
+        qc.invalidateQueries({ queryKey: ['projects'] });
         for (const id of event.ids) qc.invalidateQueries({ queryKey: ['conversation', id] });
+      } else if (event.type === 'projects') {
+        qc.invalidateQueries({ queryKey: ['projects'] });
+      } else if (event.type === 'activities') {
+        qc.invalidateQueries({ queryKey: ['activities'] });
       }
     };
     return () => es.close();

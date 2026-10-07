@@ -97,7 +97,9 @@ export interface SyncStatusDto {
 
 export type ServerEvent =
   | { type: 'sync'; status: SyncStatusDto }
-  | { type: 'conversations'; ids: string[] };
+  | { type: 'conversations'; ids: string[] }
+  | { type: 'projects' }
+  | { type: 'activities' };
 
 // ─── Conversazioni ───────────────────────────────────────────────────────────
 
@@ -116,6 +118,7 @@ export interface ConversationListItem {
   hasAttachments: boolean;
   isNoise: boolean;
   projectId: string | null;
+  archived: boolean;
   /** Partecipanti esclusi i propri indirizzi. */
   participants: PersonRef[];
   accountIds: string[];
@@ -142,6 +145,8 @@ export interface MessageDto {
   bodyTextClean: string | null;
   hasHtml: boolean;
   seen: boolean;
+  /** Solo per i messaggi scritti nell'app. */
+  outgoingStatus: 'queued' | 'sent' | 'failed' | null;
   attachments: AttachmentDto[];
 }
 
@@ -150,8 +155,78 @@ export interface ConversationDetail {
   subject: string | null;
   projectId: string | null;
   isNoise: boolean;
+  archived: boolean;
   summary: string | null;
   messages: MessageDto[];
 }
 
-export type ConversationView = 'inbox' | 'noise';
+export type ConversationView = 'inbox' | 'noise' | 'project';
+
+export interface ConversationQuery {
+  view: ConversationView;
+  projectId?: string;
+  archived?: boolean;
+  before?: number;
+}
+
+// ─── Progetti ────────────────────────────────────────────────────────────────
+
+export interface ProjectDto {
+  id: string;
+  name: string;
+  description: string | null;
+  outgoingAccountId: string;
+  color: string | null;
+  archived: boolean;
+  conversationCount: number;
+  unreadCount: number;
+  lastMessageAt: number | null;
+}
+
+export interface ProjectInput {
+  name: string;
+  description?: string | null;
+  outgoingAccountId: string;
+  color?: string | null;
+}
+
+// ─── Coda attività ───────────────────────────────────────────────────────────
+
+export type ActivityKind = 'send' | 'trash' | 'archive' | 'set_flags';
+export type ActivityStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled';
+
+export interface ActivityDto {
+  id: string;
+  kind: ActivityKind;
+  accountId: string | null;
+  status: ActivityStatus;
+  urgent: boolean;
+  /** Descrizione leggibile ("Invio: Re: Riunione → mario@x.it"). */
+  label: string;
+  conversationId: string | null;
+  attempts: number;
+  lastError: string | null;
+  createdAt: number;
+  executedAt: number | null;
+}
+
+export interface ActivityQueueDto {
+  activities: ActivityDto[];
+  /** Prossima esecuzione automatica del batch (ms epoch). */
+  nextRunAt: number | null;
+}
+
+// ─── Composizione ────────────────────────────────────────────────────────────
+
+export interface ComposeInput {
+  /** Progetto da cui si scrive: determina l'account mittente. Obbligatorio. */
+  projectId: string;
+  /** Risposta: messaggio a cui si risponde (la conversazione viene spostata nel progetto). */
+  replyToMessageId?: string;
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string;
+  body: string;
+  urgent?: boolean;
+}

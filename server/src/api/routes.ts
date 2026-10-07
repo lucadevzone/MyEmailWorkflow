@@ -13,18 +13,42 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { BlobStore } from '../store/blobs.ts';
 import type { SyncManager } from '../sync/manager.ts';
 import { bus } from '../events/bus.ts';
+import { ProjectError, ProjectService, projectInputSchema, projectPatchSchema } from '../projects/service.ts';
+import { ActivityError, type ActivityService } from '../activities/service.ts';
+import type { ActivityRunner } from '../activities/runner.ts';
+import { ActionError, composeSchema, type MailActions } from '../actions/mail-actions.ts';
+import type { ActivityQueueDto, ConversationView } from '@mmw/shared';
+import { ZodError, type ZodType } from 'zod';
 
 export interface RouteDeps {
   db: Db;
   sqlite: Database.Database;
   blobs: BlobStore;
   sync: SyncManager;
+  activities: ActivityService;
+  runner: ActivityRunner;
+  actions: MailActions;
+}
+
+function parse<T>(schema: ZodType<T>, body: unknown): T {
+  return schema.parse(body);
 }
 
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   const accountsSvc = new AccountService(deps.db);
   const settingsSvc = new SettingsService(deps.db);
   const conversationsSvc = new ConversationService(deps.db);
+  const projectsSvc = new ProjectService(deps.db);
+
+  // Errori di validazione e di dominio → 400 con messaggio leggibile.
+  app.setErrorHandler((err, _req, reply) => {
+    if (err instanceof ZodError) return reply.code(400).send({ error: err.issues.map((i) => i.message).join('; ') });
+    if (err instanceof ProjectError || err instanceof ActivityError || err instanceof ActionError) {
+      return reply.code(400).send({ error: err.message });
+    }
+    app.log.error(err);
+    return reply.code((err as { statusCode?: number }).statusCode ?? 500).send({ error: (err as Error).message });
+  });
 
   app.get('/api/health', async (): Promise<HealthDto> => {
     let vec: string | null = null;
@@ -71,7 +95,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   app.put('/api/settings', async (req, reply) => {
     const parsed = settingsPatchSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues.map((i) => i.message).join('; ') });
-    return settingsSvc.update(parsed.data);
+    const updated = settingsSvc.update(parsed.data);
+    if (parsed.data.activityBatchMinutes !== undefined) deps.runner.schedule();
+    return updated;
   });
 
   // ─── Sync ──────────────────────────────────────────────────────────────────
@@ -80,14 +106,20 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
 
   // ─── Conversazioni ─────────────────────────────────────────────────────────
 
-  app.get<{ Querystring: { view?: string; before?: string; limit?: string } }>('/api/conversations', async (req, reply) => {
-    const view = req.query.view ?? 'inbox';
-    if (view !== 'inbox' && view !== 'noise') return reply.code(400).send({ error: 'view non valida' });
-    return conversationsSvc.list(view, {
-      before: req.query.before ? Number(req.query.before) : undefined,
-      limit: req.query.limit ? Number(req.query.limit) : undefined,
-    });
-  });
+  app.get<{ Querystring: { view?: string; projectId?: string; archived?: string; before?: string; limit?: string } }>(
+    '/api/conversations',
+    async (req, reply) => {
+      const view = (req.query.view ?? 'inbox') as ConversationView;
+      if (!['inbox', 'noise', 'project'].includes(view)) return reply.code(400).send({ error: 'view non valida' });
+      return conversationsSvc.list({
+        view,
+        projectId: req.query.projectId,
+        archived: req.query.archived === '1',
+        before: req.query.before ? Number(req.query.before) : undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      });
+    },
+  );
 
   app.get('/api/conversations/counts', async () => conversationsSvc.counts());
 
@@ -155,5 +187,64 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
       clearInterval(ping);
       unsubscribe();
     });
+  });
+
+  // ─── Azioni sulle conversazioni ────────────────────────────────────────────
+
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/read', async (req) => ({ activityIds: deps.actions.markRead(req.params.id) }));
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/unread', async (req) => ({ activityIds: deps.actions.markUnread(req.params.id) }));
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/archive', async (req) => ({ activityIds: deps.actions.archive(req.params.id) }));
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/unarchive', async (req) => {
+    deps.actions.unarchive(req.params.id);
+    return { ok: true };
+  });
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/trash', async (req) => ({ activityIds: deps.actions.trash(req.params.id) }));
+  app.post<{ Params: { id: string }; Body: { projectId?: string | null } }>('/api/conversations/:id/move', async (req) => {
+    const projectId = req.body?.projectId ?? null;
+    return deps.actions.move(req.params.id, projectId);
+  });
+
+  app.post('/api/compose', async (req, reply) => reply.code(201).send(deps.actions.compose(parse(composeSchema, req.body))));
+
+  // ─── Progetti ──────────────────────────────────────────────────────────────
+
+  app.get('/api/projects', async () => projectsSvc.list());
+
+  app.post('/api/projects', async (req, reply) => {
+    const project = projectsSvc.create(parse(projectInputSchema, req.body));
+    bus.publish({ type: 'projects' });
+    return reply.code(201).send(project);
+  });
+
+  app.patch<{ Params: { id: string } }>('/api/projects/:id', async (req, reply) => {
+    const project = projectsSvc.update(req.params.id, parse(projectPatchSchema, req.body));
+    if (!project) return reply.code(404).send({ error: 'Progetto non trovato' });
+    bus.publish({ type: 'projects' });
+    return project;
+  });
+
+  // ─── Coda attività ─────────────────────────────────────────────────────────
+
+  app.get('/api/activities', async (): Promise<ActivityQueueDto> => ({
+    activities: deps.activities.list(),
+    nextRunAt: deps.runner.nextRunAt,
+  }));
+
+  app.post<{ Params: { id: string } }>('/api/activities/:id/cancel', async (req) => deps.activities.cancel(req.params.id));
+
+  app.post<{ Params: { id: string } }>('/api/activities/:id/run', async (req) => {
+    deps.activities.markUrgent(req.params.id);
+    void deps.runner.run([req.params.id]);
+    return { ok: true };
+  });
+
+  app.post<{ Params: { id: string } }>('/api/activities/:id/retry', async (req) => {
+    deps.activities.retry(req.params.id);
+    return { ok: true };
+  });
+
+  app.post('/api/activities/run', async () => {
+    void deps.runner.run();
+    return { ok: true };
   });
 }

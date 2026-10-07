@@ -1,58 +1,77 @@
+import { useState, type ReactNode } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import type { AccountDto, ConversationListItem, ConversationView } from '@mmw/shared';
+import type { AccountDto, ConversationListItem, ConversationQuery } from '@mmw/shared';
 import { api } from '../api.ts';
 import { colorFor, personLabel, shortDate } from '../lib/format.ts';
 
 const PAGE = 50;
 
 export function ConversationList({
-  view,
+  query,
+  title,
+  subtitle,
+  actions,
+  emptyText,
   selectedId,
   onSelect,
 }: {
-  view: ConversationView;
+  query: Omit<ConversationQuery, 'archived' | 'before'>;
+  title: ReactNode;
+  subtitle?: ReactNode;
+  actions?: ReactNode;
+  emptyText: string;
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const [archived, setArchived] = useState(false);
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
-  const query = useInfiniteQuery({
-    queryKey: ['conversations', view],
-    queryFn: ({ pageParam }) => api.conversations(view, pageParam),
+  const list = useInfiniteQuery({
+    queryKey: ['conversations', query.view, query.projectId ?? null, archived],
+    queryFn: ({ pageParam }) => api.conversations({ ...query, archived, before: pageParam }),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (last) => (last.length < PAGE ? undefined : last[last.length - 1]!.lastMessageAt),
   });
-  const items = query.data?.pages.flat() ?? [];
+  const items = list.data?.pages.flat() ?? [];
   const accountById = new Map(accounts.map((a) => [a.id, a]));
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b border-stone-200 px-4 py-3 dark:border-stone-800">
-        <h1 className="font-semibold">{view === 'inbox' ? 'Da smistare' : 'Rumore'}</h1>
-        <p className="text-xs text-stone-500">
-          {view === 'inbox'
-            ? 'Conversazioni non ancora assegnate a un progetto'
-            : 'Newsletter e notifiche automatiche'}
-        </p>
+      <header className="space-y-2 border-b border-stone-200 px-4 py-3 dark:border-stone-800">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate font-semibold">{title}</h1>
+            {subtitle && <p className="line-clamp-2 text-xs text-stone-500">{subtitle}</p>}
+          </div>
+          {actions}
+        </div>
+        {query.view !== 'noise' && (
+          <div className="flex gap-3 text-xs">
+            <button className={!archived ? 'font-semibold' : 'text-stone-500'} onClick={() => setArchived(false)}>
+              Attive
+            </button>
+            <button className={archived ? 'font-semibold' : 'text-stone-500'} onClick={() => setArchived(true)}>
+              Archiviate
+            </button>
+          </div>
+        )}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {query.isLoading && <div className="p-4 text-sm text-stone-500">Caricamento…</div>}
-        {!query.isLoading && items.length === 0 && (
-          <div className="p-4 text-sm text-stone-500">
-            {view === 'inbox' ? 'Niente da smistare.' : 'Nessuna conversazione marcata come rumore.'}
-          </div>
+        {list.isLoading && <div className="p-4 text-sm text-stone-500">Caricamento…</div>}
+        {!list.isLoading && items.length === 0 && (
+          <div className="p-4 text-sm text-stone-500">{archived ? 'Nessuna conversazione archiviata.' : emptyText}</div>
         )}
         <ul>
           {items.map((c) => (
             <Row key={c.id} c={c} accounts={accountById} selected={c.id === selectedId} onSelect={onSelect} />
           ))}
         </ul>
-        {query.hasNextPage && (
+        {list.hasNextPage && (
           <button
             className="w-full p-3 text-sm text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-900"
-            onClick={() => query.fetchNextPage()}
-            disabled={query.isFetchingNextPage}
+            onClick={() => list.fetchNextPage()}
+            disabled={list.isFetchingNextPage}
           >
-            {query.isFetchingNextPage ? 'Caricamento…' : 'Carica altre'}
+            {list.isFetchingNextPage ? 'Caricamento…' : 'Carica altre'}
           </button>
         )}
       </div>

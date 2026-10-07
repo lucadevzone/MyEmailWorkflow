@@ -94,7 +94,7 @@ describe('ingest', () => {
     const convIds = new Set(ctx.db.select({ c: messages.conversationId }).from(messages).all().map((m) => m.c));
     expect(convIds.size).toBe(1);
     expect(convIds.has(parent.conversationId)).toBe(true);
-    const live = new ConversationService(ctx.db).list('inbox');
+    const live = new ConversationService(ctx.db).list({ view: 'inbox' });
     expect(live).toHaveLength(1);
     expect(live[0]!.messageCount).toBe(3);
   });
@@ -103,9 +103,9 @@ describe('ingest', () => {
     await ingestMessage(ctx, ACCOUNT, raw(eml({ id: '<n@x>', from: 'news@shop.it', subject: 'Offerte', body: 'saldi', extra: 'List-Unsubscribe: <mailto:u@shop.it>' })));
     await ingestMessage(ctx, ACCOUNT, raw(eml({ id: '<p@x>', from: 'mario@x.it', subject: 'Ciao', body: 'ciao' })));
     const svc = new ConversationService(ctx.db);
-    expect(svc.list('inbox').map((c) => c.subject)).toEqual(['Ciao']);
-    expect(svc.list('noise').map((c) => c.subject)).toEqual(['Offerte']);
-    expect(svc.list('inbox')[0]!.participants).toEqual([{ name: null, email: 'mario@x.it' }]);
+    expect(svc.list({ view: 'inbox' }).map((c) => c.subject)).toEqual(['Ciao']);
+    expect(svc.list({ view: 'noise' }).map((c) => c.subject)).toEqual(['Offerte']);
+    expect(svc.list({ view: 'inbox' })[0]!.participants).toEqual([{ name: null, email: 'mario@x.it' }]);
   });
 
   it('indicizza il testo per la ricerca full-text', async () => {

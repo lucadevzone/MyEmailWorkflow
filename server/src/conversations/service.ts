@@ -1,14 +1,25 @@
-import { and, desc, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type {
   AttachmentDto,
   ConversationDetail,
   ConversationListItem,
-  ConversationView,
+  ConversationQuery,
   MessageDto,
   PersonRef,
 } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
-import { accounts, attachments, contactAddresses, conversations, messageAddresses, messages } from '../db/schema.ts';
+import {
+  accounts,
+  attachments,
+  contactAddresses,
+  conversations,
+  messageAddresses,
+  messages,
+  notes,
+  projects,
+  resources,
+  tasks,
+} from '../db/schema.ts';
 import { now } from '../lib/ids.ts';
 
 export class ConversationService {
@@ -25,14 +36,17 @@ export class ConversationService {
     );
   }
 
-  list(view: ConversationView, opts: { limit?: number; before?: number } = {}): ConversationListItem[] {
-    const limit = Math.min(opts.limit ?? 50, 200);
-    const where = [
-      isNull(conversations.deletedAt),
-      isNull(conversations.projectId),
-      eq(conversations.isNoise, view === 'noise'),
-    ];
-    if (opts.before) where.push(lt(conversations.lastMessageAt, opts.before));
+  list(q: ConversationQuery & { limit?: number }): ConversationListItem[] {
+    const limit = Math.min(q.limit ?? 50, 200);
+    const where = [isNull(conversations.deletedAt), isNull(conversations.trashedAt)];
+    if (q.view === 'project') {
+      if (!q.projectId) return [];
+      where.push(eq(conversations.projectId, q.projectId));
+    } else {
+      where.push(isNull(conversations.projectId), eq(conversations.isNoise, q.view === 'noise'));
+    }
+    where.push(q.archived ? isNotNull(conversations.archivedAt) : isNull(conversations.archivedAt));
+    if (q.before) where.push(lt(conversations.lastMessageAt, q.before));
 
     const rows = this.db
       .select()
@@ -106,10 +120,20 @@ export class ConversationService {
         hasAttachments: !!s?.attachments,
         isNoise: r.isNoise,
         projectId: r.projectId,
+        archived: r.archivedAt != null,
         participants: peopleById.get(r.id) ?? [],
         accountIds: s?.accountIds ? s.accountIds.split(',') : [],
       };
     });
+  }
+
+  private inboxBase() {
+    return [
+      isNull(conversations.deletedAt),
+      isNull(conversations.projectId),
+      isNull(conversations.trashedAt),
+      isNull(conversations.archivedAt),
+    ];
   }
 
   counts(): { inbox: number; noise: number; inboxUnread: number } {
@@ -119,7 +143,7 @@ export class ConversationService {
         noise: sql<number>`sum(case when ${conversations.isNoise} = 1 then 1 else 0 end)`,
       })
       .from(conversations)
-      .where(and(isNull(conversations.deletedAt), isNull(conversations.projectId)))
+      .where(and(...this.inboxBase()))
       .get();
     const unread = this.db
       .select({ n: sql<number>`count(distinct ${conversations.id})` })
@@ -127,8 +151,7 @@ export class ConversationService {
       .innerJoin(messages, eq(messages.conversationId, conversations.id))
       .where(
         and(
-          isNull(conversations.deletedAt),
-          isNull(conversations.projectId),
+          ...this.inboxBase(),
           eq(conversations.isNoise, false),
           eq(messages.seen, false),
           eq(messages.direction, 'in'),
@@ -177,6 +200,7 @@ export class ConversationService {
       subject: conv.subject,
       projectId: conv.projectId,
       isNoise: conv.isNoise,
+      archived: conv.archivedAt != null,
       summary: conv.summary,
       messages: msgs.map(
         (m): MessageDto => ({
@@ -193,6 +217,7 @@ export class ConversationService {
           bodyTextClean: m.bodyTextClean,
           hasHtml: !!m.htmlBlobSha,
           seen: m.seen,
+          outgoingStatus: m.outgoingStatus,
           attachments: atts
             .filter((a) => a.messageId === m.id)
             .map(
@@ -201,6 +226,102 @@ export class ConversationService {
         }),
       ),
     };
+  }
+
+  /** Sposta una conversazione (con note, task e risorse collegati) in un progetto o in Da smistare. */
+  move(id: string, projectId: string | null): { previousProjectId: string | null } | undefined {
+    const conv = this.db
+      .select({ projectId: conversations.projectId })
+      .from(conversations)
+      .where(and(eq(conversations.id, id), isNull(conversations.deletedAt)))
+      .get();
+    if (!conv) return undefined;
+    if (projectId) {
+      const p = this.db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(and(eq(projects.id, projectId), isNull(projects.deletedAt)))
+        .get();
+      if (!p) throw new Error('Progetto inesistente');
+    }
+    const t = now();
+    this.db.transaction((tx) => {
+      // Assegnare un progetto toglie anche il marchio di rumore: è una scelta esplicita dell'utente.
+      tx.update(conversations)
+        .set({ projectId, ...(projectId ? { isNoise: false } : {}), updatedAt: t })
+        .where(eq(conversations.id, id))
+        .run();
+      for (const table of [notes, tasks, resources]) {
+        tx.update(table).set({ projectId, updatedAt: t }).where(eq(table.conversationId, id)).run();
+      }
+    });
+    return { previousProjectId: conv.projectId };
+  }
+
+  setArchived(id: string, archived: boolean) {
+    this.db
+      .update(conversations)
+      .set({ archivedAt: archived ? now() : null, updatedAt: now() })
+      .where(eq(conversations.id, id))
+      .run();
+  }
+
+  setTrashed(id: string, trashed: boolean) {
+    this.db
+      .update(conversations)
+      .set({ trashedAt: trashed ? now() : null, updatedAt: now() })
+      .where(eq(conversations.id, id))
+      .run();
+  }
+
+  /** Messaggi della conversazione presenti sul server (con UID). */
+  serverMessageIds(id: string): string[] {
+    return this.db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.conversationId, id), isNull(messages.deletedAt), isNotNull(messages.uid)))
+      .all()
+      .map((m) => m.id);
+  }
+
+  /** Imposta lo stato di lettura locale; restituisce i messaggi effettivamente cambiati. */
+  setSeen(messageIds: string[], seen: boolean): string[] {
+    if (!messageIds.length) return [];
+    const changed = this.db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(inArray(messages.id, messageIds), eq(messages.seen, !seen)))
+      .all()
+      .map((m) => m.id);
+    if (changed.length) {
+      this.db.update(messages).set({ seen, updatedAt: now() }).where(inArray(messages.id, changed)).run();
+    }
+    return changed;
+  }
+
+  unreadIncoming(id: string): string[] {
+    return this.db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, id),
+          isNull(messages.deletedAt),
+          eq(messages.seen, false),
+          eq(messages.direction, 'in'),
+        ),
+      )
+      .all()
+      .map((m) => m.id);
+  }
+
+  lastIncoming(id: string): string | undefined {
+    return this.db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.conversationId, id), isNull(messages.deletedAt), eq(messages.direction, 'in')))
+      .orderBy(desc(messages.date))
+      .get()?.id;
   }
 
   setNoise(id: string, isNoise: boolean): boolean {

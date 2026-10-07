@@ -110,6 +110,55 @@ export class ImapProvider implements MailProviderClient {
     return out;
   }
 
+  private async withMailbox<T>(mailbox: string, fn: () => Promise<T>): Promise<T> {
+    const lock = await this.client.getMailboxLock(mailbox);
+    try {
+      return await fn();
+    } finally {
+      lock.release();
+    }
+  }
+
+  private async specialFolder(use: string): Promise<string | undefined> {
+    return (await this.client.list()).find((m) => m.specialUse === use)?.path;
+  }
+
+  async addFlags(mailbox: string, uids: number[], flags: string[]): Promise<void> {
+    if (!uids.length) return;
+    await this.withMailbox(mailbox, () => this.client.messageFlagsAdd(uids, flags, { uid: true })).then(() => {});
+  }
+
+  async removeFlags(mailbox: string, uids: number[], flags: string[]): Promise<void> {
+    if (!uids.length) return;
+    await this.withMailbox(mailbox, () => this.client.messageFlagsRemove(uids, flags, { uid: true })).then(() => {});
+  }
+
+  async moveToTrash(mailbox: string, uids: number[]): Promise<void> {
+    if (!uids.length) return;
+    const trash = await this.specialFolder('\\Trash');
+    if (!trash) throw new Error('Cartella Cestino non trovata sul server');
+    await this.withMailbox(mailbox, () => this.client.messageMove(uids, trash, { uid: true }));
+  }
+
+  async archive(mailbox: string, uids: number[]): Promise<void> {
+    if (!uids.length) return;
+    if (this.isGmail()) {
+      await this.withMailbox(mailbox, () =>
+        this.client.messageFlagsRemove(uids, ['\\Inbox'], { uid: true, useLabels: true }),
+      );
+      return;
+    }
+    const archive = await this.specialFolder('\\Archive');
+    if (!archive) throw new Error('Cartella Archivio non trovata sul server');
+    await this.withMailbox(mailbox, () => this.client.messageMove(uids, archive, { uid: true }));
+  }
+
+  async appendToSent(raw: Buffer): Promise<void> {
+    const sent = await this.specialFolder('\\Sent');
+    if (!sent) throw new Error('Cartella Inviati non trovata sul server');
+    await this.client.append(sent, raw, ['\\Seen']);
+  }
+
   on(events: MailboxEvents): () => void {
     const exists = () => events.onNewMessages();
     const flags = (e: { uid?: number; flags?: Set<string> }) => {

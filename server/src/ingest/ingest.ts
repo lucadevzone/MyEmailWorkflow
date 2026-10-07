@@ -21,6 +21,7 @@ import { newId, now } from '../lib/ids.ts';
 import type { BlobStore } from '../store/blobs.ts';
 import { cleanBody, makeSnippet, normalizeSubject } from './clean-text.ts';
 import { detectNoise } from './noise.ts';
+import { pendingSeenIntent } from '../activities/service.ts';
 
 export interface RawFetched {
   uid: number | null;
@@ -186,7 +187,12 @@ export async function ingestMessage(
       );
 
     tx.update(conversations)
-      .set({ lastMessageAt: sql`max(${conversations.lastMessageAt}, ${date})`, updatedAt: t })
+      .set({
+        lastMessageAt: sql`max(${conversations.lastMessageAt}, ${date})`,
+        // Posta nuova in arrivo riporta in vista una conversazione archiviata o cestinata (come Gmail).
+        ...(direction === 'in' ? { archivedAt: null, trashedAt: null } : {}),
+        updatedAt: t,
+      })
       .where(eq(conversations.id, conversationId))
       .run();
 
@@ -321,21 +327,39 @@ function findExisting(db: Db, accountId: string, gmMsgid: string | null, rfcMess
     .get();
 }
 
-export function updateFlags(db: Db, messageId: string, raw: Pick<RawFetched, 'flags' | 'labels' | 'uid' | 'mailbox' | 'gmMsgid'>) {
+export function updateFlags(
+  db: Db,
+  messageId: string,
+  raw: Pick<RawFetched, 'flags' | 'labels' | 'uid' | 'mailbox' | 'gmMsgid'> & { gmThreadId?: string | null },
+) {
+  // Un "letto/non letto" ancora in coda prevale sullo stato del server, che non è ancora aggiornato.
+  const intent = pendingSeenIntent(db, [messageId]).get(messageId);
+  const t = now();
   db.update(messages)
     .set({
       flags: JSON.stringify(raw.flags),
       labels: JSON.stringify(raw.labels),
-      seen: raw.flags.includes('\\Seen'),
+      seen: intent ?? raw.flags.includes('\\Seen'),
       ...(raw.uid != null ? { uid: raw.uid, mailbox: raw.mailbox } : {}),
       ...(raw.gmMsgid ? { gmMsgid: raw.gmMsgid } : {}),
-      updatedAt: now(),
+      ...(raw.gmThreadId ? { gmThreadId: raw.gmThreadId } : {}),
+      updatedAt: t,
     })
     .where(eq(messages.id, messageId))
     .run();
+  if (raw.gmThreadId) {
+    // Email scritta dall'app e ritrovata sul server: la conversazione eredita il thread Gmail.
+    const msg = db.select({ c: messages.conversationId }).from(messages).where(eq(messages.id, messageId)).get();
+    if (msg) {
+      db.update(conversations)
+        .set({ gmThreadId: raw.gmThreadId })
+        .where(and(eq(conversations.id, msg.c), isNull(conversations.gmThreadId)))
+        .run();
+    }
+  }
 }
 
-function upsertAddress(db: Db, addr: Address, seenAt: number): string {
+export function upsertAddress(db: Db, addr: Address, seenAt: number): string {
   const existing = db.select().from(contactAddresses).where(eq(contactAddresses.email, addr.email)).get();
   const t = now();
   if (existing) {

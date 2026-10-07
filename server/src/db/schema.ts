@@ -90,6 +90,10 @@ export const conversations = sqliteTable(
     gmThreadId: text('gm_thread_id'),
     /** Newsletter/notifiche: escluse da Da smistare, embedding e task. */
     isNoise: integer('is_noise', { mode: 'boolean' }).notNull().default(false),
+    /** Archiviata: nascosta dalle viste salvo filtro. Riappare se arriva un nuovo messaggio. */
+    archivedAt: integer('archived_at'),
+    /** Nel cestino (anche su Gmail, tramite coda attività). */
+    trashedAt: integer('trashed_at'),
     ...meta(),
   },
   (t) => [
@@ -130,6 +134,8 @@ export const messages = sqliteTable(
     seen: integer('seen', { mode: 'boolean' }).notNull().default(false),
     hasAttachments: integer('has_attachments', { mode: 'boolean' }).notNull().default(false),
     analyzedAt: integer('analyzed_at'),
+    /** Solo per i messaggi scritti nell'app: stato dell'invio tramite coda attività. */
+    outgoingStatus: text('outgoing_status', { enum: ['queued', 'sent', 'failed'] }),
     ...meta(),
   },
   (t) => [

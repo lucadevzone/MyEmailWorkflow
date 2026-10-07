@@ -54,4 +54,15 @@ export interface MailProviderClient {
   fetchUids(uids: number[] | string): AsyncIterable<FetchedMessage>;
   fetchFlagsChangedSince(modseq: string): Promise<FlagUpdate[]>;
   on(events: MailboxEvents): () => void;
+
+  // ─── Operazioni (eseguite dalla coda attività) ─────────────────────────────
+  addFlags(mailbox: string, uids: number[], flags: string[]): Promise<void>;
+  removeFlags(mailbox: string, uids: number[], flags: string[]): Promise<void>;
+  /** Gmail: sposta nel Cestino. IMAP generico: nella cartella \\Trash. */
+  moveToTrash(mailbox: string, uids: number[]): Promise<void>;
+  /** Gmail: toglie l'etichetta \\Inbox. IMAP generico: sposta nella cartella \\Archive. */
+  archive(mailbox: string, uids: number[]): Promise<void>;
+  /** Copia nella cartella Inviati (non serve su Gmail, che la salva da sé). */
+  appendToSent(raw: Buffer): Promise<void>;
+  isGmail(): boolean;
 }
