@@ -16,7 +16,7 @@ data/     database e blob (creata al primo avvio, esclusa da git)
 
 ## Avvio
 
-Requisiti: Node ≥ 22, pnpm, Ollama con `llama3.1:8b` e `bge-m3`.
+Requisiti: Node 26 (`nvm use`), pnpm 12 (`npm install -g pnpm`), Ollama con `llama3.1:8b` e `bge-m3`.
 
 ```bash
 pnpm install
