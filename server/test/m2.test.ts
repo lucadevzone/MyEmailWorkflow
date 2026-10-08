@@ -141,6 +141,20 @@ describe('letto / non letto', () => {
     expect(calls).toEqual([{ op: 'addFlags', mailbox: '[Gmail]/Tutti i messaggi', uids: [7], flags: ['\\Seen'] }]);
   });
 
+  it('segna tutto come letto in una vista con un\'attività per account, annullabile', async () => {
+    await incoming('<1@x>', 7);
+    await incoming('<2@x>', 8);
+    const res = s.actions.markViewRead({ view: 'inbox' });
+    expect(res.count).toBe(2);
+    expect(res.activityIds).toHaveLength(1);
+    expect(conv().list({ view: 'inbox' }).every((c) => c.unreadCount === 0)).toBe(true);
+    s.activities.cancel(res.activityIds[0]!);
+    expect(conv().list({ view: 'inbox' }).every((c) => c.unreadCount === 1)).toBe(true);
+    s.actions.markViewRead({ view: 'inbox' });
+    await s.runner.run();
+    expect(calls).toEqual([{ op: 'addFlags', mailbox: '[Gmail]/Tutti i messaggi', uids: [7, 8], flags: ['\\Seen'] }]);
+  });
+
   it('annullare ripristina il non letto', async () => {
     const { conversationId } = await incoming('<1@x>', 7);
     const [activityId] = s.actions.markRead(conversationId);

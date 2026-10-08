@@ -124,8 +124,9 @@ Priorità: **MVP** = prima versione utilizzabile; **POST** = successiva; **FUT**
 
 | ID | Requisito | Pr. |
 |---|---|---|
-| RF-L1 | Tasto destro su conversazione, messaggio, voce della barra superiore, bolla, file: barra flottante ancorata sopra l'elemento, con prima le azioni suggerite (viola) e poi le principali | MVP |
-| RF-L2 | "Altro" (o iniziare a scrivere) apre la palette contestuale: ricerca, gruppi "Suggerite" e "Azioni", scorciatoie, navigazione da tastiera; da tastiera si apre direttamente la palette | MVP |
+| RF-L1 | Tasto destro su conversazione, messaggio, voce della barra superiore, bolla, file: barra flottante ancorata sopra l'elemento, con prima le azioni suggerite (viola) e poi le principali | ✅ |
+| RF-L2 | "Altro" (o iniziare a scrivere) apre la palette contestuale: ricerca, gruppi "Suggerite" e "Azioni", navigazione da tastiera; da tastiera (tasto menu, Maiusc+F10) si apre direttamente la palette | ✅ |
+| RF-L3 | Le conferme usano il popup a semicerchio (✕ Annulla, ✓ OK) ancorato al punto del clic, non le finestre del browser | ✅ |
 
 ### I. Coda delle attività
 

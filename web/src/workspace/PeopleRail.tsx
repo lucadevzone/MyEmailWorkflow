@@ -4,13 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.ts';
 import { Avatar } from '../ui/Avatar.tsx';
 import { Icon } from '../ui/Icon.tsx';
+import { useContextMenu } from '../ui/contextMenu.tsx';
 import { input, primary } from '../ui/styles.ts';
 
 /**
  * Barra del progetto: solo i contatti e i gruppi inseriti nel progetto.
  * Sono scorciatoie: clic = nuova email dal progetto a quella persona (o a tutto il gruppo).
  */
-export function PeopleRail({ projectId, onCompose }: { projectId: string; onCompose: (emails: string[]) => void }) {
+export function PeopleRail({ projectId, onCompose, onOpenPerson }: { projectId: string; onCompose: (emails: string[]) => void; onOpenPerson: (key: string) => void }) {
   const ask = useConfirm();
   const qc = useQueryClient();
   const { data: members } = useQuery({ queryKey: ['project-members', projectId], queryFn: () => api.projectMembers(projectId) });
@@ -46,6 +47,10 @@ export function PeopleRail({ projectId, onCompose }: { projectId: string; onComp
           key={g.id}
           label={`${g.name} · ${g.members.length} persone — clic per scrivere a tutti`}
           onClick={() => onCompose(g.members.map((m) => m.emails[0]).filter((e): e is string => !!e))}
+          writeLabel="Scrivi a tutti"
+          onOpen={() => onOpenPerson(`g:${g.id}`)}
+          removeConfirm={`Togliere il gruppo «${g.name}» dal progetto?`}
+          onRemoveConfirmed={() => removeGroup.mutate(g.id)}
           onRemove={async () => (await ask({ message: `Togliere il gruppo «${g.name}» dal progetto?`, okLabel: 'Togli', danger: true })) && removeGroup.mutate(g.id)}
         >
           <span className="flex size-12 items-center justify-center rounded-full bg-stone-200 text-stone-600 dark:bg-stone-700 dark:text-stone-200">
@@ -58,6 +63,10 @@ export function PeopleRail({ projectId, onCompose }: { projectId: string; onComp
           key={p.key}
           label={`${p.name ?? p.emails[0]} <${p.emails[0]}> — clic per scrivere`}
           onClick={() => p.emails[0] && onCompose([p.emails[0]])}
+          writeLabel="Scrivi"
+          onOpen={() => onOpenPerson(p.key)}
+          removeConfirm={`Togliere ${p.name ?? p.emails[0]} dal progetto?`}
+          onRemoveConfirmed={() => removeContact.mutate(p.contactId!)}
           onRemove={async () => (await ask({ message: `Togliere ${p.name ?? p.emails[0]} dal progetto?`, okLabel: 'Togli', danger: true })) && removeContact.mutate(p.contactId!)}
         >
           <Avatar name={p.name} email={p.emails[0] ?? p.key} avatarUrl={p.avatarUrl} size={48} />
@@ -75,10 +84,27 @@ export function PeopleRail({ projectId, onCompose }: { projectId: string; onComp
   );
 }
 
-function Bubble({ label, onClick, onRemove, children }: { label: string; onClick: () => void; onRemove: () => void | Promise<unknown>; children: React.ReactNode }) {
+function Bubble({ label, onClick, onRemove, writeLabel, onOpen, removeConfirm, onRemoveConfirmed, children }: {
+  label: string;
+  onClick: () => void;
+  onRemove: () => void | Promise<unknown>;
+  writeLabel: string;
+  onOpen: () => void;
+  removeConfirm: string;
+  onRemoveConfirmed: () => void;
+  children: React.ReactNode;
+}) {
+  const ctx = useContextMenu(() => ({
+    title: label.split(' — ')[0],
+    actions: [
+      { id: 'write', icon: 'edit', label: writeLabel, primary: true, run: onClick },
+      { id: 'open', icon: 'badge', label: 'Apri scheda', primary: true, run: onOpen },
+      { id: 'remove', icon: 'person_remove', label: 'Togli dal progetto', primary: true, tone: 'danger', confirm: { message: removeConfirm, okLabel: 'Togli', danger: true }, run: onRemoveConfirmed },
+    ],
+  }));
   return (
     <div className="group relative shrink-0">
-      <button onClick={onClick} title={label} className="rounded-full">
+      <button {...ctx} onClick={onClick} title={label} className="rounded-full">
         {children}
       </button>
       <button

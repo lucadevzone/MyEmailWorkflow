@@ -64,6 +64,9 @@ export const api = {
   trash: (id: string) => request<{ activityIds: string[] }>('POST', `/api/conversations/${id}/trash`),
   move: (id: string, projectId: string | null) =>
     request<{ previousProjectId: string | null }>('POST', `/api/conversations/${id}/move`, { projectId }),
+  markViewRead: (view: 'inbox' | 'noise' | 'project', projectId?: string) =>
+    request<{ count: number; activityIds: string[] }>('POST', '/api/views/read', { view, projectId }),
+  attachmentToResource: (id: string) => request<ResourceDto>('POST', `/api/attachments/${id}/to-resource`),
   compose: (input: ComposeInput) =>
     request<{ activityId: string; conversationId: string; messageId: string }>('POST', '/api/compose', input),
 

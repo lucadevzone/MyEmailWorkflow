@@ -16,6 +16,7 @@ import { ConversationService } from '../conversations/service.ts';
 
 export interface FlagsPayload {
   label: string;
+  /** Vuoto per le operazioni su più conversazioni ("segna tutto come letto"). */
   conversationId: string;
   messageIds: string[];
   add?: string[];

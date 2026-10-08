@@ -111,6 +111,27 @@ export class NotesService {
     return resourceDto(row, data.length, mime);
   }
 
+  /** Copia un allegato tra le risorse della conversazione (stesso blob: nessuna duplicazione su disco). */
+  addFromBlob(conversationId: string, title: string, blobSha: string): ResourceDto {
+    const blob = this.db.select().from(blobs).where(eq(blobs.sha256, blobSha)).get();
+    if (!blob) throw new NotesError('File non trovato');
+    const t = now();
+    const row: ResourceRow = {
+      id: newId(),
+      projectId: this.projectOf(conversationId, undefined),
+      conversationId,
+      kind: 'file',
+      blobSha,
+      url: null,
+      title,
+      createdAt: t,
+      updatedAt: t,
+      deletedAt: null,
+    };
+    this.db.insert(resources).values(row).run();
+    return resourceDto(row, blob.size, blob.mime);
+  }
+
   getResource(id: string): ResourceRow | undefined {
     return this.db.select().from(resources).where(and(eq(resources.id, id), isNull(resources.deletedAt))).get();
   }

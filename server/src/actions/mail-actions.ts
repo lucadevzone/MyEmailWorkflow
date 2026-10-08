@@ -72,6 +72,45 @@ export class MailActions {
     return ids;
   }
 
+  /** "Segna tutto come letto" per una vista: Da smistare, Rumore o un progetto. Un'attività per account. */
+  markViewRead(scope: { view: 'inbox' | 'noise' } | { view: 'project'; projectId: string }): { count: number; activityIds: string[] } {
+    const { db } = this.deps;
+    const where = [
+      isNull(conversations.deletedAt),
+      isNull(conversations.trashedAt),
+      isNull(conversations.archivedAt),
+      eq(messages.seen, false),
+      eq(messages.direction, 'in'),
+      isNull(messages.deletedAt),
+    ];
+    if (scope.view === 'project') where.push(eq(conversations.projectId, scope.projectId));
+    else where.push(isNull(conversations.projectId), eq(conversations.isNoise, scope.view === 'noise'));
+    const rows = db
+      .select({ id: messages.id, accountId: messages.accountId, conversationId: messages.conversationId })
+      .from(messages)
+      .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+      .where(and(...where))
+      .all();
+    if (!rows.length) return { count: 0, activityIds: [] };
+    this.conv.setSeen(rows.map((r) => r.id), true);
+    const name =
+      scope.view === 'project'
+        ? (db.select({ n: projects.name }).from(projects).where(eq(projects.id, scope.projectId)).get()?.n ?? 'progetto')
+        : scope.view === 'inbox'
+          ? 'Da smistare'
+          : 'Rumore';
+    const activityIds = [...groupBy(rows, (r) => r.accountId)].map(([accountId, list]) =>
+      this.deps.activities.enqueue('set_flags', accountId, {
+        label: `Segna tutto come letto: ${name} (${list.length})`,
+        conversationId: '',
+        messageIds: list.map((r) => r.id),
+        add: ['\\Seen'],
+      }).id,
+    );
+    bus.publish({ type: 'conversations', ids: [...new Set(rows.map((r) => r.conversationId))] });
+    return { count: rows.length, activityIds };
+  }
+
   markUnread(conversationId: string): string[] {
     const last = this.conv.lastIncoming(conversationId);
     const changed = last ? this.conv.setSeen([last], false) : [];

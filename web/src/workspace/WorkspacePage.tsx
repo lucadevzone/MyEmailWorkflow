@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import type { ConversationQuery } from '@mmw/shared';
 import { api } from '../api.ts';
@@ -18,11 +18,14 @@ const PAGE = 50;
 export type WorkspaceScope = { view: 'inbox' } | { view: 'noise' } | { view: 'project'; projectId: string };
 
 /** Pagina di una voce della barra superiore: persone | conversazioni | messaggio. */
-export function WorkspacePage({ scope, focusConversationId, onEditProject }: {
+export function WorkspacePage({ scope, focusConversationId, intent, onEditProject, onOpenPerson }: {
   scope: WorkspaceScope;
   /** Conversazione da espandere all'apertura (es. arrivando dalla pagina Contatti). */
   focusConversationId?: string | null;
+  /** Azione richiesta dal menu contestuale della barra superiore. */
+  intent?: { kind: 'compose' | 'tasks'; key: number } | null;
   onEditProject: () => void;
+  onOpenPerson: (key: string) => void;
 }) {
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
@@ -59,11 +62,21 @@ export function WorkspacePage({ scope, focusConversationId, onEditProject }: {
       openMessage,
       compose: (request) => setPane({ kind: 'compose', request, key: Date.now() }),
       openNote: (conversationId, noteId) => setPane({ kind: 'note', conversationId, noteId, key: Date.now() }),
-      openTasks: (projectId) => setPane({ kind: 'tasks', projectId }),
+      openTasks: (projectId, draft) => setPane({ kind: 'tasks', projectId, draft, key: Date.now() }),
       close: () => setPane({ kind: 'empty' }),
     }),
     [openMessage],
   );
+
+  // Ogni richiesta (identificata dalla sua chiave) si esegue una sola volta.
+  const handledIntent = useRef<number | null>(null);
+  const projectId = scope.view === 'project' ? scope.projectId : null;
+  useEffect(() => {
+    if (!intent || !projectId || handledIntent.current === intent.key) return;
+    handledIntent.current = intent.key;
+    if (intent.kind === 'compose') actions.compose({ projectId });
+    else actions.openTasks(projectId);
+  }, [intent, projectId, actions]);
 
   const title = scope.view === 'inbox' ? 'Da smistare' : scope.view === 'noise' ? 'Rumore' : (project?.name ?? '…');
   const outgoing = project && accounts.find((a) => a.id === project.outgoingAccountId);
@@ -120,7 +133,9 @@ export function WorkspacePage({ scope, focusConversationId, onEditProject }: {
       {pane.kind === 'note' && <NoteEditor key={pane.key} conversationId={pane.conversationId} noteId={pane.noteId} pane={actions} />}
       {pane.kind === 'tasks' && (
         <TasksPanel
+          key={pane.key}
           projectId={pane.projectId}
+          draft={pane.draft}
           onOpenConversation={(conversationId, messageId) => {
             setSelected(conversationId);
             if (messageId) openMessage(conversationId, messageId);
@@ -167,7 +182,7 @@ export function WorkspacePage({ scope, focusConversationId, onEditProject }: {
         )}
       </div>
       <div className="flex min-h-0 flex-1">
-        {scope.view === 'project' && <PeopleRail projectId={scope.projectId} onCompose={(to) => actions.compose({ to, projectId: scope.projectId })} />}
+        {scope.view === 'project' && <PeopleRail projectId={scope.projectId} onCompose={(to) => actions.compose({ to, projectId: scope.projectId })} onOpenPerson={onOpenPerson} />}
         <Split storageKey="mmw.split.workspace" left={left} right={right} />
       </div>
     </div>

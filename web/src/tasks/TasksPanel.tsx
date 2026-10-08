@@ -5,13 +5,20 @@ import { api } from '../api.ts';
 import { Icon } from '../ui/Icon.tsx';
 import { input, primary } from '../ui/styles.ts';
 import { dueCls, dueInfo, useTaskOps } from './useTaskOps.ts';
+import type { TaskDraft } from '../workspace/pane.ts';
 
 /** Pannello dei task del progetto: coda riordinabile col trascinamento, completati in fondo. */
-export function TasksPanel({ projectId, onOpenConversation }: { projectId: string; onOpenConversation: (conversationId: string, messageId: string | null) => void }) {
+export function TasksPanel({ projectId, draft, onOpenConversation }: {
+  projectId: string;
+  /** Nuovo task da un messaggio: il titolo va scritto, il collegamento è già fatto. */
+  draft?: TaskDraft;
+  onOpenConversation: (conversationId: string, messageId: string | null) => void;
+}) {
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks', 'project', projectId], queryFn: () => api.projectTasks(projectId) });
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const ops = useTaskOps();
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(draft?.title ?? '');
+  const [link, setLink] = useState(draft ?? null);
   const [due, setDue] = useState('');
   const [top, setTop] = useState(false);
   const [showDone, setShowDone] = useState(false);
@@ -22,7 +29,10 @@ export function TasksPanel({ projectId, onOpenConversation }: { projectId: strin
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    ops.create.mutate({ projectId, title, dueDate: due || null, top }, { onSuccess: () => { setTitle(''); setDue(''); setTop(false); } });
+    ops.create.mutate(
+      { projectId, title, dueDate: due || null, top, conversationId: link?.conversationId, messageId: link?.messageId },
+      { onSuccess: () => { setTitle(''); setDue(''); setTop(false); setLink(null); } },
+    );
   };
 
   const onDragOver = (e: DragEvent, t: TaskDto) => {
@@ -46,7 +56,7 @@ export function TasksPanel({ projectId, onOpenConversation }: { projectId: strin
       <header className="border-b border-stone-200 px-6 py-4 dark:border-stone-800">
         <h2 className="text-lg font-semibold">Task · {projects.find((p) => p.id === projectId)?.name}</h2>
         <form onSubmit={submit} className="mt-3 flex flex-wrap items-center gap-2">
-          <input className={`${input} min-w-48 flex-1`} placeholder="Nuovo task…" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input className={`${input} min-w-48 flex-1`} placeholder={link ? 'Nuovo task dal messaggio…' : 'Nuovo task…'} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus={!!link} />
           <input className={`${input} w-40`} type="date" value={due} onChange={(e) => setDue(e.target.value)} title="Scadenza (facoltativa)" />
           <label className="flex items-center gap-1 text-xs text-stone-600 dark:text-stone-300">
             <input type="checkbox" checked={top} onChange={(e) => setTop(e.target.checked)} /> in cima
@@ -55,6 +65,12 @@ export function TasksPanel({ projectId, onOpenConversation }: { projectId: strin
             Aggiungi
           </button>
         </form>
+        {link && (
+          <div className="mt-1 flex items-center gap-1 text-xs text-stone-500">
+            <Icon name="link" size={14} /> collegato al messaggio
+            <button className="underline" onClick={() => setLink(null)}>scollega</button>
+          </div>
+        )}
         {ops.create.error && <div className="mt-1 text-xs text-rose-600">{(ops.create.error as Error).message}</div>}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">

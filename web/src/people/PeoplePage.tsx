@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useConfirm } from '../ui/confirm.tsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConversationListItem, GroupDto, PersonDto } from '@mmw/shared';
@@ -12,9 +12,22 @@ import { button, input, primary } from '../ui/styles.ts';
 type Selection = { kind: 'person'; person: PersonDto } | { kind: 'group'; group: GroupDto | null } | null;
 
 /** Rubrica: gruppi, contatti, indirizzi suggeriti. Clic su una bolla = conversazioni in tutti i progetti. */
-export function PeoplePage({ onOpenConversation }: { onOpenConversation: (c: ConversationListItem) => void }) {
+export function PeoplePage({ focusKey, onOpenConversation }: { focusKey?: string | null; onOpenConversation: (c: ConversationListItem) => void }) {
   const { data: dir } = useQuery({ queryKey: ['directory'], queryFn: api.peopleDirectory });
   const [sel, setSel] = useState<Selection>(null);
+  // Arrivando da una bolla ("Apri scheda") si seleziona subito la persona o il gruppo.
+  const focused = useRef<string | null>(null);
+  useEffect(() => {
+    if (!dir || !focusKey || focused.current === focusKey) return;
+    focused.current = focusKey;
+    if (focusKey.startsWith('g:')) {
+      const g = dir.groups.find((x) => `g:${x.id}` === focusKey);
+      if (g) setSel({ kind: 'group', group: g });
+    } else {
+      const p = [...dir.contacts, ...dir.suggested].find((x) => x.key === focusKey);
+      if (p) setSel({ kind: 'person', person: p });
+    }
+  }, [dir, focusKey]);
   const [q, setQ] = useState('');
   const match = (p: PersonDto) => !q || (p.name ?? '').toLowerCase().includes(q.toLowerCase()) || p.emails.some((e) => e.includes(q.toLowerCase()));
 

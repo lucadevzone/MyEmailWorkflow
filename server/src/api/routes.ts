@@ -230,6 +230,22 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return deps.actions.move(req.params.id, projectId);
   });
 
+  app.post<{ Body: { view?: string; projectId?: string } }>('/api/views/read', async (req, reply) => {
+    const v = req.body?.view;
+    if (v === 'project' && req.body?.projectId) return deps.actions.markViewRead({ view: 'project', projectId: req.body.projectId });
+    if (v === 'inbox' || v === 'noise') return deps.actions.markViewRead({ view: v });
+    return reply.code(400).send({ error: 'Vista non valida' });
+  });
+
+  app.post<{ Params: { id: string } }>('/api/attachments/:id/to-resource', async (req, reply) => {
+    const att = deps.db.select().from(attachments).where(eq(attachments.id, req.params.id)).get();
+    if (!att) return reply.code(404).send({ error: 'Allegato non trovato' });
+    const msg = deps.db.select({ c: messages.conversationId }).from(messages).where(eq(messages.id, att.messageId)).get()!;
+    const resource = deps.notes.addFromBlob(msg.c, att.filename ?? 'allegato', att.blobSha);
+    bus.publish({ type: 'conversations', ids: [msg.c] });
+    return reply.code(201).send(resource);
+  });
+
   app.post('/api/compose', async (req, reply) => reply.code(201).send(deps.actions.compose(parse(composeSchema, req.body))));
 
   // ─── Progetti ──────────────────────────────────────────────────────────────
