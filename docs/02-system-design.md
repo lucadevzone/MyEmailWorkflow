@@ -168,7 +168,8 @@ IDLE/fetch → salva raw (blob) → parse → dedup (gm_msgid / Message-ID)
 5. **Task e azioni**: l'LLM estrae in JSON task impliciti (richieste, scadenze) e azioni rapide (rispondi, inoltra, archivia).
 6. **Contatti**: propone di creare i contatti per gli indirizzi sconosciuti che non sono rumore.
 7. **Riassunto**: aggiornamento incrementale, calcolato da riassunto precedente + nuova email pulita.
-8. Ogni output diventa una `suggestion`. In modalità *pensaci tu*, i suggerimenti sopra soglia vengono applicati e marcati `auto_applied`, e restano annullabili.
+8. Ogni output diventa una `suggestion` in attesa. **Nulla viene applicato da solo**: "pensaci tu" è proprio questo lavoro in background, per cui i suggerimenti sono già pronti quando l'utente apre l'elemento (pulsanti viola nella quarta riga) o il menu contestuale (in cima). Scartare un suggerimento lo marca `rejected` (utile in futuro come esempio negativo).
+9. **Classificazione continua di Da smistare**: oltre ai messaggi nuovi, un lavoro a bassa priorità calcola il progetto suggerito per le conversazioni non assegnate (anche storiche), e lo ricalcola quando si crea o si modifica un progetto (nome/descrizione).
 
 Prompt e modelli sono versionati, e il campo `suggestion.model` conserva la traccia. Più avanti i suggerimenti accettati e rifiutati possono servire da few-shot.
 
@@ -229,6 +230,10 @@ pending ──(batch tick | esegui ora | urgent)──► running ──► done
   - azioni: Rispondi (a tutti), azioni suggerite, Archivia, menu ⋯. Azioni suggerite:
     - "Aggiungi i destinatari come gruppo" (o il singolo contatto) se non sono già nel progetto;
     - da M4, quelle dell'analizzatore.
+- **Task del progetto**: nella barra del titolo, dopo il nome, i primi task aperti; in fondo un'icona apre nel pannello di destra la lista riordinabile (trascinamento) dei task del progetto.
+- **Menu contestuale** (tasto destro) su conversazione, messaggio, voce della barra superiore, bolla, file:
+  - *barra flottante* a pillola ancorata sopra l'elemento: prima le azioni suggerite (viola), poi le principali con testo, infine "Altro";
+  - *palette contestuale*: si apre con "Altro" o iniziando a scrivere (da tastiera con il tasto menu o Maiusc+F10); ha ricerca, gruppi "Suggerite" e "Azioni", scorciatoie, frecce e Invio.
 - **Albero dei messaggi** sotto la conversazione espansa: dalla radice alle foglie, con badge blu sui non letti. Il clic apre il messaggio a destra e lo segna come letto.
 
 ## 8. Sicurezza

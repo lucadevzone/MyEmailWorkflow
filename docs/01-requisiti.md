@@ -89,8 +89,8 @@ Priorità: **MVP** = prima versione utilizzabile; **POST** = successiva; **FUT**
 |---|---|---|
 | RF-E1 | Su ogni email nuova suggerisce: progetto (se conversazione nuova), contatti nuovi, task, azioni immediate | MVP |
 | RF-E2 | Un task suggerito si promuove a task con un clic | MVP |
-| RF-E3 | Livelli di autonomia: *suggerisci* (default) / *pensaci tu* (applica automaticamente sopra soglia) | MVP |
-| RF-E4 | Modalità *organizza tu*: smistamento in blocco della posta, anche proponendo nuovi progetti | POST |
+| RF-E3 | "Pensaci tu" non è un comando ma l'analizzatore che lavora in background: le azioni suggerite sono già pronte quando l'elemento viene mostrato o si apre il menu contestuale. Nulla viene applicato da solo: sceglie sempre l'utente | MVP |
+| RF-E4 | La classificazione della posta in Da smistare avviene in background (anche sullo storico): il progetto suggerito compare sotto la conversazione e nel menu contestuale | MVP |
 | RF-E5 | Suggerimento di bozze di risposta usando il contesto del progetto | POST |
 
 ### F. Task
@@ -101,6 +101,7 @@ Priorità: **MVP** = prima versione utilizzabile; **POST** = successiva; **FUT**
 | RF-F2 | I task sono riordinabili manualmente | MVP |
 | RF-F3 | Scadenza opzionale | MVP |
 | RF-F4 | Task collegabili a progetto, conversazione, email, annotazione | MVP |
+| RF-F6 | I task stanno nei progetti: nella barra del progetto, dopo il titolo, i primi task; un'icona apre a destra il pannello riordinabile dei task del progetto | MVP |
 | RF-F5 | Scheduling e calendario | FUT |
 
 ### G. Note e annotazioni
@@ -118,6 +119,13 @@ Priorità: **MVP** = prima versione utilizzabile; **POST** = successiva; **FUT**
 | RF-H1 | Ricerca testuale (full-text) | MVP |
 | RF-H2 | Embedding di tutte le email (escluse quelle marcate come rumore), chunk senza testo quotato | MVP (interno, per l'analizzatore) |
 | RF-H3 | Interrogazione in linguaggio naturale della posta | POST |
+
+### L. Menu contestuale
+
+| ID | Requisito | Pr. |
+|---|---|---|
+| RF-L1 | Tasto destro su conversazione, messaggio, voce della barra superiore, bolla, file: barra flottante ancorata sopra l'elemento, con prima le azioni suggerite (viola) e poi le principali | MVP |
+| RF-L2 | "Altro" (o iniziare a scrivere) apre la palette contestuale: ricerca, gruppi "Suggerite" e "Azioni", scorciatoie, navigazione da tastiera; da tastiera si apre direttamente la palette | MVP |
 
 ### I. Coda delle attività
 
