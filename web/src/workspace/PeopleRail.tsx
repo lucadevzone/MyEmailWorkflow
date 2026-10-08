@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useConfirm } from '../ui/confirm.tsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.ts';
 import { Avatar } from '../ui/Avatar.tsx';
@@ -10,6 +11,7 @@ import { input, primary } from '../ui/styles.ts';
  * Sono scorciatoie: clic = nuova email dal progetto a quella persona (o a tutto il gruppo).
  */
 export function PeopleRail({ projectId, onCompose }: { projectId: string; onCompose: (emails: string[]) => void }) {
+  const ask = useConfirm();
   const qc = useQueryClient();
   const { data: members } = useQuery({ queryKey: ['project-members', projectId], queryFn: () => api.projectMembers(projectId) });
   const [adding, setAdding] = useState(false);
@@ -44,7 +46,7 @@ export function PeopleRail({ projectId, onCompose }: { projectId: string; onComp
           key={g.id}
           label={`${g.name} · ${g.members.length} persone — clic per scrivere a tutti`}
           onClick={() => onCompose(g.members.map((m) => m.emails[0]).filter((e): e is string => !!e))}
-          onRemove={() => confirm(`Togliere il gruppo «${g.name}» dal progetto?`) && removeGroup.mutate(g.id)}
+          onRemove={async () => (await ask({ message: `Togliere il gruppo «${g.name}» dal progetto?`, okLabel: 'Togli', danger: true })) && removeGroup.mutate(g.id)}
         >
           <span className="flex size-12 items-center justify-center rounded-full bg-stone-200 text-stone-600 dark:bg-stone-700 dark:text-stone-200">
             <Icon name="group" size={24} />
@@ -56,7 +58,7 @@ export function PeopleRail({ projectId, onCompose }: { projectId: string; onComp
           key={p.key}
           label={`${p.name ?? p.emails[0]} <${p.emails[0]}> — clic per scrivere`}
           onClick={() => p.emails[0] && onCompose([p.emails[0]])}
-          onRemove={() => confirm(`Togliere ${p.name ?? p.emails[0]} dal progetto?`) && removeContact.mutate(p.contactId!)}
+          onRemove={async () => (await ask({ message: `Togliere ${p.name ?? p.emails[0]} dal progetto?`, okLabel: 'Togli', danger: true })) && removeContact.mutate(p.contactId!)}
         >
           <Avatar name={p.name} email={p.emails[0] ?? p.key} avatarUrl={p.avatarUrl} size={48} />
         </Bubble>
@@ -73,7 +75,7 @@ export function PeopleRail({ projectId, onCompose }: { projectId: string; onComp
   );
 }
 
-function Bubble({ label, onClick, onRemove, children }: { label: string; onClick: () => void; onRemove: () => void; children: React.ReactNode }) {
+function Bubble({ label, onClick, onRemove, children }: { label: string; onClick: () => void; onRemove: () => void | Promise<unknown>; children: React.ReactNode }) {
   return (
     <div className="group relative shrink-0">
       <button onClick={onClick} title={label} className="rounded-full">

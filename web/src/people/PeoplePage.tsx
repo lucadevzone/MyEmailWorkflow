@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
+import { useConfirm } from '../ui/confirm.tsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConversationListItem, GroupDto, PersonDto } from '@mmw/shared';
 import { api } from '../api.ts';
@@ -131,6 +132,7 @@ function PhotoPicker({ person, onChanged }: { person: PersonDto; onChanged: (p: 
 }
 
 function PersonDetail({ person, onOpenConversation, onChanged }: { person: PersonDto; onOpenConversation: (c: ConversationListItem) => void; onChanged: (s: Selection) => void }) {
+  const ask = useConfirm();
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [merging, setMerging] = useState(false);
@@ -208,7 +210,7 @@ function PersonDetail({ person, onOpenConversation, onChanged }: { person: Perso
           {(save.error || remove.error) && <div className="text-xs text-rose-600">{((save.error || remove.error) as Error).message}</div>}
           <div className="flex gap-2">
             {person.contactId && (
-              <button type="button" className={button} onClick={() => confirm('Eliminare il contatto? Gli indirizzi restano.') && remove.mutate()}>
+              <button type="button" className={button} onClick={async () => (await ask({ message: 'Eliminare il contatto? Gli indirizzi restano.', okLabel: 'Elimina', danger: true })) && remove.mutate()}>
                 Elimina
               </button>
             )}
@@ -230,6 +232,7 @@ function PersonDetail({ person, onOpenConversation, onChanged }: { person: Perso
 
 /** Sceglie un'altra persona (contatto o indirizzo suggerito) da unire in questo contatto. */
 function MergePanel({ person, onCancel, onMerged }: { person: PersonDto; onCancel: () => void; onMerged: (p: PersonDto) => void }) {
+  const ask = useConfirm();
   const qc = useQueryClient();
   const { data: dir } = useQuery({ queryKey: ['directory'], queryFn: api.peopleDirectory });
   const [q, setQ] = useState('');
@@ -262,7 +265,7 @@ function MergePanel({ person, onCancel, onMerged }: { person: PersonDto; onCance
             <button
               className="flex w-full items-center gap-3 px-1 py-2 text-left hover:bg-stone-50 disabled:opacity-50 dark:hover:bg-stone-800"
               disabled={merge.isPending}
-              onClick={() => confirm(`Unire «${p.name ?? p.emails[0]}» in «${label}»?`) && merge.mutate(p.key)}
+              onClick={async () => (await ask({ message: `Unire «${p.name ?? p.emails[0]}» in «${label}»?`, okLabel: 'Unisci', danger: true })) && merge.mutate(p.key)}
             >
               <Avatar name={p.name} email={p.emails[0] ?? p.key} avatarUrl={p.avatarUrl} size={36} />
               <span className="min-w-0 flex-1">
@@ -326,6 +329,7 @@ function PersonConversations({ personKey, onOpen }: { personKey: string; onOpen:
 }
 
 function GroupDetail({ group, contacts, onOpenConversation, onDone }: { group: GroupDto | null; contacts: PersonDto[]; onOpenConversation: (c: ConversationListItem) => void; onDone: () => void }) {
+  const ask = useConfirm();
   const qc = useQueryClient();
   const [name, setName] = useState(group?.name ?? '');
   const [members, setMembers] = useState<Set<string>>(new Set(group?.members.map((m) => m.contactId!) ?? []));
@@ -373,7 +377,7 @@ function GroupDetail({ group, contacts, onOpenConversation, onDone }: { group: G
           </div>
           {save.error && <div className="text-xs text-rose-600">{(save.error as Error).message}</div>}
           <div className="flex gap-2">
-            {group && <button type="button" className={button} onClick={() => confirm('Eliminare il gruppo?') && remove.mutate()}>Elimina</button>}
+            {group && <button type="button" className={button} onClick={async () => (await ask({ message: 'Eliminare il gruppo?', okLabel: 'Elimina', danger: true })) && remove.mutate()}>Elimina</button>}
             <div className="flex-1" />
             <button type="button" className={button} onClick={() => (group ? setEditing(false) : onDone())}>Annulla</button>
             <button className={primary} disabled={save.isPending}>Salva</button>

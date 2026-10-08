@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useConfirm } from '../ui/confirm.tsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api.ts';
 import { longDate } from '../lib/format.ts';
@@ -7,6 +8,7 @@ import type { PaneAction } from './pane.ts';
 
 /** Visualizza/modifica una nota di conversazione (noteId null = nuova). */
 export function NoteEditor({ conversationId, noteId, pane }: { conversationId: string; noteId: string | null; pane: PaneAction }) {
+  const ask = useConfirm();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['conversation', conversationId], queryFn: () => api.conversation(conversationId) });
   const note = noteId ? data?.notes.find((n) => n.id === noteId) : undefined;
@@ -54,7 +56,7 @@ export function NoteEditor({ conversationId, noteId, pane }: { conversationId: s
       {(save.error || remove.error) && <div className="text-sm text-rose-600">{((save.error || remove.error) as Error).message}</div>}
       <div className="flex gap-2">
         {noteId && (
-          <button className={button} onClick={() => confirm('Eliminare la nota?') && remove.mutate()}>
+          <button className={button} onClick={async () => (await ask({ message: 'Eliminare la nota?', okLabel: 'Elimina', danger: true })) && remove.mutate()}>
             Elimina
           </button>
         )}

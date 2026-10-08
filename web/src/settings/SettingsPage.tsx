@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useConfirm } from '../ui/confirm.tsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AccountDto, ConnectionTestResult, MailProvider } from '@mmw/shared';
 import { api } from '../api.ts';
@@ -117,6 +118,7 @@ function Accounts() {
 }
 
 function AccountCard({ account }: { account: AccountDto }) {
+  const ask = useConfirm();
   const qc = useQueryClient();
   const test = useMutation({ mutationFn: () => api.testAccount(account.id) });
   const remove = useMutation({
@@ -141,7 +143,7 @@ function AccountCard({ account }: { account: AccountDto }) {
           <button
             className={button}
             disabled={remove.isPending}
-            onClick={() => confirm(`Rimuovere l'account ${account.email}?`) && remove.mutate()}
+            onClick={async () => (await ask({ message: `Rimuovere l'account ${account.email}?`, okLabel: 'Rimuovi', danger: true })) && remove.mutate()}
           >
             Rimuovi
           </button>

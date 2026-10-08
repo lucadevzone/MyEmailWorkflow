@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useConfirm } from '../ui/confirm.tsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConversationDetail, ConversationListItem, MessageDto, PersonRef, SuggestionDto } from '@mmw/shared';
 import { ProjectDialog } from '../projects/ProjectDialog.tsx';
@@ -28,6 +29,7 @@ export function ConversationCard({
 }) {
   const qc = useQueryClient();
   const toast = useToast();
+  const ask = useConfirm();
   const [open, setOpen] = useState<Set<Section>>(new Set());
   const [menu, setMenu] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -182,7 +184,7 @@ export function ConversationCard({
                     {r.title}
                   </a>
                   {r.size != null && <span className="text-stone-500">{fileSize(r.size)}</span>}
-                  <button className="text-stone-400 hover:text-rose-600" title="Elimina" onClick={() => confirm(`Eliminare ${r.title}?`) && removeResource.mutate(r.id)}>
+                  <button className="text-stone-400 hover:text-rose-600" title="Elimina" onClick={async () => (await ask({ message: `Eliminare ${r.title}?`, okLabel: 'Elimina', danger: true })) && removeResource.mutate(r.id)}>
                     <Icon name="delete" size={16} />
                   </button>
                 </li>
