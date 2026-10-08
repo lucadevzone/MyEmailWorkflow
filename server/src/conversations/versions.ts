@@ -35,7 +35,7 @@ const LEADING = [/^(copia di|copy of)\s+/];
 
 /**
  * Chiave del "file" a cui appartiene un allegato: stesso nome a meno di segni di versione
- * (numeri, copie, parole come "final", date, iniziali di chi ha rivisto) e con la stessa estensione.
+ * (numeri, copie, parole come "final", date) e con la stessa estensione.
  */
 export function normalizeFileName(name: string | null): string {
   const clean = (name ?? 'allegato').normalize('NFC').trim().replace(/\s+/g, ' ');
@@ -44,8 +44,6 @@ export function normalizeFileName(name: string | null): string {
   const ext = hasExt ? clean.slice(dot + 1).toLowerCase() : '';
   let stem = hasExt ? clean.slice(0, dot) : clean;
 
-  // Iniziali in maiuscolo del revisore ("relazione_LS"): si guardano prima di passare al minuscolo.
-  stem = stem.replace(/[_-][A-Z]{2,3}$/, '');
   stem = stem.toLowerCase();
   for (const re of LEADING) stem = stem.replace(re, '');
   let prev: string;

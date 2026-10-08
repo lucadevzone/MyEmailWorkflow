@@ -103,7 +103,7 @@ describe('nomi simili', () => {
       'Relazione_v2.docx', 'relazione-rev3.docx', 'Relazione versione 2.docx', 'relazione v1.2.docx',
       'relazione (1).docx', 'Copia di relazione.docx', 'relazione - copia.docx', 'relazione_final.docx',
       'Relazione DEF.docx', 'relazione_finale_v3.docx', 'relazione_2026-10-07.docx', 'relazione_20261007.docx',
-      'relazione 07.10.2026.docx', 'relazione_LS.docx', 'relazione_commenti_LS.docx', 'relazione_bozza.docx',
+      'relazione 07.10.2026.docx', 'relazione_commenti.docx', 'relazione_bozza.docx',
     ]) same(n, 'relazione.docx');
     same('Piano di lavoro_v2.xlsx', 'piano_di_lavoro.xlsx');
   });
@@ -115,20 +115,23 @@ describe('nomi simili', () => {
     diff('allegato A.pdf', 'allegato B.pdf');
     diff('v2.pdf', 'v3.pdf');
     diff('chapter2.pdf', 'chapter3.pdf');
+    // Le sigle in fondo al nome non sono segni di versione.
+    diff('budget_EU.xlsx', 'budget.xlsx');
+    diff('relazione_LS.docx', 'relazione.docx');
     diff('server.pdf', 'serve.pdf');
   });
 
   it('nella storia unisce le varianti come versioni dello stesso file', () => {
     const [file, ...rest] = buildFileHistory([
       occ('a', 'Relazione.docx', 's1', 1, mario),
-      occ('b', 'Relazione_LS.docx', 's2', 2, anna),
+      occ('b', 'Relazione_rivista.docx', 's2', 2, anna),
       occ('c', 'Relazione_v3_final.docx', 's3', 3, mario),
     ]);
     expect(rest).toHaveLength(0);
     expect(file!.name).toBe('Relazione_v3_final.docx');
     expect(file!.versions.map((v) => [v.no, v.filename])).toEqual([
       [3, 'Relazione_v3_final.docx'],
-      [2, 'Relazione_LS.docx'],
+      [2, 'Relazione_rivista.docx'],
       [1, 'Relazione.docx'],
     ]);
   });
