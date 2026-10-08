@@ -219,7 +219,7 @@ pending ──(batch tick | esegui ora | urgent)──► running ──► done
   - + per creare un nuovo progetto.
 - **Barra di stato**: Impostazioni, Contatti, Attività; a destra lo stato di account e Ollama (verde = online, arancione = offline).
 - **Pagina di una voce**:
-  - solo nei progetti, a sinistra, le bolle dei **contatti e gruppi inseriti nel progetto** (non chi compare nelle email): sono scorciatoie, il clic apre una nuova email dal progetto; + ne aggiunge, × li toglie;
+  - solo nei progetti, a sinistra, le bolle dei **contatti e gruppi inseriti nel progetto** (non chi compare nelle email): sono scorciatoie, il clic apre una nuova email dal progetto; + ne aggiunge, × li toglie. La prima bolla, fissa, è **Tutti**: una nuova email a tutti i contatti del progetto e ai membri dei suoi gruppi, senza doppioni;
   - due colonne ridimensionabili: conversazioni | pannello di destra.
 - **Scheda conversazione**:
   - badge rosso dei non letti;

@@ -17,8 +17,28 @@ export function PeopleRail({ projectId, onCompose }: { projectId: string; onComp
   const removeContact = useMutation({ mutationFn: (id: string) => api.removeProjectContact(projectId, id), onSuccess: refresh });
   const removeGroup = useMutation({ mutationFn: (id: string) => api.removeProjectGroup(projectId, id), onSuccess: refresh });
 
+  // "Tutti": contatti del progetto + membri dei gruppi, senza doppioni.
+  const everyone = [
+    ...new Set(
+      [...(members?.contacts ?? []), ...(members?.groups ?? []).flatMap((g) => g.members)]
+        .map((p) => p.emails[0])
+        .filter((e): e is string => !!e),
+    ),
+  ];
+
   return (
     <aside className="relative flex w-20 shrink-0 flex-col items-center gap-3 overflow-y-auto border-r border-stone-200 py-3 dark:border-stone-800">
+      <div className="flex shrink-0 flex-col items-center gap-0.5">
+        <button
+          onClick={() => everyone.length && onCompose(everyone)}
+          disabled={!everyone.length}
+          title={everyone.length ? `Scrivi a tutti (${everyone.length}): ${everyone.join(', ')}` : 'Nessun contatto nel progetto: aggiungine con +'}
+          className="flex size-12 items-center justify-center rounded-full bg-stone-900 text-white hover:bg-stone-700 disabled:cursor-default disabled:bg-stone-200 disabled:text-stone-400 dark:bg-stone-100 dark:text-stone-900 dark:disabled:bg-stone-800 dark:disabled:text-stone-600"
+        >
+          <Icon name="groups" size={26} />
+        </button>
+        <span className="text-[11px] font-medium text-stone-500">Tutti</span>
+      </div>
       {members?.groups.map((g) => (
         <Bubble
           key={g.id}
