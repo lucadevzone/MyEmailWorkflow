@@ -15,6 +15,18 @@ import {
   projectContacts,
 } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
+import type { BlobStore } from '../store/blobs.ts';
+
+/** URL della foto; la parte "v" cambia con l'immagine, così il browser non usa quella vecchia in cache. */
+const avatarUrl = (contactId: string, sha: string | null) => (sha ? `/api/contacts/${contactId}/avatar?v=${sha.slice(0, 12)}` : null);
+
+/** Tipo dell'immagine dai primi byte (non ci si fida dell'header dichiarato dal client). */
+export function imageMime(data: Buffer): string | null {
+  if (data.length > 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return 'image/jpeg';
+  if (data.length > 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (data.length > 12 && data.toString('ascii', 0, 4) === 'RIFF' && data.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  return null;
+}
 
 export const contactInputSchema = z.object({
   name: z.string().trim().min(1, 'Il nome è obbligatorio'),
@@ -44,7 +56,7 @@ interface Row {
 }
 
 export class PeopleService {
-  constructor(private db: Db, private sqlite: Database.Database) {}
+  constructor(private db: Db, private sqlite: Database.Database, private blobs: BlobStore) {}
 
   private ownEmails(): string[] {
     return this.db
@@ -92,7 +104,7 @@ export class PeopleService {
   }
 
   private contactInfo(ids: string[]) {
-    if (!ids.length) return new Map<string, { name: string; emails: string[] }>();
+    if (!ids.length) return new Map<string, { name: string; emails: string[]; avatarUrl: string | null }>();
     const cs = this.db
       .select()
       .from(contacts)
@@ -100,7 +112,14 @@ export class PeopleService {
       .all();
     const addrs = this.db.select().from(contactAddresses).where(inArray(contactAddresses.contactId, ids)).all();
     return new Map(
-      cs.map((c) => [c.id, { name: c.displayName, emails: addrs.filter((a) => a.contactId === c.id).map((a) => a.email) }]),
+      cs.map((c) => [
+        c.id,
+        {
+          name: c.displayName,
+          emails: addrs.filter((a) => a.contactId === c.id).map((a) => a.email),
+          avatarUrl: avatarUrl(c.id, c.avatarBlobSha),
+        },
+      ]),
     );
   }
 
@@ -115,6 +134,7 @@ export class PeopleService {
         emails: c?.emails ?? r.emails.split(','),
         conversationCount: r.convs,
         lastSeenAt: r.last,
+        avatarUrl: c?.avatarUrl ?? null,
       };
     });
   }
@@ -136,7 +156,7 @@ export class PeopleService {
     const info = this.contactInfo(missing);
     for (const id of missing) {
       const c = info.get(id);
-      if (c) people.push({ key: `c:${id}`, contactId: id, name: c.name, emails: c.emails, conversationCount: 0, lastSeenAt: null, member: true });
+      if (c) people.push({ key: `c:${id}`, contactId: id, name: c.name, emails: c.emails, conversationCount: 0, lastSeenAt: null, avatarUrl: c.avatarUrl, member: true });
     }
     return people;
   }
@@ -156,6 +176,7 @@ export class PeopleService {
             emails: info.get(c.id)?.emails ?? [],
             conversationCount: 0,
             lastSeenAt: null,
+            avatarUrl: info.get(c.id)?.avatarUrl ?? null,
           }
         );
       })
@@ -261,7 +282,34 @@ export class PeopleService {
   private person(contactId: string): PersonDto {
     const c = this.contactInfo([contactId]).get(contactId);
     if (!c) throw new PeopleError('Contatto non trovato');
-    return { key: `c:${contactId}`, contactId, name: c.name, emails: c.emails, conversationCount: 0, lastSeenAt: null };
+    return { key: `c:${contactId}`, contactId, name: c.name, emails: c.emails, conversationCount: 0, lastSeenAt: null, avatarUrl: c.avatarUrl };
+  }
+
+  // ─── Foto ──────────────────────────────────────────────────────────────────
+
+  /** Imposta (o toglie, con data null) la foto di un contatto. Solo JPEG, PNG o WebP, max 2 MB. */
+  setAvatar(contactId: string, data: Buffer | null): PersonDto {
+    let sha: string | null = null;
+    if (data) {
+      const mime = imageMime(data);
+      if (!mime) throw new PeopleError('Formato non supportato: usa JPEG, PNG o WebP');
+      if (data.length > 2 * 1024 * 1024) throw new PeopleError('Immagine troppo grande (max 2 MB)');
+      sha = this.blobs.put(data, mime);
+    }
+    const res = this.db
+      .update(contacts)
+      .set({ avatarBlobSha: sha, updatedAt: now() })
+      .where(and(eq(contacts.id, contactId), isNull(contacts.deletedAt)))
+      .run();
+    if (!res.changes) throw new PeopleError('Contatto non trovato');
+    return this.person(contactId);
+  }
+
+  avatar(contactId: string): { data: Buffer; mime: string } | undefined {
+    const c = this.db.select({ sha: contacts.avatarBlobSha }).from(contacts).where(eq(contacts.id, contactId)).get();
+    if (!c?.sha) return undefined;
+    const data = this.blobs.read(c.sha);
+    return { data, mime: imageMime(data) ?? 'application/octet-stream' };
   }
 
   // ─── Contatti dei progetti ─────────────────────────────────────────────────

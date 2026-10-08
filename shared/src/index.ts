@@ -210,6 +210,8 @@ export interface PersonDto {
   emails: string[];
   conversationCount: number;
   lastSeenAt: number | null;
+  /** Foto caricata dall'utente (solo contatti confermati). */
+  avatarUrl: string | null;
   /** Associato esplicitamente al progetto (solo nelle viste di progetto). */
   member?: boolean;
 }

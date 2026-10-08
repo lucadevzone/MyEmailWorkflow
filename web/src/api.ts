@@ -84,6 +84,16 @@ export const api = {
   createContact: (input: ContactInput) => request<PersonDto>('POST', '/api/contacts', input),
   updateContact: (id: string, input: Partial<ContactInput>) => request<PersonDto>('PATCH', `/api/contacts/${id}`, input),
   deleteContact: (id: string) => request<void>('DELETE', `/api/contacts/${id}`),
+  setAvatar: async (contactId: string, image: Blob): Promise<PersonDto> => {
+    const res = await fetch(`/api/contacts/${contactId}/avatar`, {
+      method: 'PUT',
+      headers: { 'x-mmw': '1', 'content-type': 'application/octet-stream' },
+      body: image,
+    });
+    if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
+    return (await res.json()) as PersonDto;
+  },
+  removeAvatar: (contactId: string) => request<PersonDto>('DELETE', `/api/contacts/${contactId}/avatar`),
   addProjectContact: (projectId: string, input: { contactId?: string; name?: string; email?: string }) =>
     request<PersonDto>('POST', `/api/projects/${projectId}/contacts`, input),
   removeProjectContact: (projectId: string, contactId: string) =>

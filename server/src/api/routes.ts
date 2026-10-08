@@ -265,6 +265,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return { ok: true };
   });
 
+  // Caricamenti binari (file, foto): corpo grezzo; i limiti per tipo li applicano i servizi.
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 50 * 1024 * 1024 }, (_req, body, done) =>
+    done(null, body),
+  );
+
   // ─── Persone ───────────────────────────────────────────────────────────────
 
   app.get<{ Querystring: { view?: string; projectId?: string } }>('/api/people', async (req, reply) => {
@@ -300,6 +305,29 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     deps.people.deleteContact(req.params.id);
     bus.publish({ type: 'people' });
     return reply.code(204).send();
+  });
+
+  // Foto: corpo binario (application/octet-stream), già ridimensionata dal client.
+  app.put<{ Params: { id: string } }>('/api/contacts/:id/avatar', async (req) => {
+    const person = deps.people.setAvatar(req.params.id, req.body as Buffer);
+    bus.publish({ type: 'people' });
+    return person;
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/contacts/:id/avatar', async (req) => {
+    const person = deps.people.setAvatar(req.params.id, null);
+    bus.publish({ type: 'people' });
+    return person;
+  });
+
+  app.get<{ Params: { id: string } }>('/api/contacts/:id/avatar', async (req, reply) => {
+    const img = deps.people.avatar(req.params.id);
+    if (!img) return reply.code(404).send({ error: 'Nessuna foto' });
+    return reply
+      .header('content-type', img.mime)
+      .header('cache-control', 'private, max-age=31536000, immutable')
+      .header('x-content-type-options', 'nosniff')
+      .send(img.data);
   });
 
   app.post<{ Params: { id: string }; Body: { contactId?: string; name?: string; email?: string } }>(
@@ -357,11 +385,6 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     touched(deps.notes.deleteNote(req.params.id));
     return reply.code(204).send();
   });
-
-  // Caricamento file: corpo binario, nome nel parametro "filename".
-  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 50 * 1024 * 1024 }, (_req, body, done) =>
-    done(null, body),
-  );
 
   app.post<{ Params: { id: string }; Querystring: { filename?: string } }>('/api/conversations/:id/resources', async (req, reply) => {
     const filename = (req.query.filename ?? 'file').slice(0, 255);

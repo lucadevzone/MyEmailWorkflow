@@ -105,6 +105,19 @@ describe('persone', () => {
   });
 });
 
+describe('foto dei contatti', () => {
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+  it('accetta solo immagini vere e le espone con un URL che cambia con la foto', () => {
+    const c = s.people.createContact({ name: 'Mario', emails: ['mario@x.it'] });
+    expect(() => s.people.setAvatar(c.contactId!, Buffer.from('<svg onload=alert(1)>'))).toThrow('Formato non supportato');
+    const withPhoto = s.people.setAvatar(c.contactId!, png);
+    expect(withPhoto.avatarUrl).toMatch(new RegExp(`^/api/contacts/${c.contactId}/avatar\\?v=[0-9a-f]{12}$`));
+    expect(s.people.avatar(c.contactId!)).toMatchObject({ mime: 'image/png' });
+    expect(s.people.directory().contacts[0]!.avatarUrl).toBe(withPhoto.avatarUrl);
+    expect(s.people.setAvatar(c.contactId!, null).avatarUrl).toBeNull();
+  });
+});
+
 describe('note e risorse', () => {
   it('conta note e risorse nella lista e le restituisce nel dettaglio', async () => {
     const r = await mail({ id: '<1@x>', from: 'mario@x.it', subject: 'S', body: 'b' });

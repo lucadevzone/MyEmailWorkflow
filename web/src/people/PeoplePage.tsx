@@ -1,9 +1,9 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConversationListItem, GroupDto, PersonDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { personLabel, shortDate } from '../lib/format.ts';
-import { Avatar } from '../ui/Avatar.tsx';
+import { Avatar, prepareAvatar } from '../ui/Avatar.tsx';
 import { Icon } from '../ui/Icon.tsx';
 import { Split } from '../ui/Split.tsx';
 import { button, input, primary } from '../ui/styles.ts';
@@ -18,9 +18,9 @@ export function PeoplePage({ onOpenConversation }: { onOpenConversation: (c: Con
   const match = (p: PersonDto) => !q || (p.name ?? '').toLowerCase().includes(q.toLowerCase()) || p.emails.some((e) => e.includes(q.toLowerCase()));
 
   const bubble = (p: PersonDto) => (
-    <button key={p.key} onClick={() => setSel({ kind: 'person', person: p })} className="flex w-20 flex-col items-center gap-1 text-center">
-      <Avatar name={p.name} email={p.emails[0] ?? p.key} size={48} ring={sel?.kind === 'person' && sel.person.key === p.key} />
-      <span className="line-clamp-2 text-xs leading-tight">{p.name ?? p.emails[0]}</span>
+    <button key={p.key} onClick={() => setSel({ kind: 'person', person: p })} className="flex w-28 flex-col items-center gap-1.5 text-center" title={p.emails.join(', ')}>
+      <Avatar name={p.name} email={p.emails[0] ?? p.key} avatarUrl={p.avatarUrl} size={72} ring={sel?.kind === 'person' && sel.person.key === p.key} />
+      <span className="break-words text-sm leading-tight">{p.name ?? p.emails[0]}</span>
     </button>
   );
 
@@ -38,13 +38,13 @@ export function PeoplePage({ onOpenConversation }: { onOpenConversation: (c: Con
             + nuovo gruppo
           </button>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-4">
           {(dir?.groups ?? []).map((g) => (
-            <button key={g.id} onClick={() => setSel({ kind: 'group', group: g })} className="flex w-20 flex-col items-center gap-1 text-center">
-              <span className={`flex size-12 items-center justify-center rounded-full bg-stone-200 text-stone-600 dark:bg-stone-700 dark:text-stone-200 ${sel?.kind === 'group' && sel.group?.id === g.id ? 'ring-2 ring-stone-900 ring-offset-2 dark:ring-stone-100' : ''}`}>
-                <Icon name="group" />
+            <button key={g.id} onClick={() => setSel({ kind: 'group', group: g })} className="flex w-28 flex-col items-center gap-1.5 text-center">
+              <span className={`flex size-[72px] items-center justify-center rounded-full bg-stone-200 text-stone-600 dark:bg-stone-700 dark:text-stone-200 ${sel?.kind === 'group' && sel.group?.id === g.id ? 'ring-2 ring-stone-900 ring-offset-2 dark:ring-stone-100' : ''}`}>
+                <Icon name="group" size={32} />
               </span>
-              <span className="line-clamp-2 text-xs leading-tight">{g.name}</span>
+              <span className="break-words text-sm leading-tight">{g.name}</span>
             </button>
           ))}
           {dir && dir.groups.length === 0 && <p className="text-sm text-stone-500">Nessun gruppo.</p>}
@@ -53,14 +53,14 @@ export function PeoplePage({ onOpenConversation }: { onOpenConversation: (c: Con
 
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Contatti</h2>
-        <div className="flex flex-wrap gap-3">{(dir?.contacts ?? []).filter(match).map(bubble)}</div>
+        <div className="flex flex-wrap gap-4">{(dir?.contacts ?? []).filter(match).map(bubble)}</div>
         {dir && dir.contacts.length === 0 && <p className="text-sm text-stone-500">Nessun contatto confermato: aggiungili dai suggeriti qui sotto.</p>}
       </section>
 
       <section className="space-y-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-stone-500">Suggeriti</h2>
         <p className="text-xs text-stone-500">Indirizzi con cui hai scambiato posta (escluso il rumore), non ancora tra i contatti.</p>
-        <div className="flex flex-wrap gap-3">{(dir?.suggested ?? []).filter(match).map(bubble)}</div>
+        <div className="flex flex-wrap gap-4">{(dir?.suggested ?? []).filter(match).map(bubble)}</div>
       </section>
     </div>
   );
@@ -76,6 +76,58 @@ export function PeoplePage({ onOpenConversation }: { onOpenConversation: (c: Con
   );
 
   return <Split storageKey="mmw.split.people" initial={560} left={left} right={right} />;
+}
+
+/** Foto del contatto: clic per caricarla (solo contatti confermati). */
+function PhotoPicker({ person, onChanged }: { person: PersonDto; onChanged: (p: PersonDto) => void }) {
+  const qc = useQueryClient();
+  const input = useRef<HTMLInputElement>(null);
+  const upload = useMutation({
+    mutationFn: async (file: File) => api.setAvatar(person.contactId!, await prepareAvatar(file)),
+    onSuccess: (p) => {
+      qc.invalidateQueries({ queryKey: ['directory'] });
+      qc.invalidateQueries({ queryKey: ['people'] });
+      onChanged(p);
+    },
+  });
+  const remove = useMutation({
+    mutationFn: () => api.removeAvatar(person.contactId!),
+    onSuccess: (p) => {
+      qc.invalidateQueries({ queryKey: ['directory'] });
+      qc.invalidateQueries({ queryKey: ['people'] });
+      onChanged(p);
+    },
+  });
+  const avatar = <Avatar name={person.name} email={person.emails[0] ?? person.key} avatarUrl={person.avatarUrl} size={96} />;
+  if (!person.contactId) return <span title="Aggiungi ai contatti per caricare una foto">{avatar}</span>;
+
+  return (
+    <div className="flex shrink-0 flex-col items-center gap-1">
+      <button className="group relative rounded-full" onClick={() => input.current?.click()} title="Carica una foto" disabled={upload.isPending}>
+        {avatar}
+        <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white opacity-0 transition group-hover:opacity-100">
+          <Icon name="photo_camera" size={28} />
+        </span>
+      </button>
+      {person.avatarUrl && (
+        <button className="text-xs text-stone-500 hover:underline" onClick={() => remove.mutate()}>
+          rimuovi foto
+        </button>
+      )}
+      {upload.error && <span className="max-w-28 text-center text-xs text-rose-600">{(upload.error as Error).message}</span>}
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = '';
+          if (f) upload.mutate(f);
+        }}
+      />
+    </div>
+  );
 }
 
 function PersonDetail({ person, onOpenConversation, onChanged }: { person: PersonDto; onOpenConversation: (c: ConversationListItem) => void; onChanged: (s: Selection) => void }) {
@@ -114,11 +166,13 @@ function PersonDetail({ person, onOpenConversation, onChanged }: { person: Perso
   return (
     <div className="space-y-5 p-6">
       <div className="flex items-center gap-4">
-        <Avatar name={person.name} email={person.emails[0] ?? person.key} size={56} />
+        <PhotoPicker person={person} onChanged={(p) => onChanged({ kind: 'person', person: { ...person, avatarUrl: p.avatarUrl } })} />
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-lg font-semibold">{person.name ?? person.emails[0]}</h2>
+          <h2 className="text-xl font-semibold">{person.name ?? person.emails[0]}</h2>
           <p className="truncate text-sm text-stone-500">{person.emails.join(', ')}</p>
-          {!person.contactId && <p className="text-xs text-amber-700 dark:text-amber-400">Non ancora tra i contatti</p>}
+          {!person.contactId && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">Non ancora tra i contatti: aggiungilo per poter caricare una foto</p>
+          )}
         </div>
         {!editing && (
           <button className={person.contactId ? button : primary} onClick={() => setEditing(true)}>

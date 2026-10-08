@@ -40,7 +40,7 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
     batchMinutes: () => settings.get().activityBatchMinutes,
   });
   const actions = new MailActions({ db, sqlite, activities, runner, getAccount: (id) => accounts.get(id) });
-  const people = new PeopleService(db, sqlite);
+  const people = new PeopleService(db, sqlite, blobs);
   const notes = new NotesService(db, blobs);
   const jobs = new JobRunner(db);
   const summarizer = o.summarizer ?? ollamaSummarizer;
