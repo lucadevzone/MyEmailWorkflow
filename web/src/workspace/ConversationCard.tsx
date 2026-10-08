@@ -351,19 +351,60 @@ function MenuItem({ icon, onClick, children }: { icon: string; onClick: () => vo
   );
 }
 
+/** File della conversazione: di base l'ultima versione; la storia (versione, data, mittente) si espande. */
 function Attachments({ d }: { d: ConversationDetail }) {
+  const [openFile, setOpenFile] = useState<string | null>(null);
+  const who = (p: PersonRef | null) => (p ? personLabel(p) : 'sconosciuto');
   return (
-    <ul className="space-y-1 rounded-md bg-stone-100 p-2 text-xs dark:bg-stone-800/60">
-      {d.attachments.map((a) => (
-        <li key={a.id} className="flex items-center gap-2">
-          <a className="min-w-0 flex-1 truncate hover:underline" href={`/api/attachments/${a.id}`} title="Scarica">
-            {a.filename ?? 'allegato'}
-          </a>
-          <span className="shrink-0 text-stone-500">
-            {a.from ? personLabel(a.from) : ''} · {shortDate(a.date)} · {fileSize(a.size)}
-          </span>
-        </li>
-      ))}
+    <ul className="space-y-1.5 rounded-md bg-stone-100 p-2 text-xs dark:bg-stone-800/60">
+      {d.files.map((f) => {
+        const multi = f.versions.length > 1;
+        const history = openFile === f.key;
+        return (
+          <li key={f.key}>
+            <div className="flex items-center gap-2">
+              <Icon name="description" size={16} className="shrink-0 text-stone-400" />
+              <a className="min-w-0 flex-1 truncate font-medium hover:underline" href={`/api/attachments/${f.latest.attachmentId}`} title="Scarica l'ultima versione">
+                {f.name}
+              </a>
+              {multi && (
+                <button
+                  className={`shrink-0 rounded px-1.5 ${history ? 'bg-stone-300 dark:bg-stone-600' : 'bg-stone-200 hover:bg-stone-300 dark:bg-stone-700'}`}
+                  onClick={() => setOpenFile(history ? null : f.key)}
+                  title="Storia delle versioni"
+                >
+                  v{f.latest.no} · {f.versions.length} versioni
+                </button>
+              )}
+            </div>
+            <div className="pl-6 text-stone-500">
+              {who(f.latest.from)} · {shortDate(f.latest.date)} · {fileSize(f.latest.size)}
+            </div>
+            {history && (
+              <ol className="ml-6 mt-1 space-y-1 border-l-2 border-stone-300 pl-3 dark:border-stone-600">
+                {f.versions.map((v) => (
+                  <li key={v.attachmentId}>
+                    <div className="flex items-center gap-2">
+                      <span className={`shrink-0 font-semibold ${v.no === f.latest.no ? 'text-sky-700 dark:text-sky-300' : ''}`}>v{v.no}</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {shortDate(v.date)} · {who(v.from)} · {fileSize(v.size)}
+                      </span>
+                      <a className="shrink-0 text-stone-500 hover:text-stone-900 dark:hover:text-stone-100" href={`/api/attachments/${v.attachmentId}`} title={`Scarica v${v.no}`}>
+                        <Icon name="download" size={16} />
+                      </a>
+                    </div>
+                    {v.resent.map((r) => (
+                      <div key={r.attachmentId} className="pl-6 text-stone-400">
+                        rinviato da {who(r.from)} · {shortDate(r.date)}
+                      </div>
+                    ))}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

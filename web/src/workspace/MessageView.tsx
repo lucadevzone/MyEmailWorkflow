@@ -91,6 +91,11 @@ export function MessageView({ conversationId, messageId, pane }: { conversationI
                 <a href={`/api/attachments/${a.id}`} className="flex items-center gap-1.5 rounded-md border border-stone-200 px-2 py-1 text-xs hover:bg-stone-50 dark:border-stone-700 dark:hover:bg-stone-800">
                   <Icon name="attach_file" size={16} />
                   <span className="max-w-56 truncate">{a.filename ?? 'allegato'}</span>
+                  {a.versionCount && a.versionCount > 1 && (
+                    <span className="rounded bg-stone-200 px-1 text-[10px] font-medium dark:bg-stone-700" title="Versione del file in questa conversazione">
+                      v{a.versionNo} di {a.versionCount}
+                    </span>
+                  )}
                   <span className="text-stone-500">{fileSize(a.size)}</span>
                 </a>
               </li>

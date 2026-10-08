@@ -121,6 +121,7 @@ export interface ConversationListItem {
   /** Messaggi non letti (in arrivo). */
   unreadCount: number;
   hasAttachments: boolean;
+  /** Numero di file distinti (non di invii: le versioni di uno stesso file contano una volta). */
   attachmentCount: number;
   noteCount: number;
   resourceCount: number;
@@ -138,6 +139,32 @@ export interface AttachmentDto {
   mime: string | null;
   size: number;
   isInline: boolean;
+  /** Versione del file a cui corrisponde questo allegato (se il file ha più versioni nella conversazione). */
+  versionNo?: number;
+  versionCount?: number;
+}
+
+/** Una versione di un file: nasce quando il contenuto cambia. */
+export interface FileVersionDto {
+  no: number;
+  attachmentId: string;
+  messageId: string;
+  filename: string | null;
+  mime: string | null;
+  size: number;
+  /** Data di ricezione e mittente della prima volta che questo contenuto è arrivato. */
+  date: number;
+  from: PersonRef | null;
+  /** Stesso contenuto rimandato più tardi (non è una nuova versione). */
+  resent: { attachmentId: string; messageId: string; date: number; from: PersonRef | null }[];
+}
+
+/** Un file della conversazione con la sua storia (versioni dalla più recente). */
+export interface FileDto {
+  key: string;
+  name: string;
+  latest: FileVersionDto;
+  versions: FileVersionDto[];
 }
 
 export interface MessageDto {
@@ -169,8 +196,8 @@ export interface ConversationDetail {
   summary: string | null;
   summaryDetailed: string | null;
   messages: MessageDto[];
-  /** Allegati di tutti i messaggi (esclusi quelli inline). */
-  attachments: (AttachmentDto & { messageId: string; date: number; from: PersonRef | null })[];
+  /** File allegati della conversazione con le loro versioni (esclusi gli inline). */
+  files: FileDto[];
   notes: NoteDto[];
   resources: ResourceDto[];
 }

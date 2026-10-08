@@ -22,6 +22,7 @@ import {
   tasks,
 } from '../db/schema.ts';
 import { now } from '../lib/ids.ts';
+import { buildFileHistory, normalizeFileName, versionIndex } from './versions.ts';
 
 export class ConversationService {
   constructor(private db: Db) {}
@@ -95,16 +96,16 @@ export class ConversationService {
       .all();
     const statsById = new Map(stats.map((s) => [s.conversationId, s]));
 
-    const attachmentCounts = new Map(
-      this.db
-        .select({ c: messages.conversationId, n: sql<number>`count(*)` })
-        .from(attachments)
-        .innerJoin(messages, eq(messages.id, attachments.messageId))
-        .where(and(inArray(messages.conversationId, ids), isNull(messages.deletedAt), eq(attachments.isInline, false)))
-        .groupBy(messages.conversationId)
-        .all()
-        .map((r) => [r.c, r.n]),
-    );
+    // Numero di file distinti per conversazione (le versioni di uno stesso file contano una volta).
+    const fileNames = new Map<string, Set<string>>();
+    for (const r of this.db
+      .select({ c: messages.conversationId, filename: attachments.filename })
+      .from(attachments)
+      .innerJoin(messages, eq(messages.id, attachments.messageId))
+      .where(and(inArray(messages.conversationId, ids), isNull(messages.deletedAt), eq(attachments.isInline, false)))
+      .all()) {
+      fileNames.set(r.c, (fileNames.get(r.c) ?? new Set()).add(normalizeFileName(r.filename)));
+    }
     const noteCounts = new Map(
       this.db
         .select({ c: notes.conversationId, n: sql<number>`count(*)` })
@@ -168,7 +169,7 @@ export class ConversationService {
         messageCount: s?.count ?? 0,
         unreadCount: s?.unread ?? 0,
         hasAttachments: !!s?.attachments,
-        attachmentCount: attachmentCounts.get(r.id) ?? 0,
+        attachmentCount: fileNames.get(r.id)?.size ?? 0,
         noteCount: noteCounts.get(r.id) ?? 0,
         resourceCount: resourceCounts.get(r.id) ?? 0,
         isNoise: r.isNoise,
@@ -275,6 +276,24 @@ export class ConversationService {
       .orderBy(desc(resources.createdAt))
       .all();
     const msgById = new Map(msgs.map((m) => [m.id, m]));
+    const files = buildFileHistory(
+      atts
+        .filter((a) => !a.isInline)
+        .map((a) => {
+          const m = msgById.get(a.messageId)!;
+          return {
+            id: a.id,
+            filename: a.filename,
+            mime: a.mime,
+            size: a.size,
+            blobSha: a.blobSha,
+            messageId: a.messageId,
+            date: m.date,
+            from: m.fromAddress ? { name: m.fromName, email: m.fromAddress } : null,
+          };
+        }),
+    );
+    const versionOf = versionIndex(files);
 
     return {
       id: conv.id,
@@ -284,22 +303,7 @@ export class ConversationService {
       archived: conv.archivedAt != null,
       summary: conv.summary,
       summaryDetailed: conv.summaryDetailed,
-      attachments: atts
-        .filter((a) => !a.isInline)
-        .map((a) => {
-          const m = msgById.get(a.messageId)!;
-          return {
-            id: a.id,
-            filename: a.filename,
-            mime: a.mime,
-            size: a.size,
-            isInline: a.isInline,
-            messageId: a.messageId,
-            date: m.date,
-            from: m.fromAddress ? { name: m.fromName, email: m.fromAddress } : null,
-          };
-        })
-        .sort((a, b) => b.date - a.date),
+      files,
       notes: noteRows.map((n) => ({
         id: n.id,
         conversationId: n.conversationId,
@@ -339,7 +343,14 @@ export class ConversationService {
           attachments: atts
             .filter((a) => a.messageId === m.id)
             .map(
-              (a): AttachmentDto => ({ id: a.id, filename: a.filename, mime: a.mime, size: a.size, isInline: a.isInline }),
+              (a): AttachmentDto => ({
+                id: a.id,
+                filename: a.filename,
+                mime: a.mime,
+                size: a.size,
+                isInline: a.isInline,
+                ...versionOf.get(a.id),
+              }),
             ),
         }),
       ),

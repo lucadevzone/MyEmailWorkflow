@@ -251,6 +251,11 @@ pending ──(batch tick | esegui ora | urgent)──► running ──► done
 
 ### Note di implementazione (stato attuale)
 
+- **Versioni dei file** (alla maniera di git), calcolate in lettura in `conversations/versions.ts`:
+  - *file* = allegati con lo stesso nome normalizzato nella conversazione;
+  - *versione* = contenuto nuovo (sha256 diverso); lo stesso contenuto rimandato resta nella storia come "rinviato da";
+  - nessun dato salvato: le versioni restano corrette con lo storico importato fuori ordine e con le unioni di conversazioni (la tabella `version_chains` resta per il riconoscimento dei nomi simili, v2).
+
 - **M2, rimandato**:
   - spostamento di una *singola* email (con distacco in una nuova conversazione). Il threading per References la ricollegherebbe alla conversazione d'origine, quindi serve un vincolo esplicito di "separazione".
   - Allegati e HTML in composizione: per ora solo testo semplice.
