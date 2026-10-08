@@ -23,9 +23,10 @@ import { cleanBody, makeSnippet, normalizeSubject } from './clean-text.ts';
 import { detectNoise } from './noise.ts';
 import { pendingSeenIntent } from '../activities/service.ts';
 import { enqueueSummary } from '../ai/summarize.ts';
+import { bus } from '../events/bus.ts';
 import { enqueueEmbedding } from '../ai/embed.ts';
 import { enqueueClassification } from '../ai/classify.ts';
-import { enqueueTaskExtraction } from '../ai/extract-tasks.ts';
+import { clearReplySuggestion, enqueueTaskExtraction } from '../ai/extract-tasks.ts';
 import { PRIORITY } from '../jobs/queue.ts';
 
 export interface RawFetched {
@@ -218,6 +219,10 @@ export async function ingestMessage(
     if (!conv.projectId) enqueueClassification(ctx.db, result.conversationId, priority);
     // Task suggeriti solo dalla posta in arrivo recente: dallo storico sarebbero rumore.
     if (priority === PRIORITY.normal && direction === 'in') enqueueTaskExtraction(ctx.db, result.messageId);
+  }
+  // Una risposta (anche da Gmail o dal telefono) chiude il suggerimento "rispondere".
+  if (direction === 'out' && clearReplySuggestion(ctx.db, result.conversationId)) {
+    bus.publish({ type: 'conversations', ids: [result.conversationId] });
   }
   return result;
 }

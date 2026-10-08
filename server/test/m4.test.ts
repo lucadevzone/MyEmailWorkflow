@@ -39,6 +39,8 @@ let pnrr: string;
 let corso: string;
 let uid = 1;
 const conv = () => new ConversationService(s.db);
+/** Solo i suggerimenti di progetto (ci sono anche i task, es. "rispondere"). */
+const projectSugs = (c: { suggestions: { kind: string }[] } | undefined) => (c?.suggestions ?? []).filter((x) => x.kind === 'project' || x.kind === 'new_project');
 
 const mail = (o: { id: string; from: string; subject: string; body: string; extra?: string }) =>
   ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
@@ -110,7 +112,7 @@ describe('progetto suggerito', () => {
     expect(last).toMatch(/^P1: PNRR$/m); // PNRR è il primo candidato grazie a persone e somiglianza
     expect(last).toContain('descrizione: Rendicontazione del progetto PNRR');
     expect(last).toContain('conversazioni recenti: Rendicontazione PNRR');
-    const [sug] = conv().list({ view: 'inbox' }).find((c) => c.id === r.conversationId)!.suggestions;
+    const [sug] = projectSugs(conv().list({ view: 'inbox' }).find((c) => c.id === r.conversationId));
     expect(sug).toMatchObject({ kind: 'project', payload: { projectId: pnrr, projectName: 'PNRR', reason: 'Riguarda PNRR' } });
     expect(sug!.confidence).toBeGreaterThan(0.6);
   });
@@ -120,7 +122,7 @@ describe('progetto suggerito', () => {
     const a = await mail({ id: '<a@x>', from: 'mario@x.it', subject: 'Spese', body: 'spese del personale PNRR' });
     const b = await mail({ id: '<b@x>', from: 'mario@x.it', subject: 'Altre spese', body: 'altre spese del personale PNRR' });
     await s.jobs.drain();
-    const sugOf = (id: string) => conv().list({ view: 'inbox' }).find((c) => c.id === id)?.suggestions[0];
+    const sugOf = (id: string) => projectSugs(conv().list({ view: 'inbox' }).find((c) => c.id === id))[0];
 
     s.suggestions.accept(sugOf(a.conversationId)!.id);
     expect(s.db.select().from(conversations).where(eq(conversations.id, a.conversationId)).get()!.projectId).toBe(pnrr);
@@ -136,20 +138,20 @@ describe('progetto suggerito', () => {
     llmAnswer = () => ({ scelta: 'nessuno', confidenza: 0.1 });
     const r = await mail({ id: '<a@x>', from: 'x@z.it', subject: 'Ciao', body: 'come stai' });
     await s.jobs.drain();
-    expect(conv().list({ view: 'inbox' })[0]!.suggestions).toEqual([]);
+    expect(projectSugs(conv().list({ view: 'inbox' })[0])).toEqual([]);
     expect(s.db.select().from(conversations).where(eq(conversations.id, r.conversationId)).get()!.classifiedAt).not.toBeNull();
 
     llmAnswer = pick('Corso', 0.3); // LLM poco sicuro e nessun indizio oggettivo
     await mail({ id: '<b@x>', from: 'y@z.it', subject: 'Domanda', body: 'una domanda' });
     await s.jobs.drain();
-    expect(s.db.select().from(suggestions).all()).toHaveLength(0);
+    expect(s.db.select().from(suggestions).all().filter((x) => x.kind === 'project')).toHaveLength(0);
   });
 
   it('può proporre un progetto nuovo', async () => {
     llmAnswer = () => ({ scelta: 'nuovo', confidenza: 0.8, motivo: 'Tema non coperto', nome_nuovo: 'Convegno ICAR' });
     await mail({ id: '<a@x>', from: 'x@z.it', subject: 'Convegno', body: 'organizzazione del convegno' });
     await s.jobs.drain();
-    expect(conv().list({ view: 'inbox' })[0]!.suggestions[0]).toMatchObject({ kind: 'new_project', payload: { projectName: 'Convegno ICAR' } });
+    expect(projectSugs(conv().list({ view: 'inbox' })[0])[0]).toMatchObject({ kind: 'new_project', payload: { projectName: 'Convegno ICAR' } });
   });
 
   it('il rumore non si classifica; spostare a mano cancella i suggerimenti in attesa', async () => {
@@ -159,8 +161,8 @@ describe('progetto suggerito', () => {
     await seedPnrr();
     const r = await mail({ id: '<a@x>', from: 'mario@x.it', subject: 'Spese', body: 'spese PNRR personale' });
     await s.jobs.drain();
-    expect(conv().list({ view: 'inbox' })[0]!.suggestions).toHaveLength(1);
+    expect(projectSugs(conv().list({ view: 'inbox' })[0])).toHaveLength(1);
     s.actions.move(r.conversationId, corso);
-    expect(s.db.select().from(suggestions).all().filter((x) => x.status === 'pending')).toHaveLength(0);
+    expect(s.db.select().from(suggestions).all().filter((x) => x.status === 'pending' && x.kind === 'project')).toHaveLength(0);
   });
 });

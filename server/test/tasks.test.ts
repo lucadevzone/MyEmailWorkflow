@@ -9,7 +9,7 @@ import { buildServices } from '../src/services.ts';
 import { ingestMessage } from '../src/ingest/ingest.ts';
 import { ConversationService } from '../src/conversations/service.ts';
 import { ProjectService } from '../src/projects/service.ts';
-import { conversations, jobs } from '../src/db/schema.ts';
+import { conversations, jobs, messages as messagesTable } from '../src/db/schema.ts';
 import { rankBetween } from '../src/lib/rank.ts';
 
 describe('indici frazionari', () => {
@@ -114,24 +114,46 @@ describe('task suggeriti', () => {
     s.actions.move(r.conversationId, projectId);
     await s.jobs.drain();
     const conv = new ConversationService(s.db);
-    const sug = conv.list({ view: 'project', projectId })[0]!.suggestions.find((x) => x.kind === 'task')!;
+    const sug = conv.list({ view: 'project', projectId })[0]!.suggestions.find((x) => x.kind === 'task' && !x.payload.reply)!;
     expect(sug.payload).toMatchObject({ title: 'Inviare i timesheet di settembre', dueDate: '2026-10-09' });
 
     s.suggestions.accept(sug.id);
     const [task] = s.tasks.forProject(projectId);
     expect(task).toMatchObject({ title: 'Inviare i timesheet di settembre', dueDate: '2026-10-09', conversationId: r.conversationId, conversationSubject: 'Timesheet' });
-    expect(conv.list({ view: 'project', projectId })[0]).toMatchObject({ taskCount: 1, suggestions: [] });
+    expect(conv.list({ view: 'project', projectId })[0]!.taskCount).toBe(1);
   });
 
   it('da Da smistare serve il progetto, e la conversazione lo segue', async () => {
-    llm = () => ({ task: [{ titolo: 'Rispondere a Mario', scadenza: null }] });
-    const r = await mail('a', 'Domanda', 'Mi rispondi?');
+    llm = () => ({ task: [{ titolo: 'Preparare il preventivo', scadenza: null }] });
+    const r = await mail('a', 'Domanda', 'Mi prepari il preventivo?');
     await s.jobs.drain();
-    const sug = new ConversationService(s.db).list({ view: 'inbox' })[0]!.suggestions.find((x) => x.kind === 'task')!;
+    const sug = new ConversationService(s.db).list({ view: 'inbox' })[0]!.suggestions.find((x) => x.kind === 'task' && !x.payload.reply)!;
     expect(() => s.suggestions.accept(sug.id)).toThrow('Scegli il progetto');
     s.suggestions.accept(sug.id, { projectId });
     expect(s.db.select().from(conversations).where(eq(conversations.id, r.conversationId)).get()!.projectId).toBe(projectId);
-    expect(titles()).toEqual(['Rispondere a Mario']);
+    expect(titles()).toEqual(['Preparare il preventivo']);
+  });
+
+  it('propone sempre "rispondere", uno per conversazione, e lo toglie quando si risponde', async () => {
+    llm = () => ({ task: [{ titolo: 'Rispondere a Mario entro sera', scadenza: null }] }); // doppione dell'LLM: scartato
+    const r = await mail('a', 'Timesheet', 'Ciao, come va?');
+    s.actions.move(r.conversationId, projectId);
+    await s.jobs.drain();
+    const replyTasks = () =>
+      new ConversationService(s.db).list({ view: 'project', projectId })[0]!.suggestions.filter((x) => x.kind === 'task');
+    expect(replyTasks().map((x) => [x.payload.title, x.payload.reply])).toEqual([['Rispondere a Mario — Timesheet', true]]);
+
+    // Un secondo messaggio aggiorna il suggerimento invece di duplicarlo.
+    await ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
+      uid: uid++, mailbox: 'All', flags: [], labels: [],
+      source: Buffer.from(`Message-ID: <b@x>\r\nIn-Reply-To: <a@x>\r\nFrom: Mario <mario@x.it>\r\nTo: me@gmail.com\r\nSubject: Re: Timesheet\r\nDate: ${new Date().toUTCString()}\r\n\r\nAllora?`),
+    });
+    await s.jobs.drain();
+    expect(replyTasks()).toHaveLength(1);
+
+    // Rispondo dall'app: il suggerimento sparisce.
+    s.actions.compose({ projectId, replyToMessageId: s.db.select().from(messagesTable).all().at(-1)!.id, to: ['mario@x.it'], cc: [], bcc: [], subject: '', body: 'Eccomi', urgent: false });
+    expect(replyTasks()).toHaveLength(0);
   });
 
   it('niente estrazione da storico, rumore o posta inviata', async () => {

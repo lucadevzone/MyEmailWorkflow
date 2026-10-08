@@ -16,6 +16,7 @@ import type { ActivityService, SendPayload } from '../activities/service.ts';
 import type { ActivityRunner } from '../activities/runner.ts';
 import { enqueueSummary } from '../ai/summarize.ts';
 import { clearProjectSuggestions, enqueueClassification } from '../ai/classify.ts';
+import { clearReplySuggestion } from '../ai/extract-tasks.ts';
 import { PRIORITY } from '../jobs/queue.ts';
 
 export const composeSchema = z
@@ -228,6 +229,7 @@ export class MailActions {
     bus.publish({ type: 'conversations', ids: [result.conversationId] });
     bus.publish({ type: 'projects' });
     enqueueSummary(db, result.conversationId);
+    clearReplySuggestion(db, result.conversationId);
     if (input.urgent) void this.deps.runner.run([result.activityId]);
     return result;
   }
