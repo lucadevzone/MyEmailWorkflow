@@ -393,6 +393,7 @@ function Attachments({ d }: { d: ConversationDetail }) {
                         <Icon name="download" size={16} />
                       </a>
                     </div>
+                    {v.filename && v.filename !== f.name && <div className="truncate pl-6 text-stone-400">{v.filename}</div>}
                     {v.resent.map((r) => (
                       <div key={r.attachmentId} className="pl-6 text-stone-400">
                         rinviato da {who(r.from)} · {shortDate(r.date)}

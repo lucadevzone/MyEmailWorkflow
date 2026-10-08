@@ -7,7 +7,7 @@ import { runMigrations } from '../src/db/migrate.ts';
 import { buildServices } from '../src/services.ts';
 import { ingestMessage } from '../src/ingest/ingest.ts';
 import { ConversationService } from '../src/conversations/service.ts';
-import { buildFileHistory } from '../src/conversations/versions.ts';
+import { buildFileHistory, normalizeFileName } from '../src/conversations/versions.ts';
 
 const mario = { name: 'Mario', email: 'mario@x.it' };
 const anna = { name: 'Anna', email: 'anna@y.it' };
@@ -91,5 +91,45 @@ describe('versioni nelle conversazioni', () => {
     const byMsg = Object.fromEntries(detail.messages.map((m) => [m.subject && m.date, m.attachments[0]?.versionNo]));
     expect(Object.values(byMsg).sort()).toEqual([1, 1, 2]);
     expect(detail.messages[0]!.attachments[0]!.versionCount).toBe(2);
+  });
+});
+
+describe('nomi simili', () => {
+  const same = (a: string, b: string) => expect(normalizeFileName(a), `${a} ~ ${b}`).toBe(normalizeFileName(b));
+  const diff = (a: string, b: string) => expect(normalizeFileName(a), `${a} ≠ ${b}`).not.toBe(normalizeFileName(b));
+
+  it('riconosce le varianti tipiche dello stesso documento', () => {
+    for (const n of [
+      'Relazione_v2.docx', 'relazione-rev3.docx', 'Relazione versione 2.docx', 'relazione v1.2.docx',
+      'relazione (1).docx', 'Copia di relazione.docx', 'relazione - copia.docx', 'relazione_final.docx',
+      'Relazione DEF.docx', 'relazione_finale_v3.docx', 'relazione_2026-10-07.docx', 'relazione_20261007.docx',
+      'relazione 07.10.2026.docx', 'relazione_LS.docx', 'relazione_commenti_LS.docx', 'relazione_bozza.docx',
+    ]) same(n, 'relazione.docx');
+    same('Piano di lavoro_v2.xlsx', 'piano_di_lavoro.xlsx');
+  });
+
+  it('tiene distinti documenti diversi', () => {
+    diff('relazione.docx', 'relazione.pdf');
+    diff('relazione.docx', 'relazione tecnica.docx');
+    diff('budget 2025.xlsx', 'budget 2026.xlsx');
+    diff('allegato A.pdf', 'allegato B.pdf');
+    diff('v2.pdf', 'v3.pdf');
+    diff('chapter2.pdf', 'chapter3.pdf');
+    diff('server.pdf', 'serve.pdf');
+  });
+
+  it('nella storia unisce le varianti come versioni dello stesso file', () => {
+    const [file, ...rest] = buildFileHistory([
+      occ('a', 'Relazione.docx', 's1', 1, mario),
+      occ('b', 'Relazione_LS.docx', 's2', 2, anna),
+      occ('c', 'Relazione_v3_final.docx', 's3', 3, mario),
+    ]);
+    expect(rest).toHaveLength(0);
+    expect(file!.name).toBe('Relazione_v3_final.docx');
+    expect(file!.versions.map((v) => [v.no, v.filename])).toEqual([
+      [3, 'Relazione_v3_final.docx'],
+      [2, 'Relazione_LS.docx'],
+      [1, 'Relazione.docx'],
+    ]);
   });
 });

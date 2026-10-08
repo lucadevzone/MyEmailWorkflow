@@ -17,9 +17,47 @@ export interface AttachmentOccurrence {
   from: PersonRef | null;
 }
 
-/** v1: stesso nome a meno di maiuscole e spazi. (v2: nomi simili, es. "report_v2.pdf".) */
+const VERSION_WORDS = [
+  'final', 'finale', 'def', 'definitivo', 'definitiva', 'ultimo', 'ultima', 'bozza', 'draft',
+  'revised', 'rivisto', 'rivista', 'corretto', 'corretta', 'correzioni', 'aggiornato', 'aggiornata',
+  'updated', 'new', 'nuovo', 'nuova', 'ok', 'commenti', 'commentato', 'comments', 'tracked', 'clean', 'pulito',
+];
+const TRAILING = [
+  /[\s_.-]*\(\d+\)$/, // "relazione (1)"
+  /[\s_.-]+-?\s*(copia|copy)$/, // "relazione - copia"
+  // Serve un separatore prima del marcatore: "chapter2" non è "chapte" + "r2".
+  /(?:^|[\s_.-]+)(v|ver|vers|version|versione|rev|revision|r)[\s_.-]?\d+(\.\d+)*$/, // "_v2", "-rev3", "versione 2", "v1.2"
+  /[\s_.-]+\d{4}[\s_.-]?\d{2}[\s_.-]?\d{2}$/, // "_2026-10-07", "20261007"
+  /[\s_.-]+\d{1,2}[\s_.-]\d{1,2}[\s_.-]\d{2,4}$/, // "_07.10.2026"
+  new RegExp(`[\\s_.-]+(${VERSION_WORDS.join('|')})$`), // "_final", "-def", " bozza"
+];
+const LEADING = [/^(copia di|copy of)\s+/];
+
+/**
+ * Chiave del "file" a cui appartiene un allegato: stesso nome a meno di segni di versione
+ * (numeri, copie, parole come "final", date, iniziali di chi ha rivisto) e con la stessa estensione.
+ */
 export function normalizeFileName(name: string | null): string {
-  return (name ?? 'allegato').normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
+  const clean = (name ?? 'allegato').normalize('NFC').trim().replace(/\s+/g, ' ');
+  const dot = clean.lastIndexOf('.');
+  const hasExt = dot > 0 && dot < clean.length - 1 && clean.length - dot <= 6;
+  const ext = hasExt ? clean.slice(dot + 1).toLowerCase() : '';
+  let stem = hasExt ? clean.slice(0, dot) : clean;
+
+  // Iniziali in maiuscolo del revisore ("relazione_LS"): si guardano prima di passare al minuscolo.
+  stem = stem.replace(/[_-][A-Z]{2,3}$/, '');
+  stem = stem.toLowerCase();
+  for (const re of LEADING) stem = stem.replace(re, '');
+  let prev: string;
+  do {
+    prev = stem;
+    for (const re of TRAILING) stem = stem.replace(re, '');
+  } while (stem !== prev && stem.length > 0);
+
+  stem = stem.replace(/[\s_.-]+/g, ' ').trim();
+  // Nome fatto solo di segni di versione ("v2.pdf"): si tiene quello originale.
+  if (!stem) stem = (hasExt ? clean.slice(0, dot) : clean).toLowerCase();
+  return ext ? `${stem}.${ext}` : stem;
 }
 
 export function buildFileHistory(items: AttachmentOccurrence[]): FileDto[] {

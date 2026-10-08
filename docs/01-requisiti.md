@@ -81,7 +81,7 @@ Priorità: **MVP** = prima versione utilizzabile; **POST** = successiva; **FUT**
 | RF-D3 | Riassunto breve aggiornato a ogni nuova email | MVP |
 | RF-D4 | Repository degli allegati della conversazione | MVP |
 | RF-D5 | Versioni degli allegati nella conversazione — v1: stesso nome file; nuova versione solo se cambia il contenuto; storia con data e mittente | ✅ |
-| RF-D6 | Versioni — v2: nome simile + stesso tipo; v3: contenuto simile | FUT |
+| RF-D6 | Versioni — v2: nome simile + stesso tipo ✅; v3: contenuto simile | FUT |
 
 ### E. Analizzatore
 
