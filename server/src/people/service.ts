@@ -285,6 +285,47 @@ export class PeopleService {
     return { key: `c:${contactId}`, contactId, name: c.name, emails: c.emails, conversationCount: 0, lastSeenAt: null, avatarUrl: c.avatarUrl };
   }
 
+  /**
+   * Unisce una persona (contatto "c:…" o indirizzo "a:…") nel contatto targetId.
+   * Il nome resta quello del target; passano indirizzi, gruppi, progetti e (se manca) la foto.
+   */
+  merge(targetId: string, sourceKey: string): PersonDto {
+    const target = this.db.select().from(contacts).where(and(eq(contacts.id, targetId), isNull(contacts.deletedAt))).get();
+    if (!target) throw new PeopleError('Contatto non trovato');
+    const [kind, id] = [sourceKey.slice(0, 2), sourceKey.slice(2)];
+    const t = now();
+
+    if (kind === 'a:') {
+      const addr = this.db.select().from(contactAddresses).where(eq(contactAddresses.id, id)).get();
+      if (!addr) throw new PeopleError('Indirizzo non trovato');
+      if (addr.contactId) return this.merge(targetId, `c:${addr.contactId}`);
+      this.db.update(contactAddresses).set({ contactId: targetId, updatedAt: t }).where(eq(contactAddresses.id, id)).run();
+      return this.person(targetId);
+    }
+    if (kind !== 'c:') throw new PeopleError('Persona non valida');
+    if (id === targetId) throw new PeopleError('Non si può unire un contatto con sé stesso');
+    const source = this.db.select().from(contacts).where(and(eq(contacts.id, id), isNull(contacts.deletedAt))).get();
+    if (!source) throw new PeopleError('Contatto da unire non trovato');
+
+    this.db.transaction((tx) => {
+      tx.update(contactAddresses).set({ contactId: targetId, updatedAt: t }).where(eq(contactAddresses.contactId, id)).run();
+      for (const g of tx.select().from(groupMembers).where(eq(groupMembers.contactId, id)).all()) {
+        tx.insert(groupMembers).values({ groupId: g.groupId, contactId: targetId }).onConflictDoNothing().run();
+      }
+      for (const pc of tx.select().from(projectContacts).where(eq(projectContacts.contactId, id)).all()) {
+        tx.insert(projectContacts).values({ projectId: pc.projectId, contactId: targetId, createdAt: t }).onConflictDoNothing().run();
+      }
+      tx.delete(groupMembers).where(eq(groupMembers.contactId, id)).run();
+      tx.delete(projectContacts).where(eq(projectContacts.contactId, id)).run();
+      if (!target.avatarBlobSha && source.avatarBlobSha) {
+        tx.update(contacts).set({ avatarBlobSha: source.avatarBlobSha }).where(eq(contacts.id, targetId)).run();
+      }
+      tx.update(contacts).set({ updatedAt: t }).where(eq(contacts.id, targetId)).run();
+      tx.update(contacts).set({ deletedAt: t, updatedAt: t }).where(eq(contacts.id, id)).run();
+    });
+    return this.person(targetId);
+  }
+
   // ─── Foto ──────────────────────────────────────────────────────────────────
 
   /** Imposta (o toglie, con data null) la foto di un contatto. Solo JPEG, PNG o WebP, max 2 MB. */

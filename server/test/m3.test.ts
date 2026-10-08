@@ -105,6 +105,38 @@ describe('persone', () => {
   });
 });
 
+describe('unione dei contatti', () => {
+  it('unisce due contatti: indirizzi, gruppi, progetti e foto passano al primo', async () => {
+    await mail({ id: '<1@x>', from: 'luca@cnr.it', subject: 'A', body: 'b' });
+    await mail({ id: '<2@x>', from: 'luca@gmail.com', subject: 'B', body: 'b' });
+    const a = s.people.createContact({ name: 'Luca Sabatucci', emails: ['luca@cnr.it'] });
+    const b = s.people.createContact({ name: 'Luca (personale)', emails: ['luca@gmail.com'] });
+    s.people.setAvatar(b.contactId!, Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex'));
+    const g = s.people.saveGroup(null, { name: 'Team', contactIds: [b.contactId!] });
+    s.people.addToProject(projectId, { contactId: b.contactId! });
+
+    const merged = s.people.merge(a.contactId!, b.key);
+    expect(merged.name).toBe('Luca Sabatucci');
+    expect(merged.emails.sort()).toEqual(['luca@cnr.it', 'luca@gmail.com']);
+    expect(merged.avatarUrl).not.toBeNull();
+
+    const dir = s.people.directory();
+    expect(dir.contacts.map((c) => c.name)).toEqual(['Luca Sabatucci']);
+    expect(dir.contacts[0]!.conversationCount).toBe(2);
+    expect(dir.groups.find((x) => x.id === g)!.members.map((m) => m.contactId)).toEqual([a.contactId]);
+    expect(s.people.inScope({ view: 'project', projectId }).find((p) => p.member)!.contactId).toBe(a.contactId);
+  });
+
+  it('unire un indirizzo suggerito lo aggiunge al contatto', async () => {
+    await mail({ id: '<1@x>', from: 'anna@y.it', subject: 'A', body: 'b' });
+    const c = s.people.createContact({ name: 'Anna', emails: ['anna.bianchi@z.it'] });
+    const suggested = s.people.directory().suggested[0]!;
+    expect(s.people.merge(c.contactId!, suggested.key).emails.sort()).toEqual(['anna.bianchi@z.it', 'anna@y.it']);
+    expect(s.people.directory().suggested).toHaveLength(0);
+    expect(() => s.people.merge(c.contactId!, c.key)).toThrow('sé stesso');
+  });
+});
+
 describe('foto dei contatti', () => {
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
   it('accetta solo immagini vere e le espone con un URL che cambia con la foto', () => {

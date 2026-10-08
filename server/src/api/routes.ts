@@ -307,6 +307,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return reply.code(204).send();
   });
 
+  app.post<{ Params: { id: string }; Body: { personKey?: string } }>('/api/contacts/:id/merge', async (req, reply) => {
+    if (!req.body?.personKey) return reply.code(400).send({ error: 'personKey mancante' });
+    const person = deps.people.merge(req.params.id, req.body.personKey);
+    bus.publish({ type: 'people' });
+    return person;
+  });
+
   // Foto: corpo binario (application/octet-stream), già ridimensionata dal client.
   app.put<{ Params: { id: string } }>('/api/contacts/:id/avatar', async (req) => {
     const person = deps.people.setAvatar(req.params.id, req.body as Buffer);

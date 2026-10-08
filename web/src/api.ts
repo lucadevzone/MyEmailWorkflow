@@ -93,6 +93,7 @@ export const api = {
     if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
     return (await res.json()) as PersonDto;
   },
+  mergeContact: (contactId: string, personKey: string) => request<PersonDto>('POST', `/api/contacts/${contactId}/merge`, { personKey }),
   removeAvatar: (contactId: string) => request<PersonDto>('DELETE', `/api/contacts/${contactId}/avatar`),
   addProjectContact: (projectId: string, input: { contactId?: string; name?: string; email?: string }) =>
     request<PersonDto>('POST', `/api/projects/${projectId}/contacts`, input),

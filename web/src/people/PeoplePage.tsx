@@ -132,7 +132,8 @@ function PhotoPicker({ person, onChanged }: { person: PersonDto; onChanged: (p: 
 
 function PersonDetail({ person, onOpenConversation, onChanged }: { person: PersonDto; onOpenConversation: (c: ConversationListItem) => void; onChanged: (s: Selection) => void }) {
   const qc = useQueryClient();
-  const [editing, setEditing] = useState(!person.contactId ? false : false);
+  const [editing, setEditing] = useState(false);
+  const [merging, setMerging] = useState(false);
   const [name, setName] = useState(person.name ?? '');
   const [emails, setEmails] = useState(person.emails.join(', '));
   const refresh = () => {
@@ -174,12 +175,30 @@ function PersonDetail({ person, onOpenConversation, onChanged }: { person: Perso
             <p className="text-xs text-amber-700 dark:text-amber-400">Non ancora tra i contatti: aggiungilo per poter caricare una foto</p>
           )}
         </div>
-        {!editing && (
-          <button className={person.contactId ? button : primary} onClick={() => setEditing(true)}>
-            {person.contactId ? 'Modifica' : 'Aggiungi ai contatti'}
-          </button>
+        {!editing && !merging && (
+          <div className="flex shrink-0 flex-col gap-2">
+            <button className={person.contactId ? button : primary} onClick={() => setEditing(true)}>
+              {person.contactId ? 'Modifica' : 'Aggiungi ai contatti'}
+            </button>
+            {person.contactId && (
+              <button className={button} onClick={() => setMerging(true)}>
+                Unisci con…
+              </button>
+            )}
+          </div>
         )}
       </div>
+
+      {merging && person.contactId && (
+        <MergePanel
+          person={person}
+          onCancel={() => setMerging(false)}
+          onMerged={(p) => {
+            setMerging(false);
+            onChanged({ kind: 'person', person: p });
+          }}
+        />
+      )}
 
       {editing && (
         <form onSubmit={submit} className="space-y-2 rounded-lg border border-stone-200 p-3 dark:border-stone-700">
@@ -205,6 +224,62 @@ function PersonDetail({ person, onOpenConversation, onChanged }: { person: Perso
       )}
 
       <PersonConversations personKey={person.key} onOpen={onOpenConversation} />
+    </div>
+  );
+}
+
+/** Sceglie un'altra persona (contatto o indirizzo suggerito) da unire in questo contatto. */
+function MergePanel({ person, onCancel, onMerged }: { person: PersonDto; onCancel: () => void; onMerged: (p: PersonDto) => void }) {
+  const qc = useQueryClient();
+  const { data: dir } = useQuery({ queryKey: ['directory'], queryFn: api.peopleDirectory });
+  const [q, setQ] = useState('');
+  const merge = useMutation({
+    mutationFn: (key: string) => api.mergeContact(person.contactId!, key),
+    onSuccess: (p) => {
+      qc.invalidateQueries({ queryKey: ['directory'] });
+      qc.invalidateQueries({ queryKey: ['people'] });
+      qc.invalidateQueries({ queryKey: ['conversations'] });
+      onMerged(p);
+    },
+  });
+  const ql = q.trim().toLowerCase();
+  const candidates = [...(dir?.contacts ?? []), ...(dir?.suggested ?? [])]
+    .filter((p) => p.key !== person.key)
+    .filter((p) => !ql || (p.name ?? '').toLowerCase().includes(ql) || p.emails.some((e) => e.includes(ql)));
+  const label = person.name ?? person.emails[0];
+
+  return (
+    <div className="space-y-2 rounded-lg border border-stone-200 p-3 dark:border-stone-700">
+      <div className="text-sm font-medium">Unisci in «{label}»</div>
+      <p className="text-xs text-stone-500">
+        Il contatto scelto sparisce: i suoi indirizzi, gruppi e progetti passano a «{label}», che mantiene il nome.
+      </p>
+      <input className={input} placeholder="Cerca per nome o indirizzo…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+      <ul className="max-h-72 divide-y divide-stone-100 overflow-y-auto dark:divide-stone-800">
+        {candidates.length === 0 && <li className="py-2 text-sm text-stone-500">Nessuna persona trovata.</li>}
+        {candidates.map((p) => (
+          <li key={p.key}>
+            <button
+              className="flex w-full items-center gap-3 px-1 py-2 text-left hover:bg-stone-50 disabled:opacity-50 dark:hover:bg-stone-800"
+              disabled={merge.isPending}
+              onClick={() => confirm(`Unire «${p.name ?? p.emails[0]}» in «${label}»?`) && merge.mutate(p.key)}
+            >
+              <Avatar name={p.name} email={p.emails[0] ?? p.key} avatarUrl={p.avatarUrl} size={36} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{p.name ?? p.emails[0]}</span>
+                <span className="block truncate text-xs text-stone-500">{p.emails.join(', ')}</span>
+              </span>
+              {!p.contactId && <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">suggerito</span>}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {merge.error && <div className="text-xs text-rose-600">{(merge.error as Error).message}</div>}
+      <div className="flex justify-end">
+        <button className={button} onClick={onCancel}>
+          Annulla
+        </button>
+      </div>
     </div>
   );
 }
