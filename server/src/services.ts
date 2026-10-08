@@ -22,6 +22,7 @@ import { ollamaJson } from './ai/ollama-chat.ts';
 import { SuggestionService } from './suggestions/service.ts';
 import { TaskService } from './tasks/service.ts';
 import { extractTasks } from './ai/extract-tasks.ts';
+import { suggestActions } from './ai/suggest-actions.ts';
 
 export interface ServiceOverrides {
   createProvider?: (account: AccountDto) => MailProviderClient;
@@ -58,6 +59,7 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
   const llm: Llm = o.llm ?? ollamaJson;
   jobs.register('classify', (p) => classifyConversation({ db, sqlite, people, llm }, (p as { conversationId: string }).conversationId));
   jobs.register('extract_tasks', (p) => extractTasks(db, (p as { messageId: string }).messageId, llm));
+  jobs.register('suggest_actions', (p) => suggestActions(db, (p as { messageId: string }).messageId, llm));
   const tasks = new TaskService(db);
   const suggestions = new SuggestionService(db, actions, tasks);
   return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions, tasks };

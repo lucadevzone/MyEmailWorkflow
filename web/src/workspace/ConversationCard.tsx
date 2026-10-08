@@ -202,7 +202,7 @@ export function ConversationCard({
             </SmallButton>
             {/* Azioni suggerite (tono "ai"); da M4 anche quelle dell'analizzatore. */}
             {c.suggestions.map((sug) => (
-              <SuggestionButton key={sug.id} c={c} sug={sug} />
+              <SuggestionButton key={sug.id} c={c} sug={sug} pane={pane} />
             ))}
             {expanded && c.projectId && <ParticipantsSuggestion c={c} />}
             {c.archived ? (
@@ -301,7 +301,7 @@ function ConversationTasks({ c }: { c: ConversationListItem }) {
 }
 
 /** Suggerimento dell'analizzatore (calcolato in background): clic = applica, × = scarta. */
-function SuggestionButton({ c, sug }: { c: ConversationListItem; sug: SuggestionDto }) {
+function SuggestionButton({ c, sug, pane }: { c: ConversationListItem; sug: SuggestionDto; pane: PaneAction }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [creating, setCreating] = useState(false);
@@ -320,6 +320,7 @@ function SuggestionButton({ c, sug }: { c: ConversationListItem; sug: Suggestion
   });
   const reject = useMutation({ mutationFn: () => api.rejectSuggestion(sug.id), onSuccess: refresh });
   if (sug.kind === 'task') return <TaskSuggestion c={c} sug={sug} onReject={() => reject.mutate()} />;
+  if (sug.kind === 'action') return <ActionSuggestion c={c} sug={sug} pane={pane} onReject={() => reject.mutate()} />;
   if (sug.kind !== 'project' && sug.kind !== 'new_project') return null;
 
   const pct = sug.confidence != null ? ` · ${Math.round(sug.confidence * 100)}%` : '';
@@ -345,6 +346,52 @@ function SuggestionButton({ c, sug }: { c: ConversationListItem; sug: Suggestion
           onSaved={(p) => accept.mutate(p.id)}
         />
       )}
+    </span>
+  );
+}
+
+/** Azione rapida suggerita: rispondi (apre il compositore con la bozza), archivia, è rumore. */
+function ActionSuggestion({ c, sug, pane, onReject }: { c: ConversationListItem; sug: SuggestionDto; pane: PaneAction; onReject: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const p = sug.payload as { action: 'reply' | 'archive' | 'noise'; messageId: string; draft?: string; reason?: string };
+  const refresh = () => {
+    for (const k of [['conversations'], ['counts'], ['projects'], ['conversation', c.id]]) qc.invalidateQueries({ queryKey: k });
+  };
+  const accept = useMutation({
+    mutationFn: () => api.acceptSuggestion(sug.id),
+    onSuccess: (res) => {
+      refresh();
+      if (p.action === 'archive') {
+        const ids = (res as { activityIds?: string[] }).activityIds ?? [];
+        toast({ text: 'Conversazione archiviata', action: { label: 'Annulla', run: () => void Promise.all(ids.map(api.cancelActivity)).then(refresh) } });
+      } else {
+        toast({ text: 'Spostata nel Rumore', action: { label: 'Annulla', run: () => void api.setNoise(c.id, false).then(refresh) } });
+      }
+    },
+  });
+  const reply = async () => {
+    const d = await qc.fetchQuery({ queryKey: ['conversation', c.id], queryFn: () => api.conversation(c.id) });
+    const m = d.messages.find((x) => x.id === p.messageId) ?? d.messages[d.messages.length - 1];
+    if (m) pane.compose({ replyTo: m, replyAll: true, projectId: d.projectId, draft: p.draft });
+  };
+  const preview = (p.draft ?? '').replace(/\s+/g, ' ');
+  const label =
+    p.action === 'reply' ? `Rispondi: «${preview.length > 40 ? `${preview.slice(0, 40)}…` : preview}»` : p.action === 'archive' ? 'Archivia' : 'È rumore';
+
+  return (
+    <span className="inline-flex items-stretch overflow-hidden rounded bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200">
+      <button
+        className="max-w-80 truncate whitespace-nowrap px-2 py-0.5 text-xs font-medium hover:bg-violet-200 dark:hover:bg-violet-800/60"
+        title={[p.reason, p.draft].filter(Boolean).join('\n\n') || 'Suggerito dall\'analizzatore'}
+        disabled={accept.isPending}
+        onClick={() => (p.action === 'reply' ? void reply() : accept.mutate())}
+      >
+        {label}
+      </button>
+      <button className="px-1 hover:bg-violet-200 dark:hover:bg-violet-800/60" title="Scarta il suggerimento" onClick={onReject}>
+        <Icon name="close" size={14} />
+      </button>
     </span>
   );
 }

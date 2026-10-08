@@ -42,7 +42,7 @@ export function Composer({ request, ownEmails, onClose, onSent }: {
   const [bcc, setBcc] = useState<string[]>([]);
   const [showBcc, setShowBcc] = useState(false);
   const [subject, setSubject] = useState('');
-  const [body, setBody] = useState(replyTo ? quote(replyTo) : '');
+  const [body, setBody] = useState((request.draft ?? '') + (replyTo ? quote(replyTo) : ''));
   const [urgent, setUrgent] = useState(false);
 
   const recipients = useMemo(() => [...to, ...cc], [to, cc]);

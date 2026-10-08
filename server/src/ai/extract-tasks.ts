@@ -1,6 +1,6 @@
 // Task suggeriti: richieste e scadenze rivolte all'utente in un messaggio in arrivo (solo posta recente).
 
-import { and, eq, gt, isNull, like } from 'drizzle-orm';
+import { and, eq, gt, isNull, like, lt } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import { conversations, messages, suggestions, tasks } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
@@ -26,6 +26,29 @@ export function toFirstPerson(title: string): string {
   });
 }
 
+const IMPERATIVE: Record<string, string> = {
+  mandami: 'Inviare', inviami: 'Inviare', manda: 'Inviare', invia: 'Inviare', mandare: 'Inviare',
+  rispondi: 'Rispondere', scrivi: 'Scrivere', scrivimi: 'Scrivere', fammi: 'Far', dimmi: 'Comunicare',
+  indica: 'Indicare', indicami: 'Indicare', conferma: 'Confermare', confermami: 'Confermare',
+  controlla: 'Controllare', verifica: 'Verificare', prepara: 'Preparare', preparami: 'Preparare',
+  leggi: 'Leggere', compila: 'Compilare', firma: 'Firmare', carica: 'Caricare', aggiorna: 'Aggiornare',
+};
+
+/** I task sono all'infinito: "Mandami i timesheet" → "Inviare i timesheet", "rispondi…" → "Rispondere…". */
+export function toInfinitive(title: string): string {
+  const m = /^(\S+)(.*)$/s.exec(title.trim());
+  if (!m) return title;
+  const [, first, rest] = m as unknown as [string, string, string];
+  const w = first.toLowerCase();
+  let verb = IMPERATIVE[w];
+  // Imperativo regolare in -a (eventualmente con "-mi"): "prenota" → "Prenotare".
+  if (!verb && /^[a-zàèéìòù]{3,}(a|ami)$/.test(w) && !/are$/.test(w)) verb = w.replace(/(ami|a)$/, 'are');
+  if (!verb) return title.charAt(0).toUpperCase() + title.slice(1);
+  return verb.charAt(0).toUpperCase() + verb.slice(1) + rest;
+}
+
+const EXAMPLE_TITLE = 'Prenotare la sala riunioni';
+
 export function calendarFrom(date: Date, days = 14): string {
   const out: string[] = [];
   for (let i = 0; i < days; i++) {
@@ -43,6 +66,30 @@ export interface TaskSuggestionPayload {
   messageId: string;
   /** Il task "rispondere a questa email": sempre proposto, uno per conversazione. */
   reply?: boolean;
+}
+
+/**
+ * Una risposta è partita (o è stata vista dal sync): i task aperti "Rispondere a…" della conversazione
+ * creati prima della risposta si completano da soli.
+ */
+export function completeReplyTasks(db: Db, conversationId: string, repliedAt: number): number {
+  const open = db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.conversationId, conversationId),
+        eq(tasks.status, 'open'),
+        isNull(tasks.deletedAt),
+        like(tasks.title, 'Rispondere a %'),
+        lt(tasks.createdAt, repliedAt),
+      ),
+    )
+    .all();
+  const t = now();
+  for (const r of open) db.update(tasks).set({ status: 'done', completedAt: t, updatedAt: t }).where(eq(tasks.id, r.id)).run();
+  if (open.length) bus.publish({ type: 'tasks' });
+  return open.length;
 }
 
 /** Toglie il suggerimento "rispondere" in attesa: quando si risponde non serve più. */
@@ -105,6 +152,15 @@ export async function extractTasks(db: Db, messageId: string, llm: Llm) {
 
   const text = (m.bodyTextClean || m.bodyText || '').slice(0, 3000);
   if (!text.trim()) return;
+  // Se l'analizzatore ha già stabilito che il messaggio non chiede nulla (archivia/rumore), niente task.
+  const verdict = db
+    .select({ payload: suggestions.payload })
+    .from(suggestions)
+    .where(and(eq(suggestions.subjectId, m.conversationId), eq(suggestions.kind, 'action'), eq(suggestions.status, 'pending')))
+    .all()
+    .map((r) => JSON.parse(r.payload) as { action: string; messageId: string })
+    .find((p) => p.messageId === messageId);
+  if (verdict && verdict.action !== 'reply') return;
 
   const when = new Date(m.date);
   const prompt = [
@@ -113,11 +169,15 @@ export async function extractTasks(db: Db, messageId: string, llm: Llm) {
     '',
     text,
     '',
+    'Esempio (solo per la forma, da non copiare): il messaggio "Puoi prenotare la sala riunioni per lunedì?"',
+    `diventa {"task": [{"titolo": "${EXAMPLE_TITLE}", "scadenza": "<data di lunedì dal calendario>", "dettagli": null}]}.`,
+    '',
     'Calendario per risolvere le date relative ("venerdì", "domani", "la prossima settimana"):',
     calendarFrom(when),
     '',
     `Rispondi con un JSON {"task": [...]}, al massimo ${MAX_TASKS} elementi, lista vuota se il mittente non chiede nulla al destinatario.`,
-    'Ogni elemento: {"titolo": frase breve all\'infinito dal punto di vista del destinatario, senza "tuo/tua" (es. "Inviare i timesheet di settembre"),',
+    // Niente esempi concreti: il modello tende a copiarli come task.
+    'Ogni elemento: {"titolo": frase breve che inizia con un verbo all\'infinito, dal punto di vista del destinatario, senza "tuo/tua",',
     '"scadenza": la data "AAAA-MM-GG" presa dal calendario se il messaggio indica una scadenza, altrimenti null,',
     '"dettagli": eventuale precisazione utile, altrimenti null}.',
   ].join('\n');
@@ -133,9 +193,11 @@ export async function extractTasks(db: Db, messageId: string, llm: Llm) {
   );
   let added = 0;
   for (const t of (out.task ?? []).slice(0, MAX_TASKS)) {
-    const title = t.titolo?.trim() ? toFirstPerson(t.titolo.trim()) : '';
-    // "Rispondere…" è già coperto dal task deterministico.
-    if (!title || existing.has(title.toLowerCase()) || /^rispondere\b/i.test(title)) continue;
+    const title = t.titolo?.trim() ? toInfinitive(toFirstPerson(t.titolo.trim())) : '';
+    // "Rispondere…" è già coperto dal task deterministico; l'esempio del prompt non è un task.
+    if (!title || existing.has(title.toLowerCase()) || /^rispond/i.test(title) || title === EXAMPLE_TITLE) continue;
+    // Segnaposto del modello per "nessun task" ("Niente da fare", "Nessuna richiesta").
+    if (/^(niente|nessun[oa]?)\b/i.test(title)) continue;
     const due = t.scadenza && /^\d{4}-\d{2}-\d{2}$/.test(t.scadenza) ? t.scadenza : null;
     saveTask(db, m.conversationId, { title: title.slice(0, 200), dueDate: due, details: t.dettagli?.trim() || null, messageId });
     added++;

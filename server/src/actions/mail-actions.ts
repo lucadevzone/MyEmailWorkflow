@@ -16,7 +16,8 @@ import type { ActivityService, SendPayload } from '../activities/service.ts';
 import type { ActivityRunner } from '../activities/runner.ts';
 import { enqueueSummary } from '../ai/summarize.ts';
 import { clearProjectSuggestions, enqueueClassification } from '../ai/classify.ts';
-import { clearReplySuggestion } from '../ai/extract-tasks.ts';
+import { clearReplySuggestion, completeReplyTasks } from '../ai/extract-tasks.ts';
+import { clearActionSuggestions } from '../ai/suggest-actions.ts';
 import { PRIORITY } from '../jobs/queue.ts';
 
 export const composeSchema = z
@@ -81,6 +82,7 @@ export class MailActions {
 
   archive(conversationId: string): string[] {
     this.conv.setArchived(conversationId, true);
+    clearActionSuggestions(this.deps.db, conversationId);
     const ids = this.enqueuePerAccount(conversationId, 'archive', 'Archivia');
     bus.publish({ type: 'conversations', ids: [conversationId] });
     return ids;
@@ -104,6 +106,7 @@ export class MailActions {
     if (!res) throw new ActionError('Conversazione non trovata');
     // Il progetto ora l'ha scelto l'utente: i suggerimenti in attesa non servono più.
     clearProjectSuggestions(this.deps.db, conversationId);
+    clearActionSuggestions(this.deps.db, conversationId, ['noise']);
     if (!projectId) enqueueClassification(this.deps.db, conversationId, PRIORITY.background);
     bus.publish({ type: 'conversations', ids: [conversationId] });
     bus.publish({ type: 'projects' });
@@ -230,6 +233,8 @@ export class MailActions {
     bus.publish({ type: 'projects' });
     enqueueSummary(db, result.conversationId);
     clearReplySuggestion(db, result.conversationId);
+    clearActionSuggestions(db, result.conversationId);
+    completeReplyTasks(db, result.conversationId, now() + 1);
     if (input.urgent) void this.deps.runner.run([result.activityId]);
     return result;
   }

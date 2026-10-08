@@ -39,8 +39,11 @@ let pnrr: string;
 let corso: string;
 let uid = 1;
 const conv = () => new ConversationService(s.db);
+/** Ultimo prompt di classificazione (l'LLM riceve anche quelli di task e azioni). */
+const classifyPrompt = () => prompts.filter((p) => p.includes('Progetti candidati')).at(-1)!;
 /** Solo i suggerimenti di progetto (ci sono anche i task, es. "rispondere"). */
-const projectSugs = (c: { suggestions: { kind: string }[] } | undefined) => (c?.suggestions ?? []).filter((x) => x.kind === 'project' || x.kind === 'new_project');
+const projectSugs = <T extends { kind: string }>(c: { suggestions: T[] } | undefined): T[] =>
+  (c?.suggestions ?? []).filter((x) => x.kind === 'project' || x.kind === 'new_project');
 
 const mail = (o: { id: string; from: string; subject: string; body: string; extra?: string }) =>
   ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
@@ -108,7 +111,7 @@ describe('progetto suggerito', () => {
     await seedPnrr();
     const r = await mail({ id: '<n@x>', from: 'Mario Rossi <mario@x.it>', subject: 'Spese personale', body: 'Ti mando le spese del personale per la rendicontazione PNRR.' });
     await s.jobs.drain();
-    const last = prompts.at(-1)!;
+    const last = classifyPrompt();
     expect(last).toMatch(/^P1: PNRR$/m); // PNRR è il primo candidato grazie a persone e somiglianza
     expect(last).toContain('descrizione: Rendicontazione del progetto PNRR');
     expect(last).toContain('conversazioni recenti: Rendicontazione PNRR');
@@ -130,7 +133,7 @@ describe('progetto suggerito', () => {
     s.suggestions.reject(sugOf(b.conversationId)!.id);
     await mail({ id: '<b2@x>', from: 'mario@x.it', subject: 'Re: Altre spese', body: 'ancora spese PNRR', extra: 'In-Reply-To: <b@x>' });
     await s.jobs.drain();
-    expect(prompts.at(-1)).not.toMatch(/^P\d+: PNRR$/m);
+    expect(classifyPrompt()).not.toMatch(/^P\d+: PNRR$/m);
     expect(sugOf(b.conversationId)).toBeUndefined();
   });
 

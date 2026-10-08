@@ -26,7 +26,8 @@ import { enqueueSummary } from '../ai/summarize.ts';
 import { bus } from '../events/bus.ts';
 import { enqueueEmbedding } from '../ai/embed.ts';
 import { enqueueClassification } from '../ai/classify.ts';
-import { clearReplySuggestion, enqueueTaskExtraction } from '../ai/extract-tasks.ts';
+import { clearReplySuggestion, completeReplyTasks, enqueueTaskExtraction } from '../ai/extract-tasks.ts';
+import { clearActionSuggestions, enqueueActionSuggestion } from '../ai/suggest-actions.ts';
 import { PRIORITY } from '../jobs/queue.ts';
 
 export interface RawFetched {
@@ -218,11 +219,18 @@ export async function ingestMessage(
     enqueueSummary(ctx.db, result.conversationId, priority);
     if (!conv.projectId) enqueueClassification(ctx.db, result.conversationId, priority);
     // Task suggeriti solo dalla posta in arrivo recente: dallo storico sarebbero rumore.
-    if (priority === PRIORITY.normal && direction === 'in') enqueueTaskExtraction(ctx.db, result.messageId);
+    if (priority === PRIORITY.normal && direction === 'in') {
+      // Prima la valutazione (rispondi/archivia/rumore): se il messaggio non chiede nulla, i task si saltano.
+      enqueueActionSuggestion(ctx.db, result.messageId);
+      enqueueTaskExtraction(ctx.db, result.messageId);
+    }
   }
-  // Una risposta (anche da Gmail o dal telefono) chiude il suggerimento "rispondere".
-  if (direction === 'out' && clearReplySuggestion(ctx.db, result.conversationId)) {
-    bus.publish({ type: 'conversations', ids: [result.conversationId] });
+  // Una risposta (anche da Gmail o dal telefono) chiude "rispondere" (suggerimenti e task) e le azioni proposte.
+  if (direction === 'out') {
+    const cleared = clearReplySuggestion(ctx.db, result.conversationId);
+    const actions = clearActionSuggestions(ctx.db, result.conversationId);
+    const done = completeReplyTasks(ctx.db, result.conversationId, date);
+    if (cleared || actions || done) bus.publish({ type: 'conversations', ids: [result.conversationId] });
   }
   return result;
 }

@@ -5,6 +5,8 @@ export interface ComposeRequest {
   replyAll?: boolean;
   to?: string[];
   projectId: string | null;
+  /** Bozza proposta dall'analizzatore, messa sopra la citazione. */
+  draft?: string;
 }
 
 /** Contenuto della colonna di destra. */

@@ -48,6 +48,8 @@ const tests = [
   ['n1', 'Mario Rossi <mario.rossi@cnr.it>', 'Rendiconto spese', 'Luca, per la rendicontazione del secondo semestre mi mandi i timesheet di settembre?'],
   ['n2', 'Marco Neri <marco.neri@studenti.unipa.it>', 'Esame del 12', 'Salve, non riesco a iscrivermi all\'appello del 12 di basi di dati, il portale dà errore.'],
   ['n3', 'Paolo Gialli <paolo@ordine-ingegneri.it>', 'Convegno ordine ingegneri', 'Gentile ingegnere, la invitiamo a tenere un intervento al convegno annuale dell\'ordine su IA e professioni.'],
+  ['n5', 'Anna Verdi <anna.verdi@unipa.it>', 'Grazie!', 'Grazie Luca per i materiali, tutto chiaro. Buon fine settimana!'],
+  ['n6', 'Portale Docenti <noreply-portale@unipa.it>', 'Verbale registrato', 'Il verbale d\'esame n. 4521 è stato registrato correttamente. Questo è un messaggio automatico.'],
   ['n4', 'Anna Verdi <anna.verdi@unipa.it>', 'Deliverable D4.1', 'Ciao Luca, entro venerdì mi servono la tua sezione del D4.1 e la lista delle pubblicazioni del 2026. Ci sentiamo martedì per la riunione di WP4.'],
 ] as const;
 for (const [id, from, subj, body] of tests) {
@@ -59,6 +61,8 @@ for (const [id, from, subj, body] of tests) {
   const taskSugs = item?.suggestions.filter((x) => x.kind === 'task') ?? [];
   console.log(`== ${subj}  (${((Date.now() - t) / 1000).toFixed(1)}s)`);
   console.log(sug ? `   → ${sug.kind === 'project' ? 'Sposta in' : 'Nuovo progetto'} ${sug.payload.projectName} · ${Math.round((sug.confidence ?? 0) * 100)}%\n     motivo: ${sug.payload.reason}` : '   → nessun suggerimento di progetto');
+  const act = item?.suggestions.find((x) => x.kind === 'action');
+  if (act) console.log(`   ! azione: ${act.payload.action}${act.payload.draft ? ` — «${act.payload.draft}»` : ''}`);
   for (const t of taskSugs) console.log(`   + task: ${t.payload.title}${t.payload.dueDate ? ` (entro ${t.payload.dueDate})` : ''}`);
 }
 s.jobs.stop();

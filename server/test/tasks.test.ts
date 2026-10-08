@@ -101,6 +101,15 @@ describe('task suggeriti', () => {
     expect(cal).toContain('venerdì 2026-10-09');
   });
 
+  it('porta i titoli all\'infinito', async () => {
+    const { toInfinitive } = await import('../src/ai/extract-tasks.ts');
+    expect(toInfinitive('Mandami i timesheet di settembre')).toBe('Inviare i timesheet di settembre');
+    expect(toInfinitive('rispondi per confermare')).toBe('Rispondere per confermare');
+    expect(toInfinitive('prenota la sala')).toBe('Prenotare la sala');
+    expect(toInfinitive('Inviare il report')).toBe('Inviare il report');
+    expect(toInfinitive('verbale da firmare')).toBe('Verbale da firmare');
+  });
+
   it('riporta i task al punto di vista del destinatario', async () => {
     const { toFirstPerson } = await import('../src/ai/extract-tasks.ts');
     expect(toFirstPerson('Inviare la tua sezione del D4.1')).toBe('Inviare la mia sezione del D4.1');
@@ -160,5 +169,61 @@ describe('task suggeriti', () => {
     await mail('old', 'Vecchia', 'fai questo', { date: 'Mon, 01 Jan 2024 10:00:00 +0100' });
     await mail('n', 'Offerte', 'compra', { noise: true });
     expect(s.db.select().from(jobs).all().filter((j) => j.kind === 'extract_tasks')).toHaveLength(0);
+  });
+});
+
+describe('azioni rapide', () => {
+  const actionLlm = (answer: object) => (system: string, user: string) => {
+    if (system.includes('gestire la posta')) return answer;
+    return system.includes('richieste esplicite') ? { task: [] } : { scelta: 'nessuno' };
+  };
+  const rebuild = (answer: object) => {
+    const { db, sqlite } = openDb(':memory:');
+    runMigrations(db);
+    s = buildServices(db, sqlite, fs.mkdtempSync(path.join(os.tmpdir(), 'mmw-blobs-')), {
+      createProvider: () => {
+        throw new Error('no imap');
+      },
+      summarizer: async () => ({ breve: 'x' }),
+      embedder: async (texts) => texts.map(() => Array.from({ length: 1024 }, (_, i) => (i === 0 ? 1 : 0))),
+      llm: (async (system: string, user: string) => actionLlm(answer)(system, user)) as never,
+    });
+    accountId = s.accounts.create({ name: 'Luca', email: 'me@gmail.com', provider: 'gmail', credentialRef: 'env:X' }).id;
+    projectId = new ProjectService(db).create({ name: 'PNRR', outgoingAccountId: accountId }).id;
+  };
+  const actions = () => new ConversationService(s.db).list({ view: 'inbox' })[0]?.suggestions.filter((x) => x.kind === 'action') ?? [];
+
+  it('propone "rispondi" con bozza; rispondere chiude suggerimenti e completa il task "Rispondere a…"', async () => {
+    rebuild({ tipo: 'personale', azione: 'rispondere', bozza: 'Va bene, confermo per giovedì.', motivo: 'Chiede una conferma' });
+    const r = await mail('a', 'Riunione', 'Confermi giovedì?');
+    await s.jobs.drain();
+    expect(actions().map((a) => [a.payload.action, a.payload.draft])).toEqual([['reply', 'Va bene, confermo per giovedì.']]);
+    expect(() => s.suggestions.accept(actions()[0]!.id)).toThrow('compositore');
+
+    // Il task "Rispondere a…" accettato si completa da solo quando rispondo.
+    const replySug = new ConversationService(s.db).list({ view: 'inbox' })[0]!.suggestions.find((x) => x.payload.reply)!;
+    s.suggestions.accept(replySug.id, { projectId });
+    const task = s.tasks.forProject(projectId).find((t) => t.title.startsWith('Rispondere a'))!;
+    expect(task.status).toBe('open');
+    const msgId = s.db.select().from(messagesTable).where(eq(messagesTable.conversationId, r.conversationId)).get()!.id;
+    s.actions.compose({ projectId, replyToMessageId: msgId, to: ['mario@x.it'], cc: [], bcc: [], subject: '', body: 'Confermo', urgent: false });
+    expect(s.tasks.get(task.id)!.status).toBe('done');
+    expect(new ConversationService(s.db).list({ view: 'project', projectId })[0]!.suggestions).toEqual([]);
+  });
+
+  it('propone "archivia" e "è rumore"; accettarli agisce sulla conversazione', async () => {
+    rebuild({ tipo: 'personale', azione: 'archiviare', motivo: 'È solo un ringraziamento' });
+    const r = await mail('a', 'Grazie', 'Grazie mille!');
+    await s.jobs.drain();
+    const res = s.suggestions.accept(actions()[0]!.id);
+    expect(res.activityIds).toHaveLength(1);
+    expect(s.db.select().from(conversations).where(eq(conversations.id, r.conversationId)).get()!.archivedAt).not.toBeNull();
+
+    rebuild({ tipo: 'automatica', azione: 'nessuna', motivo: 'Notifica automatica' });
+    const n = await mail('b', 'Il tuo ordine', 'Il tuo ordine è stato spedito.');
+    await s.jobs.drain();
+    expect(actions()[0]!.payload.action).toBe('noise');
+    s.suggestions.accept(actions()[0]!.id);
+    expect(s.db.select().from(conversations).where(eq(conversations.id, n.conversationId)).get()!.isNoise).toBe(true);
   });
 });
