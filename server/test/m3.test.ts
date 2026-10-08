@@ -48,6 +48,9 @@ beforeEach(() => {
     createProvider: () => {
       throw new Error('no imap');
     },
+    // Niente Ollama nei test: embedding e classificazione finti.
+    embedder: async (texts) => texts.map(() => Array.from({ length: 1024 }, (_, i) => (i === 0 ? 1 : 0))),
+    llm: (async () => ({ scelta: 'nessuno', confidenza: 0 })) as never,
     summarizer: async (prompt) => {
       prompts.push(prompt);
       return { breve: 'Mario propone una riunione giovedì.', dettagliata: 'Mario chiede di vedersi giovedì. Da confermare.' };
@@ -240,20 +243,21 @@ describe('sintesi', () => {
   it('ogni nuovo messaggio accoda la sintesi (non per il rumore) e il job la salva', async () => {
     const r = await mail({ id: '<1@x>', from: 'Mario <mario@x.it>', subject: 'Riunione', body: 'Ci vediamo giovedì?' });
     await mail({ id: '<n@x>', from: 'news@shop.it', subject: 'Offerte', body: 'saldi' });
-    expect(s.db.select().from(jobs).all().map((j) => JSON.parse(j.payload).conversationId)).toEqual([r.conversationId]);
+    const summaryJobs = () => s.db.select().from(jobs).all().filter((j) => j.kind === 'summarize');
+    expect(summaryJobs().map((j) => JSON.parse(j.payload).conversationId)).toEqual([r.conversationId]);
 
     await s.jobs.drain();
     expect(prompts[0]).toContain('Mario:\nCi vediamo giovedì?');
     const conv = s.db.select().from(conversations).where(eq(conversations.id, r.conversationId)).get()!;
     expect(conv.summary).toBe('Mario propone una riunione giovedì.');
     expect(conv.summaryDetailed).toContain('Da confermare');
-    expect(s.db.select().from(jobs).all()).toHaveLength(0);
+    expect(summaryJobs()).toHaveLength(0);
   });
 
   it('non duplica i lavori in attesa per la stessa conversazione', async () => {
     const r = await mail({ id: '<1@x>', from: 'mario@x.it', subject: 'S', body: 'a' });
     await mail({ id: '<2@x>', from: 'anna@y.it', subject: 'Re: S', body: 'b', inReplyTo: '<1@x>', refs: ['<1@x>'] });
-    expect(s.db.select().from(jobs).all()).toHaveLength(1);
+    expect(s.db.select().from(jobs).all().filter((j) => j.kind === 'summarize')).toHaveLength(1);
     expect(buildSummaryPrompt(s.db, r.conversationId)).toContain('anna@y.it:\nb');
   });
 });

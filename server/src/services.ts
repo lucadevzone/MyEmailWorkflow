@@ -16,11 +16,17 @@ import { PeopleService } from './people/service.ts';
 import { NotesService } from './notes/service.ts';
 import { JobRunner } from './jobs/runner.ts';
 import { ollamaSummarizer, summarizeConversation, type Summarizer } from './ai/summarize.ts';
+import { embedMessage, ollamaEmbedder, type Embedder } from './ai/embed.ts';
+import { classifyConversation, type Llm } from './ai/classify.ts';
+import { ollamaJson } from './ai/ollama-chat.ts';
+import { SuggestionService } from './suggestions/service.ts';
 
 export interface ServiceOverrides {
   createProvider?: (account: AccountDto) => MailProviderClient;
   sendSmtp?: SmtpSender;
   summarizer?: Summarizer;
+  embedder?: Embedder;
+  llm?: Llm;
 }
 
 export function buildServices(db: Db, sqlite: Database.Database, blobDir: string, o: ServiceOverrides = {}) {
@@ -45,5 +51,10 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
   const jobs = new JobRunner(db);
   const summarizer = o.summarizer ?? ollamaSummarizer;
   jobs.register('summarize', (p) => summarizeConversation(db, (p as { conversationId: string }).conversationId, summarizer));
-  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs };
+  const embedder = o.embedder ?? ollamaEmbedder;
+  jobs.register('embed', (p) => embedMessage(db, sqlite, (p as { messageId: string }).messageId, embedder));
+  const llm: Llm = o.llm ?? ollamaJson;
+  jobs.register('classify', (p) => classifyConversation({ db, sqlite, people, llm }, (p as { conversationId: string }).conversationId));
+  const suggestions = new SuggestionService(db, actions);
+  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions };
 }

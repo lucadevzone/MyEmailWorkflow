@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ConversationDetail, ConversationListItem, MessageDto, PersonRef } from '@mmw/shared';
+import type { ConversationDetail, ConversationListItem, MessageDto, PersonRef, SuggestionDto } from '@mmw/shared';
+import { ProjectDialog } from '../projects/ProjectDialog.tsx';
 import { api } from '../api.ts';
 import { fileSize, personLabel, shortDate } from '../lib/format.ts';
 import { Badge } from '../ui/Badge.tsx';
@@ -196,6 +197,9 @@ export function ConversationCard({
               Rispondi
             </SmallButton>
             {/* Azioni suggerite (tono "ai"); da M4 anche quelle dell'analizzatore. */}
+            {c.suggestions.map((sug) => (
+              <SuggestionButton key={sug.id} c={c} sug={sug} />
+            ))}
             {expanded && c.projectId && <ParticipantsSuggestion c={c} />}
             {c.archived ? (
               <SmallButton tone="neutral" onClick={() => unarchive.mutate()}>
@@ -261,6 +265,54 @@ export function ConversationCard({
         <MessageTree messages={detail.messages} selectedId={selectedMessageId} onOpen={(id) => pane.openMessage(c.id, id)} />
       )}
     </li>
+  );
+}
+
+/** Suggerimento dell'analizzatore (calcolato in background): clic = applica, × = scarta. */
+function SuggestionButton({ c, sug }: { c: ConversationListItem; sug: SuggestionDto }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [creating, setCreating] = useState(false);
+  const refresh = () => {
+    for (const k of [['conversations'], ['counts'], ['projects'], ['conversation', c.id]]) qc.invalidateQueries({ queryKey: k });
+  };
+  const accept = useMutation({
+    mutationFn: (projectId?: string) => api.acceptSuggestion(sug.id, projectId),
+    onSuccess: () => {
+      refresh();
+      toast({
+        text: `Spostata in ${sug.payload.projectName}`,
+        action: { label: 'Annulla', run: () => void api.move(c.id, null).then(refresh) },
+      });
+    },
+  });
+  const reject = useMutation({ mutationFn: () => api.rejectSuggestion(sug.id), onSuccess: refresh });
+  if (sug.kind !== 'project' && sug.kind !== 'new_project') return null;
+
+  const pct = sug.confidence != null ? ` · ${Math.round(sug.confidence * 100)}%` : '';
+  const label = sug.kind === 'project' ? `Sposta in ${sug.payload.projectName}${pct}` : `Nuovo progetto «${sug.payload.projectName}»`;
+  return (
+    <span className="inline-flex items-stretch overflow-hidden rounded bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200">
+      <button
+        className="whitespace-nowrap px-2 py-0.5 text-xs font-medium hover:bg-violet-200 dark:hover:bg-violet-800/60"
+        title={sug.payload.reason || 'Suggerito dall\'analizzatore'}
+        disabled={accept.isPending}
+        onClick={() => (sug.kind === 'project' ? accept.mutate(undefined) : setCreating(true))}
+      >
+        {label}
+      </button>
+      <button className="px-1 hover:bg-violet-200 dark:hover:bg-violet-800/60" title="Scarta il suggerimento" onClick={() => reject.mutate()}>
+        <Icon name="close" size={14} />
+      </button>
+      {creating && (
+        <ProjectDialog
+          initialName={sug.payload.projectName}
+          initialDescription={sug.payload.reason}
+          onClose={() => setCreating(false)}
+          onSaved={(p) => accept.mutate(p.id)}
+        />
+      )}
+    </span>
   );
 }
 

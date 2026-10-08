@@ -5,11 +5,18 @@ import { api } from '../api.ts';
 import { input, button, primary } from '../ui/styles.ts';
 
 /** Creazione o modifica di un progetto. */
-export function ProjectDialog({ project, onClose, onSaved }: { project?: ProjectDto; onClose: () => void; onSaved?: (p: ProjectDto) => void }) {
+export function ProjectDialog({ project, initialName, initialDescription, onClose, onSaved }: {
+  project?: ProjectDto;
+  /** Valori proposti per un progetto nuovo (es. dal suggerimento dell'analizzatore). */
+  initialName?: string;
+  initialDescription?: string;
+  onClose: () => void;
+  onSaved?: (p: ProjectDto) => void;
+}) {
   const qc = useQueryClient();
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
-  const [name, setName] = useState(project?.name ?? '');
-  const [description, setDescription] = useState(project?.description ?? '');
+  const [name, setName] = useState(project?.name ?? initialName ?? '');
+  const [description, setDescription] = useState(project?.description ?? initialDescription ?? '');
   const [accountId, setAccountId] = useState(project?.outgoingAccountId ?? '');
   const effectiveAccount = accountId || accounts[0]?.id || '';
 

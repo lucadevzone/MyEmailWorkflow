@@ -8,8 +8,6 @@ export const settingsPatchSchema = z
   .object({
     activityBatchMinutes: z.number().int().min(1).max(24 * 60),
     initialSyncDays: z.number().int().min(1).max(3650),
-    autonomy: z.enum(['suggest', 'auto']),
-    autoApplyThreshold: z.number().min(0).max(1),
   })
   .partial();
 

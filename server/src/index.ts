@@ -4,6 +4,8 @@ import { runMigrations } from './db/migrate.ts';
 import { buildApp } from './app.ts';
 import { buildServices } from './services.ts';
 import { enqueueMissingSummaries } from './ai/summarize.ts';
+import { enqueueMissingEmbeddings } from './ai/embed.ts';
+import { enqueueMissingClassifications } from './ai/classify.ts';
 
 const { db, sqlite } = openDb();
 runMigrations(db);
@@ -26,5 +28,7 @@ await app.listen({ host: config.host, port: config.port });
 
 services.runner.start();
 services.jobs.start();
+enqueueMissingEmbeddings(db);
 enqueueMissingSummaries(db);
+enqueueMissingClassifications(db);
 for (const account of services.accounts.list()) services.sync.start(account);

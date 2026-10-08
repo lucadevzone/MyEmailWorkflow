@@ -15,6 +15,8 @@ import { upsertAddress } from '../ingest/ingest.ts';
 import type { ActivityService, SendPayload } from '../activities/service.ts';
 import type { ActivityRunner } from '../activities/runner.ts';
 import { enqueueSummary } from '../ai/summarize.ts';
+import { clearProjectSuggestions, enqueueClassification } from '../ai/classify.ts';
+import { PRIORITY } from '../jobs/queue.ts';
 
 export const composeSchema = z
   .object({
@@ -99,6 +101,9 @@ export class MailActions {
   move(conversationId: string, projectId: string | null) {
     const res = this.conv.move(conversationId, projectId);
     if (!res) throw new ActionError('Conversazione non trovata');
+    // Il progetto ora l'ha scelto l'utente: i suggerimenti in attesa non servono più.
+    clearProjectSuggestions(this.deps.db, conversationId);
+    if (!projectId) enqueueClassification(this.deps.db, conversationId, PRIORITY.background);
     bus.publish({ type: 'conversations', ids: [conversationId] });
     bus.publish({ type: 'projects' });
     return res;

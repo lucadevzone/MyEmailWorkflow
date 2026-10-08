@@ -65,17 +65,11 @@ export interface SettingsDto {
   activityBatchMinutes: number;
   /** Giorni di posta recente importati e analizzati subito. */
   initialSyncDays: number;
-  /** Livello di autonomia dell'analizzatore. */
-  autonomy: 'suggest' | 'auto';
-  /** Soglia di confidenza per l'applicazione automatica in modalità "auto". */
-  autoApplyThreshold: number;
 }
 
 export const DEFAULT_SETTINGS: SettingsDto = {
   activityBatchMinutes: 5,
   initialSyncDays: 90,
-  autonomy: 'suggest',
-  autoApplyThreshold: 0.85,
 };
 
 // ─── Sync ────────────────────────────────────────────────────────────────────
@@ -128,9 +122,23 @@ export interface ConversationListItem {
   isNoise: boolean;
   projectId: string | null;
   archived: boolean;
+  /** Azioni suggerite dall'analizzatore, in attesa (dalla più sicura). */
+  suggestions: SuggestionDto[];
   /** Partecipanti esclusi i propri indirizzi. */
   participants: PersonRef[];
   accountIds: string[];
+}
+
+export type SuggestionKind = 'project' | 'new_project' | 'conversation' | 'contact' | 'group' | 'task' | 'action' | 'noise';
+
+/** Suggerimento calcolato in background ("pensaci tu"): l'utente lo accetta o lo scarta. */
+export interface SuggestionDto {
+  id: string;
+  kind: SuggestionKind;
+  confidence: number | null;
+  /** Per project/new_project: { projectId, projectName, reason, signals }. */
+  payload: { projectId?: string | null; projectName?: string; reason?: string; [k: string]: unknown };
+  createdAt: number;
 }
 
 export interface AttachmentDto {

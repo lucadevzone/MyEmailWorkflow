@@ -98,6 +98,8 @@ export const api = {
   removeAvatar: (contactId: string) => request<PersonDto>('DELETE', `/api/contacts/${contactId}/avatar`),
   addProjectContact: (projectId: string, input: { contactId?: string; name?: string; email?: string }) =>
     request<PersonDto>('POST', `/api/projects/${projectId}/contacts`, input),
+  acceptSuggestion: (id: string, projectId?: string) => request<{ conversationId: string }>('POST', `/api/suggestions/${id}/accept`, { projectId }),
+  rejectSuggestion: (id: string) => request<{ conversationId: string }>('POST', `/api/suggestions/${id}/reject`),
   projectMembers: (projectId: string) => request<ProjectMembersDto>('GET', `/api/projects/${projectId}/members`),
   addProjectGroup: (projectId: string, groupId: string) => request<ProjectMembersDto>('POST', `/api/projects/${projectId}/groups`, { groupId }),
   removeProjectGroup: (projectId: string, groupId: string) => request<void>('DELETE', `/api/projects/${projectId}/groups/${groupId}`),

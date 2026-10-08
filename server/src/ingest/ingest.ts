@@ -23,6 +23,9 @@ import { cleanBody, makeSnippet, normalizeSubject } from './clean-text.ts';
 import { detectNoise } from './noise.ts';
 import { pendingSeenIntent } from '../activities/service.ts';
 import { enqueueSummary } from '../ai/summarize.ts';
+import { enqueueEmbedding } from '../ai/embed.ts';
+import { enqueueClassification } from '../ai/classify.ts';
+import { PRIORITY } from '../jobs/queue.ts';
 
 export interface RawFetched {
   uid: number | null;
@@ -200,13 +203,19 @@ export async function ingestMessage(
     return { messageId, conversationId, created: true };
   });
 
-  // Ogni nuovo messaggio aggiorna la sintesi della conversazione (non per il rumore).
+  // Lavori in background (non per il rumore): sintesi, embedding e, se è in Da smistare, classificazione.
+  // La posta vecchia (backfill) va in coda con priorità bassa.
   const conv = ctx.db
-    .select({ isNoise: conversations.isNoise })
+    .select({ isNoise: conversations.isNoise, projectId: conversations.projectId })
     .from(conversations)
     .where(eq(conversations.id, result.conversationId))
     .get();
-  if (conv && !conv.isNoise) enqueueSummary(ctx.db, result.conversationId);
+  if (conv && !conv.isNoise) {
+    const priority = date > Date.now() - 30 * 86_400_000 ? PRIORITY.normal : PRIORITY.background;
+    enqueueEmbedding(ctx.db, result.messageId, priority);
+    enqueueSummary(ctx.db, result.conversationId, priority);
+    if (!conv.projectId) enqueueClassification(ctx.db, result.conversationId, priority);
+  }
   return result;
 }
 

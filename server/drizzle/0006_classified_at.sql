@@ -1,0 +1,1 @@
+ALTER TABLE `conversations` ADD `classified_at` integer;

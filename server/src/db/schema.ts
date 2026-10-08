@@ -93,6 +93,8 @@ export const conversations = sqliteTable(
     gmThreadId: text('gm_thread_id'),
     /** Newsletter/notifiche: escluse da Da smistare, embedding e task. */
     isNoise: integer('is_noise', { mode: 'boolean' }).notNull().default(false),
+    /** Ultima classificazione (progetto suggerito); NULL = da (ri)classificare. */
+    classifiedAt: integer('classified_at'),
     /** Archiviata: nascosta dalle viste salvo filtro. Riappare se arriva un nuovo messaggio. */
     archivedAt: integer('archived_at'),
     /** Nel cestino (anche su Gmail, tramite coda attività). */

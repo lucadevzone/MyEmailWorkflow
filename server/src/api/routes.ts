@@ -23,6 +23,9 @@ import { ZodError, type ZodType } from 'zod';
 import { PeopleError, contactInputSchema, groupInputSchema, type PeopleService } from '../people/service.ts';
 import { NotesError, noteInputSchema, type NotesService } from '../notes/service.ts';
 import type { PeopleScope } from '../people/service.ts';
+import { SuggestionError, type SuggestionService } from '../suggestions/service.ts';
+import { enqueueClassification, reclassifyInbox } from '../ai/classify.ts';
+import { PRIORITY } from '../jobs/queue.ts';
 
 export interface RouteDeps {
   db: Db;
@@ -34,6 +37,7 @@ export interface RouteDeps {
   actions: MailActions;
   people: PeopleService;
   notes: NotesService;
+  suggestions: SuggestionService;
 }
 
 function parse<T>(schema: ZodType<T>, body: unknown): T {
@@ -54,7 +58,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
       err instanceof ActivityError ||
       err instanceof ActionError ||
       err instanceof PeopleError ||
-      err instanceof NotesError
+      err instanceof NotesError ||
+      err instanceof SuggestionError
     ) {
       return reply.code(400).send({ error: err.message });
     }
@@ -146,6 +151,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   app.post<{ Params: { id: string }; Body: { isNoise?: unknown } }>('/api/conversations/:id/noise', async (req, reply) => {
     if (typeof req.body?.isNoise !== 'boolean') return reply.code(400).send({ error: 'isNoise deve essere booleano' });
     if (!conversationsSvc.setNoise(req.params.id, req.body.isNoise)) return reply.code(404).send({ error: 'Conversazione non trovata' });
+    enqueueClassification(deps.db, req.params.id, PRIORITY.normal); // rumore → niente suggerimenti; non rumore → si classifica
     bus.publish({ type: 'conversations', ids: [req.params.id] });
     return { ok: true };
   });
@@ -229,13 +235,16 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
 
   app.post('/api/projects', async (req, reply) => {
     const project = projectsSvc.create(parse(projectInputSchema, req.body));
+    reclassifyInbox(deps.db); // un progetto nuovo può accogliere posta già in Da smistare
     bus.publish({ type: 'projects' });
     return reply.code(201).send(project);
   });
 
   app.patch<{ Params: { id: string } }>('/api/projects/:id', async (req, reply) => {
-    const project = projectsSvc.update(req.params.id, parse(projectPatchSchema, req.body));
+    const patch = parse(projectPatchSchema, req.body);
+    const project = projectsSvc.update(req.params.id, patch);
     if (!project) return reply.code(404).send({ error: 'Progetto non trovato' });
+    if (patch.name !== undefined || patch.description !== undefined || patch.archived !== undefined) reclassifyInbox(deps.db);
     bus.publish({ type: 'projects' });
     return project;
   });
@@ -436,5 +445,19 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   app.delete<{ Params: { id: string } }>('/api/resources/:id', async (req, reply) => {
     touched(deps.notes.deleteResource(req.params.id));
     return reply.code(204).send();
+  });
+
+  // ─── Suggerimenti ──────────────────────────────────────────────────────────
+
+  app.post<{ Params: { id: string }; Body: { projectId?: string } }>('/api/suggestions/:id/accept', async (req) => {
+    const r = deps.suggestions.accept(req.params.id, req.body ?? {});
+    bus.publish({ type: 'conversations', ids: [r.conversationId] });
+    return r;
+  });
+
+  app.post<{ Params: { id: string } }>('/api/suggestions/:id/reject', async (req) => {
+    const r = deps.suggestions.reject(req.params.id);
+    bus.publish({ type: 'conversations', ids: [r.conversationId] });
+    return r;
   });
 }

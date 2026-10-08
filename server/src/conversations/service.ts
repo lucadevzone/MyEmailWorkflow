@@ -6,6 +6,7 @@ import type {
   ConversationQuery,
   MessageDto,
   PersonRef,
+  SuggestionDto,
 } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
 import {
@@ -19,6 +20,7 @@ import {
   notes,
   projects,
   resources,
+  suggestions,
   tasks,
 } from '../db/schema.ts';
 import { now } from '../lib/ids.ts';
@@ -106,6 +108,7 @@ export class ConversationService {
       .all()) {
       fileNames.set(r.c, (fileNames.get(r.c) ?? new Set()).add(normalizeFileName(r.filename)));
     }
+    const pending = this.pendingSuggestions(ids);
     const noteCounts = new Map(
       this.db
         .select({ c: notes.conversationId, n: sql<number>`count(*)` })
@@ -175,10 +178,29 @@ export class ConversationService {
         isNoise: r.isNoise,
         projectId: r.projectId,
         archived: r.archivedAt != null,
+        suggestions: pending.get(r.id) ?? [],
         participants: peopleById.get(r.id) ?? [],
         accountIds: s?.accountIds ? s.accountIds.split(',') : [],
       };
     });
+  }
+
+  /** Suggerimenti in attesa per queste conversazioni, dal più sicuro. */
+  private pendingSuggestions(ids: string[]): Map<string, SuggestionDto[]> {
+    const out = new Map<string, SuggestionDto[]>();
+    const rows = this.db
+      .select()
+      .from(suggestions)
+      .where(and(eq(suggestions.subjectType, 'conversation'), inArray(suggestions.subjectId, ids), eq(suggestions.status, 'pending')))
+      .orderBy(desc(suggestions.confidence))
+      .all();
+    for (const r of rows) {
+      out.set(r.subjectId, [
+        ...(out.get(r.subjectId) ?? []),
+        { id: r.id, kind: r.kind, confidence: r.confidence, payload: JSON.parse(r.payload), createdAt: r.createdAt },
+      ]);
+    }
+    return out;
   }
 
   private inboxBase() {
