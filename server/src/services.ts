@@ -20,6 +20,8 @@ import { embedMessage, ollamaEmbedder, type Embedder } from './ai/embed.ts';
 import { classifyConversation, type Llm } from './ai/classify.ts';
 import { ollamaJson } from './ai/ollama-chat.ts';
 import { SuggestionService } from './suggestions/service.ts';
+import { TaskService } from './tasks/service.ts';
+import { extractTasks } from './ai/extract-tasks.ts';
 
 export interface ServiceOverrides {
   createProvider?: (account: AccountDto) => MailProviderClient;
@@ -55,6 +57,8 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
   jobs.register('embed', (p) => embedMessage(db, sqlite, (p as { messageId: string }).messageId, embedder));
   const llm: Llm = o.llm ?? ollamaJson;
   jobs.register('classify', (p) => classifyConversation({ db, sqlite, people, llm }, (p as { conversationId: string }).conversationId));
-  const suggestions = new SuggestionService(db, actions);
-  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions };
+  jobs.register('extract_tasks', (p) => extractTasks(db, (p as { messageId: string }).messageId, llm));
+  const tasks = new TaskService(db);
+  const suggestions = new SuggestionService(db, actions, tasks);
+  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions, tasks };
 }

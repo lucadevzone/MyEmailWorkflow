@@ -48,14 +48,17 @@ const tests = [
   ['n1', 'Mario Rossi <mario.rossi@cnr.it>', 'Rendiconto spese', 'Luca, per la rendicontazione del secondo semestre mi mandi i timesheet di settembre?'],
   ['n2', 'Marco Neri <marco.neri@studenti.unipa.it>', 'Esame del 12', 'Salve, non riesco a iscrivermi all\'appello del 12 di basi di dati, il portale dà errore.'],
   ['n3', 'Paolo Gialli <paolo@ordine-ingegneri.it>', 'Convegno ordine ingegneri', 'Gentile ingegnere, la invitiamo a tenere un intervento al convegno annuale dell\'ordine su IA e professioni.'],
+  ['n4', 'Anna Verdi <anna.verdi@unipa.it>', 'Deliverable D4.1', 'Ciao Luca, entro venerdì mi servono la tua sezione del D4.1 e la lista delle pubblicazioni del 2026. Ci sentiamo martedì per la riunione di WP4.'],
 ] as const;
 for (const [id, from, subj, body] of tests) {
   const t = Date.now();
   const r = await mail(id, from, subj, body);
   await s.jobs.drain();
   const item = conv.list({ view: 'inbox' }).find((c) => c.id === r.conversationId);
-  const sug = item?.suggestions[0];
+  const sug = item?.suggestions.find((x) => x.kind === 'project' || x.kind === 'new_project');
+  const taskSugs = item?.suggestions.filter((x) => x.kind === 'task') ?? [];
   console.log(`== ${subj}  (${((Date.now() - t) / 1000).toFixed(1)}s)`);
-  console.log(sug ? `   → ${sug.kind === 'project' ? 'Sposta in' : 'Nuovo progetto'} ${sug.payload.projectName} · ${Math.round((sug.confidence ?? 0) * 100)}%\n     motivo: ${sug.payload.reason}` : '   → nessun suggerimento');
+  console.log(sug ? `   → ${sug.kind === 'project' ? 'Sposta in' : 'Nuovo progetto'} ${sug.payload.projectName} · ${Math.round((sug.confidence ?? 0) * 100)}%\n     motivo: ${sug.payload.reason}` : '   → nessun suggerimento di progetto');
+  for (const t of taskSugs) console.log(`   + task: ${t.payload.title}${t.payload.dueDate ? ` (entro ${t.payload.dueDate})` : ''}`);
 }
 s.jobs.stop();

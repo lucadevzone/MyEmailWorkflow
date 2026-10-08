@@ -25,6 +25,7 @@ import { pendingSeenIntent } from '../activities/service.ts';
 import { enqueueSummary } from '../ai/summarize.ts';
 import { enqueueEmbedding } from '../ai/embed.ts';
 import { enqueueClassification } from '../ai/classify.ts';
+import { enqueueTaskExtraction } from '../ai/extract-tasks.ts';
 import { PRIORITY } from '../jobs/queue.ts';
 
 export interface RawFetched {
@@ -215,6 +216,8 @@ export async function ingestMessage(
     enqueueEmbedding(ctx.db, result.messageId, priority);
     enqueueSummary(ctx.db, result.conversationId, priority);
     if (!conv.projectId) enqueueClassification(ctx.db, result.conversationId, priority);
+    // Task suggeriti solo dalla posta in arrivo recente: dallo storico sarebbero rumore.
+    if (priority === PRIORITY.normal && direction === 'in') enqueueTaskExtraction(ctx.db, result.messageId);
   }
   return result;
 }

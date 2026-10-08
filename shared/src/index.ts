@@ -94,7 +94,8 @@ export type ServerEvent =
   | { type: 'conversations'; ids: string[] }
   | { type: 'projects' }
   | { type: 'activities' }
-  | { type: 'people' };
+  | { type: 'people' }
+  | { type: 'tasks' };
 
 // ─── Conversazioni ───────────────────────────────────────────────────────────
 
@@ -117,6 +118,8 @@ export interface ConversationListItem {
   hasAttachments: boolean;
   /** Numero di file distinti (non di invii: le versioni di uno stesso file contano una volta). */
   attachmentCount: number;
+  /** Task aperti collegati alla conversazione. */
+  taskCount: number;
   noteCount: number;
   resourceCount: number;
   isNoise: boolean;
@@ -229,6 +232,38 @@ export interface ResourceDto {
   size: number | null;
   mime: string | null;
   createdAt: number;
+}
+
+// ─── Task ────────────────────────────────────────────────────────────────────
+
+export interface TaskDto {
+  id: string;
+  projectId: string | null;
+  conversationId: string | null;
+  messageId: string | null;
+  /** Oggetto della conversazione collegata, per il contesto. */
+  conversationSubject: string | null;
+  title: string;
+  details: string | null;
+  status: 'open' | 'done';
+  rank: string;
+  /** 1 = in cima alla coda. */
+  priority: number | null;
+  /** Scadenza facoltativa: data ISO "AAAA-MM-GG". */
+  dueDate: string | null;
+  completedAt: number | null;
+  createdAt: number;
+}
+
+export interface TaskInput {
+  projectId: string;
+  title: string;
+  details?: string | null;
+  conversationId?: string | null;
+  messageId?: string | null;
+  dueDate?: string | null;
+  /** true = in cima alla coda invece che in fondo. */
+  top?: boolean;
 }
 
 // ─── Persone e gruppi ────────────────────────────────────────────────────────

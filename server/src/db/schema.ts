@@ -322,7 +322,8 @@ export const tasks = sqliteTable(
     /** Fractional index: ordinamento manuale della coda. */
     rank: text('rank').notNull(),
     priority: integer('priority'),
-    dueDate: integer('due_date'),
+    /** Scadenza facoltativa, data ISO "AAAA-MM-GG". */
+    dueDate: text('due_date'),
     completedAt: integer('completed_at'),
     ...meta(),
   },

@@ -26,6 +26,7 @@ import type { PeopleScope } from '../people/service.ts';
 import { SuggestionError, type SuggestionService } from '../suggestions/service.ts';
 import { enqueueClassification, reclassifyInbox } from '../ai/classify.ts';
 import { PRIORITY } from '../jobs/queue.ts';
+import { TaskError, taskInputSchema, taskMoveSchema, taskPatchSchema, type TaskService } from '../tasks/service.ts';
 
 export interface RouteDeps {
   db: Db;
@@ -38,6 +39,7 @@ export interface RouteDeps {
   people: PeopleService;
   notes: NotesService;
   suggestions: SuggestionService;
+  tasks: TaskService;
 }
 
 function parse<T>(schema: ZodType<T>, body: unknown): T {
@@ -59,7 +61,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
       err instanceof ActionError ||
       err instanceof PeopleError ||
       err instanceof NotesError ||
-      err instanceof SuggestionError
+      err instanceof SuggestionError ||
+      err instanceof TaskError
     ) {
       return reply.code(400).send({ error: err.message });
     }
@@ -452,6 +455,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   app.post<{ Params: { id: string }; Body: { projectId?: string } }>('/api/suggestions/:id/accept', async (req) => {
     const r = deps.suggestions.accept(req.params.id, req.body ?? {});
     bus.publish({ type: 'conversations', ids: [r.conversationId] });
+    bus.publish({ type: 'tasks' });
     return r;
   });
 
@@ -459,5 +463,40 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     const r = deps.suggestions.reject(req.params.id);
     bus.publish({ type: 'conversations', ids: [r.conversationId] });
     return r;
+  });
+
+  // ─── Task ──────────────────────────────────────────────────────────────────
+
+  const tasksChanged = (conversationId: string | null | undefined) => {
+    bus.publish({ type: 'tasks' });
+    if (conversationId) bus.publish({ type: 'conversations', ids: [conversationId] });
+  };
+
+  app.get<{ Params: { id: string } }>('/api/projects/:id/tasks', async (req) => deps.tasks.forProject(req.params.id));
+  app.get<{ Params: { id: string } }>('/api/conversations/:id/tasks', async (req) => deps.tasks.forConversation(req.params.id));
+
+  app.post('/api/tasks', async (req, reply) => {
+    const task = deps.tasks.create(parse(taskInputSchema, req.body));
+    tasksChanged(task.conversationId);
+    return reply.code(201).send(task);
+  });
+
+  app.patch<{ Params: { id: string } }>('/api/tasks/:id', async (req) => {
+    const task = deps.tasks.update(req.params.id, parse(taskPatchSchema, req.body));
+    tasksChanged(task.conversationId);
+    return task;
+  });
+
+  app.post<{ Params: { id: string } }>('/api/tasks/:id/move', async (req) => {
+    const task = deps.tasks.move(req.params.id, parse(taskMoveSchema, req.body).afterId);
+    tasksChanged(null);
+    return task;
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/tasks/:id', async (req, reply) => {
+    const task = deps.tasks.get(req.params.id);
+    deps.tasks.remove(req.params.id);
+    tasksChanged(task?.conversationId);
+    return reply.code(204).send();
   });
 }

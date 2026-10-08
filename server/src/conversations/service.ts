@@ -109,6 +109,15 @@ export class ConversationService {
       fileNames.set(r.c, (fileNames.get(r.c) ?? new Set()).add(normalizeFileName(r.filename)));
     }
     const pending = this.pendingSuggestions(ids);
+    const taskCounts = new Map(
+      this.db
+        .select({ c: tasks.conversationId, n: sql<number>`count(*)` })
+        .from(tasks)
+        .where(and(inArray(tasks.conversationId, ids), eq(tasks.status, 'open'), isNull(tasks.deletedAt)))
+        .groupBy(tasks.conversationId)
+        .all()
+        .map((r) => [r.c, r.n]),
+    );
     const noteCounts = new Map(
       this.db
         .select({ c: notes.conversationId, n: sql<number>`count(*)` })
@@ -173,6 +182,7 @@ export class ConversationService {
         unreadCount: s?.unread ?? 0,
         hasAttachments: !!s?.attachments,
         attachmentCount: fileNames.get(r.id)?.size ?? 0,
+        taskCount: taskCounts.get(r.id) ?? 0,
         noteCount: noteCounts.get(r.id) ?? 0,
         resourceCount: resourceCounts.get(r.id) ?? 0,
         isNoise: r.isNoise,

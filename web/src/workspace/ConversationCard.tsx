@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConversationDetail, ConversationListItem, MessageDto, PersonRef, SuggestionDto } from '@mmw/shared';
 import { ProjectDialog } from '../projects/ProjectDialog.tsx';
+import { TaskRow } from '../tasks/TasksPanel.tsx';
+import { dueInfo, useTaskOps } from '../tasks/useTaskOps.ts';
 import { api } from '../api.ts';
 import { fileSize, personLabel, shortDate } from '../lib/format.ts';
 import { Badge } from '../ui/Badge.tsx';
@@ -9,7 +11,7 @@ import { Icon } from '../ui/Icon.tsx';
 import { useToast } from '../ui/toast.tsx';
 import type { PaneAction } from './pane.ts';
 
-type Section = 'summary' | 'attachments' | 'notes' | 'resources';
+type Section = 'summary' | 'attachments' | 'notes' | 'resources' | 'tasks';
 
 export function ConversationCard({
   c,
@@ -111,7 +113,7 @@ export function ConversationCard({
   const removeResource = useMutation({ mutationFn: api.deleteResource, onSuccess: refresh });
 
   const title = c.summary ?? c.subject ?? '(nessun oggetto)';
-  const hasExtras = c.attachmentCount + c.noteCount + c.resourceCount > 0;
+  const hasExtras = c.attachmentCount + c.noteCount + c.resourceCount + c.taskCount > 0 || open.has('tasks');
 
   return (
     <li className={`border-b border-stone-200 dark:border-stone-800 ${expanded ? 'bg-white dark:bg-stone-900' : ''}`}>
@@ -148,11 +150,13 @@ export function ConversationCard({
           {/* Riga 3: allegati, note, risorse */}
           {hasExtras && (
             <div className="flex gap-3 text-xs text-stone-500">
+              {(c.taskCount > 0 || open.has('tasks')) && <ExtraButton icon="task_alt" n={c.taskCount} active={open.has('tasks')} onClick={() => toggle('tasks')} title="Task" />}
               {c.attachmentCount > 0 && <ExtraButton icon="attach_file" n={c.attachmentCount} active={open.has('attachments')} onClick={() => toggle('attachments')} title="Allegati" />}
               {c.noteCount > 0 && <ExtraButton icon="sticky_note_2" n={c.noteCount} active={open.has('notes')} onClick={() => toggle('notes')} title="Note" />}
               {c.resourceCount > 0 && <ExtraButton icon="inventory_2" n={c.resourceCount} active={open.has('resources')} onClick={() => toggle('resources')} title="Risorse" />}
             </div>
           )}
+          {open.has('tasks') && <ConversationTasks c={c} />}
           {open.has('attachments') && detail && <Attachments d={detail} />}
           {open.has('notes') && detail && (
             <ul className="space-y-1 rounded-md bg-amber-50 p-2 text-xs dark:bg-amber-950/30">
@@ -235,6 +239,7 @@ export function ConversationCard({
                     </select>
                   </label>
                   <MenuItem icon="sticky_note_2" onClick={() => { setMenu(false); pane.openNote(c.id, null); }}>Nuova nota</MenuItem>
+                  <MenuItem icon="add_task" onClick={() => { setMenu(false); setOpen((p) => new Set(p).add('tasks')); }}>Nuovo task</MenuItem>
                   <MenuItem icon="upload_file" onClick={() => { setMenu(false); fileInput.current?.click(); }}>Carica file</MenuItem>
                   <MenuItem icon="mark_email_unread" onClick={() => { setMenu(false); unread.mutate(); }}>Segna come non letta</MenuItem>
                   {!c.projectId && (
@@ -268,6 +273,33 @@ export function ConversationCard({
   );
 }
 
+/** Task collegati alla conversazione, con aggiunta rapida (solo se la conversazione è in un progetto). */
+function ConversationTasks({ c }: { c: ConversationListItem }) {
+  const { data: tasks = [] } = useQuery({ queryKey: ['tasks', 'conversation', c.id], queryFn: () => api.conversationTasks(c.id) });
+  const ops = useTaskOps();
+  const [title, setTitle] = useState('');
+  return (
+    <div className="rounded-md bg-emerald-50/60 p-1.5 dark:bg-emerald-950/20">
+      {tasks.map((t) => (
+        <TaskRow key={t.id} t={t} compact />
+      ))}
+      {c.projectId ? (
+        <form
+          className="px-2 pt-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (title.trim()) ops.create.mutate({ projectId: c.projectId!, title, conversationId: c.id }, { onSuccess: () => setTitle('') });
+          }}
+        >
+          <input className="w-full bg-transparent text-xs outline-none placeholder:text-stone-400" placeholder="+ nuovo task (Invio)" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus={!tasks.length} />
+        </form>
+      ) : (
+        <p className="px-2 text-xs text-stone-500">I task stanno nei progetti: sposta prima la conversazione in un progetto.</p>
+      )}
+    </div>
+  );
+}
+
 /** Suggerimento dell'analizzatore (calcolato in background): clic = applica, × = scarta. */
 function SuggestionButton({ c, sug }: { c: ConversationListItem; sug: SuggestionDto }) {
   const qc = useQueryClient();
@@ -287,6 +319,7 @@ function SuggestionButton({ c, sug }: { c: ConversationListItem; sug: Suggestion
     },
   });
   const reject = useMutation({ mutationFn: () => api.rejectSuggestion(sug.id), onSuccess: refresh });
+  if (sug.kind === 'task') return <TaskSuggestion c={c} sug={sug} onReject={() => reject.mutate()} />;
   if (sug.kind !== 'project' && sug.kind !== 'new_project') return null;
 
   const pct = sug.confidence != null ? ` · ${Math.round(sug.confidence * 100)}%` : '';
@@ -312,6 +345,58 @@ function SuggestionButton({ c, sug }: { c: ConversationListItem; sug: Suggestion
           onSaved={(p) => accept.mutate(p.id)}
         />
       )}
+    </span>
+  );
+}
+
+/** Task suggerito: clic = crea il task (da Da smistare si sceglie prima il progetto). */
+function TaskSuggestion({ c, sug, onReject }: { c: ConversationListItem; sug: SuggestionDto; onReject: () => void }) {
+  const qc = useQueryClient();
+  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
+  const proposed = c.suggestions.find((x) => x.kind === 'project')?.payload.projectId ?? '';
+  const [choosing, setChoosing] = useState(false);
+  const [projectId, setProjectId] = useState(proposed);
+  const accept = useMutation({
+    mutationFn: (pid?: string) => api.acceptSuggestion(sug.id, pid),
+    onSuccess: () => {
+      for (const k of [['conversations'], ['tasks'], ['projects'], ['counts']]) qc.invalidateQueries({ queryKey: k });
+      setChoosing(false);
+    },
+  });
+  const p = sug.payload as { title?: string; dueDate?: string | null; details?: string | null };
+  const due = dueInfo(p.dueDate ?? null);
+
+  return (
+    <span className="inline-flex items-stretch overflow-hidden rounded bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200">
+      <button
+        className="max-w-72 truncate whitespace-nowrap px-2 py-0.5 text-xs font-medium hover:bg-violet-200 dark:hover:bg-violet-800/60"
+        title={p.details ?? p.title}
+        disabled={accept.isPending}
+        onClick={() => (c.projectId ? accept.mutate(undefined) : setChoosing(!choosing))}
+      >
+        + Task: {p.title}
+        {due && ` · ${due.label}`}
+      </button>
+      {choosing && (
+        <span className="flex items-center gap-1 px-1">
+          <select className="rounded bg-white px-1 text-xs text-stone-900 dark:bg-stone-800 dark:text-stone-100" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+            <option value="" disabled>
+              progetto…
+            </option>
+            {projects.filter((x) => !x.archived).map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name}
+              </option>
+            ))}
+          </select>
+          <button className="rounded bg-violet-600 px-1.5 text-xs text-white disabled:opacity-50" disabled={!projectId} onClick={() => accept.mutate(projectId)}>
+            Crea
+          </button>
+        </span>
+      )}
+      <button className="px-1 hover:bg-violet-200 dark:hover:bg-violet-800/60" title="Scarta il suggerimento" onClick={onReject}>
+        <Icon name="close" size={14} />
+      </button>
     </span>
   );
 }

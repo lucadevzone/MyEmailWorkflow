@@ -10,6 +10,8 @@ import { MessageView } from './MessageView.tsx';
 import { NoteEditor } from './NoteEditor.tsx';
 import { PeopleRail } from './PeopleRail.tsx';
 import type { PaneAction, PaneState } from './pane.ts';
+import { TasksPanel, TaskRow } from '../tasks/TasksPanel.tsx';
+import { useQuery as useQ } from '@tanstack/react-query';
 
 const PAGE = 50;
 
@@ -57,6 +59,7 @@ export function WorkspacePage({ scope, focusConversationId, onEditProject }: {
       openMessage,
       compose: (request) => setPane({ kind: 'compose', request, key: Date.now() }),
       openNote: (conversationId, noteId) => setPane({ kind: 'note', conversationId, noteId, key: Date.now() }),
+      openTasks: (projectId) => setPane({ kind: 'tasks', projectId }),
       close: () => setPane({ kind: 'empty' }),
     }),
     [openMessage],
@@ -115,23 +118,42 @@ export function WorkspacePage({ scope, focusConversationId, onEditProject }: {
         />
       )}
       {pane.kind === 'note' && <NoteEditor key={pane.key} conversationId={pane.conversationId} noteId={pane.noteId} pane={actions} />}
+      {pane.kind === 'tasks' && (
+        <TasksPanel
+          projectId={pane.projectId}
+          onOpenConversation={(conversationId, messageId) => {
+            setSelected(conversationId);
+            if (messageId) openMessage(conversationId, messageId);
+          }}
+        />
+      )}
     </div>
   );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-3 border-b border-stone-200 bg-stone-50 px-5 py-3 dark:border-stone-800 dark:bg-stone-950">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 shrink-0">
           <h1 className="truncate text-xl font-semibold">{title}</h1>
           {project && (
-            <p className="truncate text-xs text-stone-500">
+            <p className="max-w-80 truncate text-xs text-stone-500">
               {project.description ? `${project.description} · ` : ''}
               {outgoing ? `invia da ${outgoing.email}` : ''}
             </p>
           )}
         </div>
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+          {project && <ProjectTaskChips projectId={project.id} onOpen={() => actions.openTasks(project.id)} />}
+        </div>
         {project && (
           <>
+            <button
+              className={`flex size-8 items-center justify-center rounded-md ${pane.kind === 'tasks' ? 'bg-stone-200 text-stone-900 dark:bg-stone-800 dark:text-stone-100' : 'text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800'}`}
+              title="Task del progetto"
+              onClick={() => (pane.kind === 'tasks' ? actions.close() : actions.openTasks(project.id))}
+            >
+              <Icon name="checklist" />
+            </button>
             <button className="flex size-8 items-center justify-center rounded-md text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-800" title="Modifica progetto" onClick={onEditProject}>
               <Icon name="tune" />
             </button>
@@ -149,5 +171,28 @@ export function WorkspacePage({ scope, focusConversationId, onEditProject }: {
         <Split storageKey="mmw.split.workspace" left={left} right={right} />
       </div>
     </div>
+  );
+}
+
+const CHIPS = 3;
+
+/** Primi task aperti del progetto nella barra del titolo; clic = pannello completo. */
+function ProjectTaskChips({ projectId, onOpen }: { projectId: string; onOpen: () => void }) {
+  const { data: tasks = [] } = useQ({ queryKey: ['tasks', 'project', projectId], queryFn: () => api.projectTasks(projectId) });
+  const open = tasks.filter((t) => t.status === 'open');
+  if (!open.length) return null;
+  return (
+    <>
+      {open.slice(0, CHIPS).map((t) => (
+        <div key={t.id} className="min-w-0 max-w-64 shrink rounded-full border border-stone-200 bg-white pr-1 dark:border-stone-700 dark:bg-stone-900">
+          <TaskRow t={t} compact />
+        </div>
+      ))}
+      {open.length > CHIPS && (
+        <button className="shrink-0 text-xs text-stone-500 hover:underline" onClick={onOpen}>
+          +{open.length - CHIPS}
+        </button>
+      )}
+    </>
   );
 }
