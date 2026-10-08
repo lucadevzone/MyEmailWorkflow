@@ -229,6 +229,12 @@ export interface PeopleDirectoryDto {
   groups: GroupDto[];
 }
 
+/** Contatti e gruppi inseriti in un progetto: scorciatoie per scrivere. */
+export interface ProjectMembersDto {
+  contacts: PersonDto[];
+  groups: GroupDto[];
+}
+
 export interface ContactInput {
   name: string;
   emails: string[];

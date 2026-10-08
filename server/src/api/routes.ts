@@ -346,6 +346,27 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     },
   );
 
+  app.get<{ Params: { id: string } }>('/api/projects/:id/members', async (req) => deps.people.projectMembers(req.params.id));
+
+  app.post<{ Params: { id: string }; Body: { groupId?: string } }>('/api/projects/:id/groups', async (req, reply) => {
+    if (!req.body?.groupId) return reply.code(400).send({ error: 'groupId mancante' });
+    deps.people.addGroupToProject(req.params.id, req.body.groupId);
+    bus.publish({ type: 'people' });
+    return reply.code(201).send(deps.people.projectMembers(req.params.id));
+  });
+
+  app.delete<{ Params: { id: string; groupId: string } }>('/api/projects/:id/groups/:groupId', async (req, reply) => {
+    deps.people.removeGroupFromProject(req.params.id, req.params.groupId);
+    bus.publish({ type: 'people' });
+    return reply.code(204).send();
+  });
+
+  app.post<{ Params: { id: string }; Body: { groupName?: string } }>('/api/conversations/:id/participants-to-project', async (req) => {
+    const members = deps.people.participantsToProject(req.params.id, req.body?.groupName);
+    bus.publish({ type: 'people' });
+    return members;
+  });
+
   app.delete<{ Params: { id: string; contactId: string } }>('/api/projects/:id/contacts/:contactId', async (req, reply) => {
     deps.people.removeFromProject(req.params.id, req.params.contactId);
     bus.publish({ type: 'people' });

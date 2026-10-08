@@ -3,7 +3,7 @@
 
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { z } from 'zod';
-import type { GroupDto, PeopleDirectoryDto, PersonDto, ProjectSuggestion } from '@mmw/shared';
+import type { GroupDto, PeopleDirectoryDto, PersonDto, ProjectMembersDto, ProjectSuggestion } from '@mmw/shared';
 import type Database from 'better-sqlite3';
 import type { Db } from '../db/client.ts';
 import {
@@ -13,6 +13,10 @@ import {
   contacts,
   groupMembers,
   projectContacts,
+  projectGroups,
+  messages,
+  messageAddresses,
+  conversations,
 } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
 import type { BlobStore } from '../store/blobs.ts';
@@ -366,6 +370,93 @@ export class PeopleService {
     }
     this.db.insert(projectContacts).values({ projectId, contactId, createdAt: now() }).onConflictDoNothing().run();
     return { ...this.person(contactId), member: true };
+  }
+
+  /** Contatti e gruppi inseriti esplicitamente nel progetto. */
+  projectMembers(projectId: string): ProjectMembersDto {
+    const contactIds = this.db
+      .select({ id: projectContacts.contactId })
+      .from(projectContacts)
+      .where(eq(projectContacts.projectId, projectId))
+      .orderBy(projectContacts.createdAt)
+      .all()
+      .map((r) => r.id);
+    const info = this.contactInfo(contactIds);
+    const people: PersonDto[] = contactIds
+      .filter((id) => info.has(id))
+      .map((id) => {
+        const c = info.get(id)!;
+        return { key: `c:${id}`, contactId: id, name: c.name, emails: c.emails, conversationCount: 0, lastSeenAt: null, avatarUrl: c.avatarUrl, member: true };
+      });
+    const groupIds = this.db
+      .select({ id: projectGroups.groupId })
+      .from(projectGroups)
+      .innerJoin(contactGroups, eq(contactGroups.id, projectGroups.groupId))
+      .where(and(eq(projectGroups.projectId, projectId), isNull(contactGroups.deletedAt)))
+      .orderBy(projectGroups.createdAt)
+      .all()
+      .map((r) => r.id);
+    return { contacts: people, groups: this.groupsById(groupIds) };
+  }
+
+  private groupsById(ids: string[]): GroupDto[] {
+    if (!ids.length) return [];
+    const gs = this.db.select().from(contactGroups).where(inArray(contactGroups.id, ids)).all();
+    const members = this.db.select().from(groupMembers).where(inArray(groupMembers.groupId, ids)).all();
+    const info = this.contactInfo([...new Set(members.map((m) => m.contactId))]);
+    return ids
+      .map((id) => gs.find((g) => g.id === id))
+      .filter((g): g is NonNullable<typeof g> => !!g)
+      .map((g) => ({
+        id: g.id,
+        name: g.name,
+        members: members
+          .filter((m) => m.groupId === g.id && info.has(m.contactId))
+          .map((m) => {
+            const c = info.get(m.contactId)!;
+            return { key: `c:${m.contactId}`, contactId: m.contactId, name: c.name, emails: c.emails, conversationCount: 0, lastSeenAt: null, avatarUrl: c.avatarUrl };
+          }),
+      }));
+  }
+
+  addGroupToProject(projectId: string, groupId: string) {
+    this.db.insert(projectGroups).values({ projectId, groupId, createdAt: now() }).onConflictDoNothing().run();
+  }
+
+  removeGroupFromProject(projectId: string, groupId: string) {
+    this.db.delete(projectGroups).where(and(eq(projectGroups.projectId, projectId), eq(projectGroups.groupId, groupId))).run();
+  }
+
+  /**
+   * Azione suggerita su una conversazione di progetto: i partecipanti (escluso me) diventano
+   * contatti (se non lo sono già) e, se sono più di uno, un gruppo; tutto viene inserito nel progetto.
+   */
+  participantsToProject(conversationId: string, groupName?: string): ProjectMembersDto {
+    const conv = this.db.select().from(conversations).where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))).get();
+    if (!conv) throw new PeopleError('Conversazione non trovata');
+    if (!conv.projectId) throw new PeopleError('La conversazione non è in un progetto');
+    const own = new Set(this.ownEmails());
+    const addrs = this.db
+      .selectDistinct({ id: contactAddresses.id, email: contactAddresses.email, name: contactAddresses.displayName, contactId: contactAddresses.contactId })
+      .from(messageAddresses)
+      .innerJoin(messages, eq(messages.id, messageAddresses.messageId))
+      .innerJoin(contactAddresses, eq(contactAddresses.id, messageAddresses.contactAddressId))
+      .where(and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt)))
+      .all()
+      .filter((a) => !own.has(a.email));
+    if (!addrs.length) throw new PeopleError('Nessun destinatario oltre a te');
+
+    const contactIds = [
+      ...new Set(addrs.map((a) => a.contactId ?? this.createContact({ name: a.name?.trim() || a.email.split('@')[0]!, emails: [a.email] }).contactId!)),
+    ];
+    if (contactIds.length === 1) {
+      this.addToProject(conv.projectId, { contactId: contactIds[0] });
+    } else {
+      const name = groupName?.trim() || conv.subject || 'Gruppo';
+      const groupId = this.saveGroup(null, { name, contactIds });
+      this.addGroupToProject(conv.projectId, groupId);
+    }
+    return this.projectMembers(conv.projectId);
   }
 
   removeFromProject(projectId: string, contactId: string) {

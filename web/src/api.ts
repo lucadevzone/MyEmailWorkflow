@@ -10,6 +10,7 @@ import type {
   PeopleDirectoryDto,
   PersonDto,
   ProjectDto,
+  ProjectMembersDto,
   ProjectSuggestion,
   ResourceDto,
   UnreadCountsDto,
@@ -97,6 +98,11 @@ export const api = {
   removeAvatar: (contactId: string) => request<PersonDto>('DELETE', `/api/contacts/${contactId}/avatar`),
   addProjectContact: (projectId: string, input: { contactId?: string; name?: string; email?: string }) =>
     request<PersonDto>('POST', `/api/projects/${projectId}/contacts`, input),
+  projectMembers: (projectId: string) => request<ProjectMembersDto>('GET', `/api/projects/${projectId}/members`),
+  addProjectGroup: (projectId: string, groupId: string) => request<ProjectMembersDto>('POST', `/api/projects/${projectId}/groups`, { groupId }),
+  removeProjectGroup: (projectId: string, groupId: string) => request<void>('DELETE', `/api/projects/${projectId}/groups/${groupId}`),
+  participantsToProject: (conversationId: string, groupName?: string) =>
+    request<ProjectMembersDto>('POST', `/api/conversations/${conversationId}/participants-to-project`, { groupName }),
   removeProjectContact: (projectId: string, contactId: string) =>
     request<void>('DELETE', `/api/projects/${projectId}/contacts/${contactId}`),
   createGroup: (name: string, contactIds: string[]) => request<{ id: string }>('POST', '/api/groups', { name, contactIds }),

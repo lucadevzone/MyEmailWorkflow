@@ -219,14 +219,16 @@ pending ──(batch tick | esegui ora | urgent)──► running ──► done
   - + per creare un nuovo progetto.
 - **Barra di stato**: Impostazioni, Contatti, Attività; a destra lo stato di account e Ollama (verde = online, arancione = offline).
 - **Pagina di una voce**:
-  - a sinistra le bolle delle persone (clic = filtra; + aggiunge al progetto);
+  - solo nei progetti, a sinistra, le bolle dei **contatti e gruppi inseriti nel progetto** (non chi compare nelle email): sono scorciatoie, il clic apre una nuova email dal progetto; + ne aggiunge, × li toglie;
   - due colonne ridimensionabili: conversazioni | pannello di destra.
 - **Scheda conversazione**:
   - badge rosso dei non letti;
   - sintesi AI (clic = versione di 4-5 righe);
   - persone (clic = nuova email);
   - allegati, note e risorse espandibili;
-  - azioni: Rispondi (a tutti), azioni AI (M4), Archivia, menu ⋯.
+  - azioni: Rispondi (a tutti), azioni suggerite, Archivia, menu ⋯. Azioni suggerite:
+    - "Aggiungi i destinatari come gruppo" (o il singolo contatto) se non sono già nel progetto;
+    - da M4, quelle dell'analizzatore.
 - **Albero dei messaggi** sotto la conversazione espansa: dalla radice alle foglie, con badge blu sui non letti. Il clic apre il messaggio a destra e lo segna come letto.
 
 ## 8. Sicurezza

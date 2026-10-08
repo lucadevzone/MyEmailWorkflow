@@ -32,6 +32,7 @@ export function useServerEvents() {
       } else if (event.type === 'people') {
         qc.invalidateQueries({ queryKey: ['people'] });
         qc.invalidateQueries({ queryKey: ['directory'] });
+        qc.invalidateQueries({ queryKey: ['project-members'] });
       }
     };
     return () => es.close();

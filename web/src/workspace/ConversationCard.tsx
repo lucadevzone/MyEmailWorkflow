@@ -191,11 +191,12 @@ export function ConversationCard({
           )}
 
           {/* Riga 4: azioni */}
-          <div className="flex items-center gap-1.5 pt-0.5">
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
             <SmallButton tone="primary" onClick={() => void reply()}>
               Rispondi
             </SmallButton>
-            {/* Qui compariranno le azioni suggerite dall'analizzatore (M4), con tono "ai". */}
+            {/* Azioni suggerite (tono "ai"); da M4 anche quelle dell'analizzatore. */}
+            {expanded && c.projectId && <ParticipantsSuggestion c={c} />}
             {c.archived ? (
               <SmallButton tone="neutral" onClick={() => unarchive.mutate()}>
                 Ripristina
@@ -263,6 +264,53 @@ export function ConversationCard({
   );
 }
 
+/**
+ * Suggerimento: i destinatari della conversazione non sono ancora nel progetto →
+ * aggiungerli come contatto (se è uno) o come gruppo (se sono più di uno).
+ */
+function ParticipantsSuggestion({ c }: { c: ConversationListItem }) {
+  const qc = useQueryClient();
+  const { data: members } = useQuery({ queryKey: ['project-members', c.projectId], queryFn: () => api.projectMembers(c.projectId!) });
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState(c.subject ?? '');
+  const add = useMutation({
+    mutationFn: () => api.participantsToProject(c.id, name),
+    onSuccess: () => {
+      setNaming(false);
+      for (const k of [['project-members', c.projectId], ['directory'], ['people']]) qc.invalidateQueries({ queryKey: k });
+    },
+  });
+  if (!members || !c.participants.length) return null;
+  const covered = new Set([...members.contacts, ...members.groups.flatMap((g) => g.members)].flatMap((p) => p.emails));
+  if (c.participants.every((p) => covered.has(p.email))) return null;
+
+  const single = c.participants.length === 1;
+  if (naming) {
+    return (
+      <form
+        className="flex items-center gap-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          add.mutate();
+        }}
+      >
+        <input className="w-40 rounded border border-violet-300 bg-transparent px-1.5 py-0.5 text-xs dark:border-violet-700" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome del gruppo" autoFocus />
+        <SmallButton tone="ai" onClick={() => add.mutate()}>
+          Crea gruppo
+        </SmallButton>
+        <button type="button" className="text-xs text-stone-400" onClick={() => setNaming(false)}>
+          annulla
+        </button>
+      </form>
+    );
+  }
+  return (
+    <SmallButton tone="ai" onClick={() => (single ? add.mutate() : setNaming(true))}>
+      {single ? `Aggiungi ${personLabel(c.participants[0]!)} al progetto` : `Aggiungi i ${c.participants.length} destinatari come gruppo`}
+    </SmallButton>
+  );
+}
+
 function PersonLink({ p, onClick }: { p: PersonRef; onClick: () => void }) {
   return (
     <button className="text-stone-600 hover:text-sky-700 hover:underline dark:text-stone-300" title={`Scrivi a ${p.email}`} onClick={onClick}>
@@ -288,7 +336,7 @@ function SmallButton({ tone, onClick, children }: { tone: 'primary' | 'ai' | 'da
     neutral: 'bg-stone-100 text-stone-700 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-200',
   }[tone];
   return (
-    <button className={`rounded px-2 py-0.5 text-xs font-medium ${cls}`} onClick={onClick}>
+    <button className={`whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${cls}`} onClick={onClick}>
       {children}
     </button>
   );

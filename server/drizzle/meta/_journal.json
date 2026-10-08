@@ -36,6 +36,13 @@
       "when": 1791397387571,
       "tag": "0004_ui_m3",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791431636548,
+      "tag": "0005_project_groups",
+      "breakpoints": true
     }
   ]
 }

@@ -25,14 +25,13 @@ export function WorkspacePage({ scope, focusConversationId, onEditProject }: {
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
   const project = scope.view === 'project' ? projects.find((p) => p.id === scope.projectId) : undefined;
-  const [person, setPerson] = useState<string | null>(null);
   const [archived, setArchived] = useState(false);
   const [selected, setSelected] = useState<string | null>(focusConversationId ?? null);
   const [pane, setPane] = useState<PaneState>({ kind: 'empty' });
 
   const query: ConversationQuery = useMemo(
-    () => ({ view: scope.view, projectId: scope.view === 'project' ? scope.projectId : undefined, person: person ?? undefined, archived }),
-    [scope, person, archived],
+    () => ({ view: scope.view, projectId: scope.view === 'project' ? scope.projectId : undefined, archived }),
+    [scope, archived],
   );
   const list = useInfiniteQuery({
     queryKey: ['conversations', query],
@@ -75,11 +74,6 @@ export function WorkspacePage({ scope, focusConversationId, onEditProject }: {
         <button className={archived ? 'font-semibold' : 'text-stone-500'} onClick={() => setArchived(true)}>
           Archiviate
         </button>
-        {person && (
-          <button className="ml-auto flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200" onClick={() => setPerson(null)}>
-            filtro persona <Icon name="close" size={14} />
-          </button>
-        )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {list.isLoading && <div className="p-4 text-sm text-stone-500">Caricamento…</div>}
@@ -151,7 +145,7 @@ export function WorkspacePage({ scope, focusConversationId, onEditProject }: {
         )}
       </div>
       <div className="flex min-h-0 flex-1">
-        <PeopleRail scope={scope} filter={person} onFilter={setPerson} />
+        {scope.view === 'project' && <PeopleRail projectId={scope.projectId} onCompose={(to) => actions.compose({ to, projectId: scope.projectId })} />}
         <Split storageKey="mmw.split.workspace" left={left} right={right} />
       </div>
     </div>

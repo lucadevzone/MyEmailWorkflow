@@ -105,6 +105,36 @@ describe('persone', () => {
   });
 });
 
+describe('contatti del progetto', () => {
+  it('il progetto mostra solo contatti e gruppi inseriti esplicitamente', async () => {
+    const r = await mail({ id: '<1@x>', from: 'Mario Rossi <mario@x.it>', to: 'me@gmail.com, Anna <anna@y.it>', subject: 'Budget', body: 'b' });
+    s.actions.move(r.conversationId, projectId);
+    expect(s.people.projectMembers(projectId)).toEqual({ contacts: [], groups: [] });
+
+    const members = s.people.participantsToProject(r.conversationId, 'Team budget');
+    expect(members.contacts).toEqual([]);
+    expect(members.groups).toHaveLength(1);
+    expect(members.groups[0]!.name).toBe('Team budget');
+    expect(members.groups[0]!.members.map((m) => m.name).sort()).toEqual(['Anna', 'Mario Rossi']);
+    // I partecipanti sono diventati contatti confermati.
+    expect(s.people.directory().contacts.map((c) => c.name).sort()).toEqual(['Anna', 'Mario Rossi']);
+  });
+
+  it('con un solo destinatario lo aggiunge come contatto, riusando quello esistente', async () => {
+    const r = await mail({ id: '<1@x>', from: 'mario@x.it', subject: 'S', body: 'b' });
+    const mario = s.people.createContact({ name: 'Mario', emails: ['mario@x.it'] });
+    s.actions.move(r.conversationId, projectId);
+    const members = s.people.participantsToProject(r.conversationId);
+    expect(members.contacts.map((c) => c.contactId)).toEqual([mario.contactId]);
+    expect(members.groups).toEqual([]);
+  });
+
+  it('rifiuta conversazioni fuori da un progetto', async () => {
+    const r = await mail({ id: '<1@x>', from: 'mario@x.it', subject: 'S', body: 'b' });
+    expect(() => s.people.participantsToProject(r.conversationId)).toThrow('non è in un progetto');
+  });
+});
+
 describe('unione dei contatti', () => {
   it('unisce due contatti: indirizzi, gruppi, progetti e foto passano al primo', async () => {
     await mail({ id: '<1@x>', from: 'luca@cnr.it', subject: 'A', body: 'b' });
@@ -124,7 +154,7 @@ describe('unione dei contatti', () => {
     expect(dir.contacts.map((c) => c.name)).toEqual(['Luca Sabatucci']);
     expect(dir.contacts[0]!.conversationCount).toBe(2);
     expect(dir.groups.find((x) => x.id === g)!.members.map((m) => m.contactId)).toEqual([a.contactId]);
-    expect(s.people.inScope({ view: 'project', projectId }).find((p) => p.member)!.contactId).toBe(a.contactId);
+    expect(s.people.projectMembers(projectId).contacts.map((c) => c.contactId)).toEqual([a.contactId]);
   });
 
   it('unire un indirizzo suggerito lo aggiunge al contatto', async () => {

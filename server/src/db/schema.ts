@@ -212,6 +212,17 @@ export const projectContacts = sqliteTable(
   (t) => [primaryKey({ columns: [t.projectId, t.contactId] })],
 );
 
+/** Gruppi associati a un progetto (scorciatoia per scrivere a tutti i membri). */
+export const projectGroups = sqliteTable(
+  'project_groups',
+  {
+    projectId: text('project_id').notNull().references(() => projects.id),
+    groupId: text('group_id').notNull().references(() => contactGroups.id),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.projectId, t.groupId] })],
+);
+
 // ─── Allegati, risorse, versioni ─────────────────────────────────────────────
 
 /** Storage content-addressed: il file sta in data/blobs/<sha[0:2]>/<sha>. */
