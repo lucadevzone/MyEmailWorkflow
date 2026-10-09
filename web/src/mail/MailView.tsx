@@ -24,6 +24,11 @@ const GAP = 6;
 const RAMP = 220;
 /** Altezza stimata di una scheda non ancora misurata. */
 const ESTIMATE = 420;
+/** Margine superiore del primo messaggio quando la conversazione parte dall'inizio. */
+const TOP_MARGIN = 16;
+
+/** Il primo messaggio parte già allineato in alto: il suo tratto è più corto di questa quantità. */
+const leadOf = (viewport: number) => Math.max(0, viewport * READING_LINE - TOP_MARGIN);
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
@@ -50,7 +55,8 @@ function scrollLayout(full: number[], viewport: number): Layout {
   let at = 0;
   full.forEach((h, i) => {
     const last = i === full.length - 1;
-    const len = last ? Math.max(RAMP, h - viewport * (1 - READING_LINE) + RAMP) : Math.max(RAMP, h + GAP);
+    const lead = i === 0 ? leadOf(viewport) : 0;
+    const len = last ? Math.max(RAMP, h - viewport * (1 - READING_LINE) + RAMP) : Math.max(RAMP, h + GAP - lead);
     starts.push(at);
     lengths.push(len);
     at += len;
@@ -331,12 +337,15 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     const k = indexAt(s, L);
     const lastIdx = keys.length - 1;
     const progress = Math.min(1, Math.max(0, (s - L.starts[k]!) / L.lengths[k]!));
-    const local = k === lastIdx ? Math.min(progress * L.lengths[k]!, heights[k]!) : progress * (heights[k]! + GAP);
+    const lead = k === 0 ? Math.min(leadOf(viewport), heights[0]! + GAP) : 0;
+    const local = k === lastIdx ? Math.min(progress * L.lengths[k]!, heights[k]!) : lead + progress * (heights[k]! + GAP - lead);
     const lineY = viewport * READING_LINE;
     let shift = lineY - (tops[k]! + local);
-    // La colonna non sale oltre il fondo dell'ultimo elemento: resta ferma sul bordo inferiore.
+    // Con la bozza aperta la colonna non sale oltre il suo fondo: resta ferma sul bordo inferiore.
+    // La regola entra in proporzione all'apertura della bozza, così non ci sono salti.
     const contentBottom = tops[lastIdx]! + heights[lastIdx]!;
-    shift = Math.max(shift, Math.min(lineY, viewport - 16 - contentBottom));
+    const pinnedShift = Math.max(shift, Math.min(lineY, viewport - 16 - contentBottom));
+    shift += (pinnedShift - shift) * open[lastIdx]!;
 
     stage = (
       <div className="pm-carousel__track" role="feed" style={{ transform: `translateY(${shift}px)` }}>
