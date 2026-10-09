@@ -15,7 +15,7 @@ import { composeTarget, NEW_DRAFT, seedOf, type DraftSeed } from './seed.ts';
 
 const time = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' });
 /** Linea di lettura (frazione dell'altezza visibile): il messaggio che la attraversa è quello in focus. */
-const READING_LINE = 0.3;
+const READING_LINE = 0.2;
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const SWAP_MS = 260;
@@ -191,6 +191,20 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
   }, [select, conversationId]);
+
+  // Altezza visibile del carosello: da qui gli spazi sopra/sotto e l'altezza minima della scheda in focus (CSS).
+  useLayoutEffect(() => {
+    const el = carousel.current;
+    if (!el) return;
+    const apply = () => {
+      el.style.setProperty('--carousel-h', `${el.clientHeight}px`);
+      el.style.setProperty('--reading-line', String(READING_LINE));
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Dopo il cambio di focus: compensa le altezze cambiate sopra, oppure porta l'elemento alla linea di lettura.
   const ready = !conversationId || !!d;

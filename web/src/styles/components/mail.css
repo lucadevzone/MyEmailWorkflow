@@ -31,7 +31,7 @@
 .pm-carousel__track {
   flex: 1 1 auto; max-width: var(--carousel-max); min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px;
   /* spazio sopra e sotto: il primo e l'ultimo elemento possono arrivare alla linea di lettura */
-  padding: 22vh 0 60vh;
+  padding: calc(var(--carousel-h, 600px) * var(--reading-line, .2) - 12px) 0 calc(var(--carousel-h, 600px) * (1 - var(--reading-line, .2)));
 }
 .pm-carousel__track--single { padding: 16px 0; min-height: 100%; box-sizing: border-box; }
 .pm-carousel__item { width: 100%; display: flex; justify-content: center; flex: none; }
@@ -55,6 +55,8 @@
 .pm-msg--focused {
   width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-4xl);
   padding: 22px 28px; box-shadow: var(--shadow-focus); display: flex; flex-direction: column; gap: 16px;
+  /* occupa lo spazio visibile sotto la linea di lettura, lasciando intravedere il messaggio successivo */
+  min-height: calc(var(--carousel-h, 600px) * (1 - var(--reading-line, .2)) - 40px);
 }
 .pm-msg__head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
 .pm-msg__headmain { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -69,7 +71,7 @@
 
 .pm-msg__side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; margin-left: auto; }
 .pm-msg__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-.pm-msg__body { font-size: var(--fs-lg); line-height: var(--lh-read); max-width: 760px; text-wrap: pretty; min-height: 120px; }
+.pm-msg__body { font-size: var(--fs-lg); line-height: var(--lh-read); max-width: 900px; text-wrap: pretty; min-height: 120px; }
 .pm-msg__body pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .pm-msg__body iframe { min-height: 320px; }
 .pm-msg__quoted { color: var(--ink-muted); border-left: 2px solid var(--border); padding-left: 14px; margin-top: 12px; }
@@ -81,7 +83,7 @@
   width: 100%; box-sizing: border-box; background: var(--surface); border: 1.5px solid var(--ink); border-radius: var(--r-4xl);
   box-shadow: var(--shadow-focus); display: flex; flex-direction: column; overflow: clip;
   /* la bozza riempie lo spazio visibile; il testo cresce con quello che si scrive */
-  min-height: max(420px, calc(100vh - 220px));
+  min-height: max(360px, calc(var(--carousel-h, 600px) * (1 - var(--reading-line, .2)) - 24px));
 }
 .pm-draft__scroll { flex: 1 1 auto; display: flex; flex-direction: column; }
 .pm-draft__row { display: flex; align-items: center; gap: 10px; padding: 12px 24px; border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap; flex: none; position: relative; }
@@ -159,7 +161,6 @@
   .pm-mailview { overflow-y: auto; flex-wrap: wrap; }
   /* Il carosello resta alto quanto lo spazio visibile (le schede scorrono al loro interno); l'Assistente va sotto. */
   .pm-carousel { flex-basis: 100%; height: 100%; }
-  .pm-draft { min-height: 360px; }
   /* sotto il carosello, con altezza propria: scorre la chat e il campo di testo resta visibile */
   .pm-assistant { max-width: none; flex-basis: 100%; height: min(560px, 85%); border-left: 0; border-top: 1px solid var(--border); }
   .pm-assistant--collapsed { min-height: 0; flex-direction: row; justify-content: flex-start; padding: 8px 16px; gap: 8px; }
