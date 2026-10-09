@@ -7,8 +7,8 @@ import { Ic } from '../ui/Ic.tsx';
 import { useConfirm } from '../ui/confirm.tsx';
 
 export type TagEditorTarget =
-  | { kind: 'task'; task?: TaskDto; projectId: string; conversationId: string | null; messageId?: string | null }
-  | { kind: 'note'; note?: NoteDto; conversationId: string };
+  | { kind: 'task'; task?: TaskDto; projectId: string; conversationId: string | null; messageId?: string | null; initialTitle?: string; initialBody?: string }
+  | { kind: 'note'; note?: NoteDto; conversationId: string; initialBody?: string };
 
 /**
  * Maschera di modifica di task e note (O1): popover di 360 px ancorato all'elemento.
@@ -28,8 +28,8 @@ export function TagEditor({ target, anchor, onClose }: { target: TagEditorTarget
     enabled: !!conversationId,
   });
 
-  const [title, setTitle] = useState(task?.title ?? '');
-  const [body, setBody] = useState(isTask ? (task?.details ?? '') : (note?.body ?? ''));
+  const [title, setTitle] = useState(task?.title ?? (target.kind === 'task' ? (target.initialTitle ?? '') : ''));
+  const [body, setBody] = useState(isTask ? (task?.details ?? target.initialBody ?? '') : (note?.body ?? target.initialBody ?? ''));
   const [due, setDue] = useState(task?.dueDate ?? '');
   const [pos, setPos] = useState<{ left: number; top: number }>({ left: anchor.left, top: anchor.bottom + 6 });
 

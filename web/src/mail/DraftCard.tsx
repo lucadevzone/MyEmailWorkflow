@@ -168,6 +168,16 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
     setF((cur) => (cur ? { ...cur, ...patch } : cur));
   };
 
+  // Bozza che parte con del testo (citazione, proposta): il cursore va in fondo, pronto per scrivere.
+  const caretPlaced = useRef(false);
+  useEffect(() => {
+    const el = textarea.current;
+    if (!el || caretPlaced.current || !f?.body || f.to.length === 0) return;
+    caretPlaced.current = true;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, [f]);
+
   // L'assistente inserisce le proposte dove sta il cursore (o in fondo).
   useEffect(() => {
     if (!handle) return;

@@ -32,7 +32,8 @@ interface OpenMenu extends MenuSpec {
   restore: HTMLElement | null;
 }
 
-type Open = (spec: MenuSpec, target: HTMLElement, mode?: 'bar' | 'palette', query?: string) => void;
+/** Il menu si ancora a un elemento oppure a un rettangolo qualsiasi (es. il testo selezionato). */
+type Open = (spec: MenuSpec, target: HTMLElement | DOMRect, mode?: 'bar' | 'palette', query?: string) => void;
 const MenuContext = createContext<Open>(() => {});
 
 /** Apertura programmatica (es. "Sposta in…" riapre la palette già filtrata). */
@@ -71,7 +72,8 @@ export function ContextMenuProvider({ children }: { children: ReactNode }) {
   const ask = useConfirm();
 
   const open: Open = useCallback((spec, target, mode = 'bar', query = '') => {
-    setMenu({ ...spec, rect: target.getBoundingClientRect(), mode, query, restore: target });
+    const el = target instanceof HTMLElement ? target : null;
+    setMenu({ ...spec, rect: el ? el.getBoundingClientRect() : (target as DOMRect), mode, query, restore: el });
   }, []);
 
   const close = useCallback(() => {
@@ -111,7 +113,7 @@ function anchor(rect: DOMRect, width: number, height: number) {
   const above = rect.top > height + 16;
   const left = Math.min(Math.max(rect.left + rect.width / 2 - width / 2, 8), window.innerWidth - width - 8);
   const top = above ? rect.top - height - 8 : Math.min(rect.bottom + 8, window.innerHeight - height - 8);
-  return { left, top };
+  return { left, top: Math.max(8, top) };
 }
 
 const toneCls = (a: MenuAction) => (a.tone ? ` pm-ctx--${a.tone}` : '');

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Bookmark, ChevronDown, ChevronUp, Forward, Image, Paperclip, ReplyAll } from 'lucide-react';
 import type { ConversationDetail, MessageDto } from '@mmw/shared';
@@ -9,6 +10,17 @@ import { PersonAvatar, PersonChip, useDisplayName } from '../ui/People.tsx';
 import { useToast } from '../ui/toast.tsx';
 import { HtmlFrame } from '../workspace/HtmlFrame.tsx';
 import type { ComposeRequest } from '../workspace/pane.ts';
+import { useOpenMenu } from '../ui/contextMenu.tsx';
+import { TagEditor, type TagEditorTarget } from '../project/TagEditor.tsx';
+
+/** Testo citato come in una risposta ("> " su ogni riga). */
+const quoteText = (t: string) => t.split('\n').map((l) => `> ${l}`).join('\n');
+
+/** Titolo di un task ricavato dalla selezione: la prima riga, accorciata. */
+function taskTitle(t: string): string {
+  const line = t.replace(/\s+/g, ' ').trim();
+  return line.length > 100 ? `${line.slice(0, 99).trimEnd()}…` : line;
+}
 
 const UNKNOWN = { name: null, email: 'sconosciuto' };
 
@@ -74,6 +86,8 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
   const [images, setImages] = useState(false);
   const [quoted, setQuoted] = useState(false);
   const marked = useRef<string | null>(null);
+  const openMenu = useOpenMenu();
+  const [editor, setEditor] = useState<{ target: TagEditorTarget; anchor: DOMRect } | null>(null);
   const from = m.from ?? UNKNOWN;
   const files = m.attachments.filter((a) => !a.isInline);
   const showHtml = m.hasHtml;
@@ -91,6 +105,51 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
   }, [m, d.id, qc, active]);
 
   const compose = (r: Omit<ComposeRequest, 'projectId' | 'conversationId'>) => onCompose({ ...r, projectId: d.projectId, conversationId: d.id });
+
+  // Testo selezionato nel messaggio: menu con rispondi citando, crea nota, crea task.
+  const onSelectText = (text: string, rect: DOMRect) => {
+    openMenu(
+      {
+        title: `«${taskTitle(text).slice(0, 60)}${text.length > 60 ? '…' : ''}»`,
+        actions: [
+          { id: 'quote', icon: 'format_quote', label: 'Rispondi citando', primary: true, run: () => compose({ replyTo: m, replyAll: true, draft: `${quoteText(text)}\n\n` }) },
+          {
+            id: 'note', icon: 'sticky_note_2', label: 'Crea una nota', primary: true,
+            run: () => setEditor({ target: { kind: 'note', conversationId: d.id, initialBody: `${quoteText(text)}\n\n` }, anchor: rect }),
+          },
+          ...(d.projectId
+            ? [
+                {
+                  id: 'task', icon: 'task_alt', label: 'Crea un task', primary: true,
+                  run: () =>
+                    setEditor({
+                      target: {
+                        kind: 'task' as const,
+                        projectId: d.projectId!,
+                        conversationId: d.id,
+                        messageId: m.id,
+                        initialTitle: taskTitle(text),
+                        initialBody: text.length > 100 || text.includes('\n') ? quoteText(text) : '',
+                      },
+                      anchor: rect,
+                    }),
+                },
+              ]
+            : []),
+          { id: 'copy', icon: 'content_copy', label: 'Copia', run: () => void navigator.clipboard?.writeText(text) },
+        ],
+      },
+      rect,
+      'bar',
+    );
+  };
+  const onTextMouseUp = (e: React.MouseEvent | React.KeyboardEvent) => {
+    if ('shiftKey' in e && e.type === 'keyup' && !e.shiftKey) return;
+    const sel = window.getSelection();
+    const text = sel?.toString().trim() ?? '';
+    if (!sel || sel.rangeCount === 0 || text.length < 2 || !(e.currentTarget as HTMLElement).contains(sel.anchorNode)) return;
+    onSelectText(text, sel.getRangeAt(0).getBoundingClientRect());
+  };
 
   return (
     <article className="pm-msg--focused" aria-posinset={index + 1} aria-setsize={total} aria-label={m.subject ?? 'Messaggio'}>
@@ -131,9 +190,9 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
         </div>
       </div>
 
-      <div className="pm-msg__body">
+      <div className="pm-msg__body" onMouseUp={onTextMouseUp} onKeyUp={onTextMouseUp}>
         {showHtml ? (
-          <HtmlFrame src={`/api/messages/${m.id}/html${images ? '?images=1' : ''}`} />
+          <HtmlFrame src={`/api/messages/${m.id}/html${images ? '?images=1' : ''}`} onSelectText={onSelectText} />
         ) : (
           <pre>{(quoted ? full : clean || full).trim() || '(messaggio vuoto)'}</pre>
         )}
@@ -158,6 +217,8 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
           {quoted ? 'Nascondi testo citato' : `Testo citato${index > 0 ? ` · ${index} ${index === 1 ? 'messaggio precedente' : 'messaggi precedenti'}` : ''}`}
         </button>
       )}
+      {/* Fuori dal carosello (traslato): un popover fixed dentro di lui sarebbe posizionato male. */}
+      {editor && createPortal(<TagEditor target={editor.target} anchor={editor.anchor} onClose={() => setEditor(null)} />, document.body)}
     </article>
   );
 }
