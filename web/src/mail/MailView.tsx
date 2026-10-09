@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronUp, Plus } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, PenLine, Plus } from 'lucide-react';
 import type { MessageDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { shortDate } from '../lib/format.ts';
@@ -14,23 +14,11 @@ import { Assistant, type DraftHandle } from './Assistant.tsx';
 import { composeTarget, NEW_DRAFT, seedOf, type DraftSeed } from './seed.ts';
 
 const time = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' });
-const WHEEL_STEP = 50;
-/** Pausa senza eventi che chiude un gesto (l'inerzia del trackpad continua a mandarne per un po'). */
-const GESTURE_GAP = 220;
+/** Linea di lettura (frazione dell'altezza visibile): il messaggio che la attraversa è quello in focus. */
+const READING_LINE = 0.3;
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
-
-/** Elemento scorrevole tra il bersaglio della rotella e la traccia: se può ancora scorrere, la rotella è sua. */
-function canScroll(from: EventTarget | null, stop: HTMLElement, dy: number): boolean {
-  for (let el = from instanceof HTMLElement ? from : null; el && el !== stop; el = el.parentElement) {
-    const style = getComputedStyle(el);
-    if (!/(auto|scroll)/.test(style.overflowY) && el.tagName !== 'TEXTAREA') continue;
-    if (el.scrollHeight <= el.clientHeight + 1) continue;
-    if (dy > 0 ? el.scrollTop + el.clientHeight < el.scrollHeight - 1 : el.scrollTop > 0) return true;
-  }
-  return false;
-}
 
 /**
  * S2/S3 · Email: carosello verticale sull'intera conversazione (D10, D11).
@@ -51,8 +39,13 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   const d = conv.data ?? null;
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const carousel = useRef<HTMLElement>(null);
-  // Un gesto (anche con l'inerzia) fa al massimo un passo; se ha fatto scorrere il testo della mail, nessuno.
-  const wheel = useRef({ acc: 0, stepped: false, inside: false, timer: 0 });
+  // Cambio di focus dallo scorrimento: si tiene fermo l'elemento che entra in focus (le altezze cambiano sopra di lui).
+  // Scendendo resta fermo il bordo superiore (si legge dall'alto), salendo quello inferiore (si legge risalendo).
+  const anchor = useRef<{ idx: number; edge: 'top' | 'bottom'; y: number; at: number } | null>(null);
+  // Cambio di focus da comando (tasti, frecce, mini-mappa, clic): si scorre fino all'elemento.
+  const scrollTo = useRef<{ idx: number; smooth: boolean } | null>(null);
+  // Durante uno scorrimento programmato il focus non segue la posizione.
+  const quietUntil = useRef(0);
   const draftHandle = useRef<DraftHandle | null>(null);
 
   const messages: MessageDto[] = useMemo(() => [...(d?.messages ?? [])].sort((a, b) => a.date - b.date), [d]);
@@ -81,17 +74,26 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   useEffect(() => {
     pos.current = focus;
   }, [focus]);
-  const goTo = useCallback(
-    (i: number) => {
+  const select = useCallback(
+    (i: number, how: 'scroll' | 'command') => {
       if (!conversationId) return;
       const target = Math.max(0, Math.min(n, i));
       if (target === pos.current) return;
+      if (how === 'scroll') {
+        const el = carousel.current?.querySelector<HTMLElement>(`[data-idx="${target}"]`);
+        const r = el?.getBoundingClientRect();
+        const edge = target > pos.current ? 'top' : 'bottom';
+        anchor.current = r ? { idx: target, edge, y: edge === 'top' ? r.top : r.bottom, at: performance.now() } : null;
+      } else {
+        scrollTo.current = { idx: target, smooth: true };
+      }
       pos.current = target;
       if (target < n) navigate(paths.message(projectKey, conversationId, messages[target]!.id), { replace: true });
       else navigate(paths.draft(projectKey, conversationId, saved?.id ?? NEW_DRAFT), { replace: true });
     },
     [conversationId, n, navigate, projectKey, messages, saved],
   );
+  const goTo = useCallback((i: number) => select(i, 'command'), [select]);
 
   const backToConversation = useCallback(() => {
     if (conversationId) navigate(paths.conversation(projectKey, conversationId));
@@ -125,39 +127,55 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     return () => window.removeEventListener('keydown', onKey);
   }, [goTo, focus, n, compose, conversationId, messages, d?.projectId, backToConversation]);
 
-  // Rotella su tutta l'area del carosello: dentro la scheda in focus scorre il contenuto;
-  // a contenuto finito, un nuovo gesto passa al messaggio vicino.
+  // Scorrimento nativo e continuo: il focus passa all'elemento che attraversa la linea di lettura.
   useEffect(() => {
     const el = carousel.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      const w = wheel.current;
-      window.clearTimeout(w.timer);
-      w.timer = window.setTimeout(() => {
-        w.acc = 0;
-        w.stepped = false;
-        w.inside = false;
-      }, GESTURE_GAP);
-      const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
-      if (canScroll(e.target, el, dy)) {
-        w.inside = true;
-        return;
-      }
-      e.preventDefault();
-      if (w.stepped || w.inside) return;
-      w.acc += dy;
-      if (Math.abs(w.acc) >= WHEEL_STEP) {
-        goTo(pos.current + Math.sign(w.acc));
-        w.acc = 0;
-        w.stepped = true;
+    if (!el || !conversationId) return;
+    // Pochi elementi da misurare: il calcolo si fa direttamente a ogni evento di scorrimento.
+    const onScroll = () => {
+      const now = performance.now();
+      if (now < quietUntil.current) return;
+      // Un cambio di focus è in corso: il layout misurato ora è quello vecchio.
+      if (anchor.current && now - anchor.current.at < 400) return;
+      const box = el.getBoundingClientRect();
+      const line = box.top + box.height * READING_LINE;
+      for (const item of el.querySelectorAll<HTMLElement>('[data-idx]')) {
+        const r = item.getBoundingClientRect();
+        if (r.top <= line && r.bottom > line) {
+          select(Number(item.dataset.idx), 'scroll');
+          break;
+        }
       }
     };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => {
-      el.removeEventListener('wheel', onWheel);
-      window.clearTimeout(wheel.current.timer);
-    };
-  }, [goTo]);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [select, conversationId]);
+
+  // Dopo il cambio di focus: compensa le altezze cambiate sopra, oppure porta l'elemento alla linea di lettura.
+  const ready = !conversationId || !!d;
+  const firstScroll = useRef(true);
+  useLayoutEffect(() => {
+    const el = carousel.current;
+    if (!el || !ready) return;
+    const item = el.querySelector<HTMLElement>(`[data-idx="${focus}"]`);
+    if (!item) return;
+    if (firstScroll.current) {
+      firstScroll.current = false;
+      scrollTo.current = { idx: focus, smooth: false };
+    }
+    if (anchor.current?.idx === focus) {
+      const r = item.getBoundingClientRect();
+      el.scrollTop += (anchor.current.edge === 'top' ? r.top : r.bottom) - anchor.current.y;
+      anchor.current = null;
+    } else if (scrollTo.current?.idx === focus) {
+      const box = el.getBoundingClientRect();
+      const delta = item.getBoundingClientRect().top - (box.top + box.height * READING_LINE) + 24;
+      const smooth = scrollTo.current.smooth && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      quietUntil.current = performance.now() + (smooth ? 700 : 100);
+      el.scrollTo({ top: el.scrollTop + delta, behavior: smooth ? 'smooth' : 'auto' });
+      scrollTo.current = null;
+    }
+  }, [focus, ready, draftId]);
 
   const onSent = (info: SentInfo) => navigate(paths.conversation(info.projectId, info.conversationId));
   // La scheda resta montata quando è lei stessa a creare la bozza (new → id); per ogni altra bozza si rimonta.
@@ -192,44 +210,44 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     />
   );
 
-  // Elementi visibili: bordo della pila, vicino compresso, elemento in focus, vicino compresso, bordo.
+  // Tutta la conversazione in una colonna che scorre: in focus la scheda intera, gli altri compressi; in fondo la bozza.
   const items: React.ReactNode[] = [];
   if (conversationId && d) {
-    if (focus >= 2) items.push(<button type="button" key="edge-top" className="pm-msg-edge pm-msg-edge--top" aria-label="Messaggi precedenti" onClick={() => goTo(focus - 2)} />);
-    if (focus >= 1) {
-      const m = messages[focus - 1]!;
-      items.push(<CompactMessage key={m.id} m={m} label={`Messaggio ${focus} di ${n}`} onClick={() => goTo(focus - 1)} />);
-    }
-    if (focus < n) {
-      const m = messages[focus]!;
-      items.push(<MessageCard key={m.id} m={m} d={d} index={focus} total={n} onCompose={compose} />);
-      if (focus + 1 < n) {
-        const next = messages[focus + 1]!;
-        items.push(<CompactMessage key={next.id} m={next} label={`Messaggio ${focus + 2} di ${n}`} onClick={() => goTo(focus + 1)} />);
-      } else if (saved) {
-        items.push(
-          <button type="button" key="draft-compact" className="pm-msg--compact" onClick={() => goTo(n)}>
-            <span className="pm-msg__draftmark">Bozza</span>
-            <span className="pm-msg__preview">{saved.body.replace(/\s+/g, ' ').trim() || saved.subject || '(vuota)'}</span>
-            <span className="pm-msg__time">{shortDate(saved.updatedAt)}</span>
-          </button>,
-        );
-      }
-      if (focus + 2 < n || (focus + 2 === n && saved)) {
-        items.push(<button type="button" key="edge-bottom" className="pm-msg-edge pm-msg-edge--bottom" aria-label="Messaggi successivi" onClick={() => goTo(focus + 2)} />);
-      }
-      if (focus === n - 1 && !saved) {
-        items.push(
-          <p key="hint" className="pm-carousel__hint">
-            <Ic icon={ChevronDown} size={15} /> Scorri oltre l'ultimo messaggio per scrivere una risposta
-          </p>,
-        );
-      }
-    } else {
-      items.push(<div key="draft" style={{ display: 'contents' }}>{draftCard}</div>);
-    }
+    messages.forEach((m, i) => {
+      items.push(
+        i === focus ? (
+          <div key={m.id} data-idx={i} className="pm-carousel__item">
+            <MessageCard m={m} d={d} index={i} total={n} onCompose={compose} />
+          </div>
+        ) : (
+          <div key={m.id} data-idx={i} className="pm-carousel__item pm-carousel__item--compact">
+            <CompactMessage m={m} label={`Messaggio ${i + 1} di ${n}`} onClick={() => goTo(i)} />
+          </div>
+        ),
+      );
+    });
+    items.push(
+      focus === n ? (
+        <div key="draft" data-idx={n} className="pm-carousel__item">{draftCard}</div>
+      ) : (
+        <div key="draft" data-idx={n} className="pm-carousel__item pm-carousel__item--compact">
+          {saved ? (
+            <button type="button" className="pm-msg--compact" onClick={() => goTo(n)}>
+              <span className="pm-msg__draftmark">Bozza</span>
+              <span className="pm-msg__preview">{saved.body.replace(/\s+/g, ' ').trim() || saved.subject || '(vuota)'}</span>
+              <span className="pm-msg__time">{shortDate(saved.updatedAt)}</span>
+            </button>
+          ) : (
+            <button type="button" className="pm-msg--compact pm-msg--newreply" onClick={() => goTo(n)}>
+              <Ic icon={PenLine} size={15} />
+              <span className="pm-msg__preview">Scorri qui o fai clic per scrivere una risposta</span>
+            </button>
+          )}
+        </div>
+      ),
+    );
   } else if (!conversationId) {
-    items.push(<div key="draft" style={{ display: 'contents' }}>{draftCard}</div>);
+    items.push(<div key="draft" className="pm-carousel__item">{draftCard}</div>);
   }
 
   const position = draftId
@@ -283,7 +301,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
               )}
             </nav>
           )}
-          <div className="pm-carousel__track" role="feed" aria-busy={conv.isLoading}>
+          <div className={`pm-carousel__track${conversationId ? '' : ' pm-carousel__track--single'}`} role="feed" aria-busy={conv.isLoading}>
             {conversationId && conv.isLoading && <div className="pm-empty">Caricamento…</div>}
             {items}
           </div>

@@ -13,9 +13,12 @@
 .pm-squarebtn:disabled { opacity: .4; }
 
 .pm-mailview { flex: 1; min-height: 0; display: flex; flex-wrap: wrap; align-items: stretch; }
-.pm-carousel { flex: 999 1 640px; min-width: 0; min-height: 0; height: 100%; box-sizing: border-box; padding: 12px 24px 16px; display: flex; justify-content: center; gap: 20px; }
+.pm-carousel {
+  flex: 999 1 640px; min-width: 0; min-height: 0; height: 100%; box-sizing: border-box; padding: 0 24px;
+  display: flex; justify-content: center; align-items: flex-start; gap: 20px; overflow-y: auto; overscroll-behavior: contain;
+}
 
-.pm-minimap { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; align-self: center; }
+.pm-minimap { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; position: sticky; top: 30%; padding-top: 4px; }
 .pm-minimap__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-dashed); border: 0; padding: 0; transition: height .2s ease-out, width .2s ease-out; }
 .pm-minimap__dot--important { background: var(--important); }
 .pm-minimap__dot[aria-current="true"] { width: 10px; height: 28px; border-radius: 6px; background: var(--ink); }
@@ -24,7 +27,14 @@
   display: flex; align-items: center; justify-content: center; color: var(--ink-label);
 }
 
-.pm-carousel__track { flex: 1 1 auto; max-width: var(--carousel-max); min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.pm-carousel__track {
+  flex: 1 1 auto; max-width: var(--carousel-max); min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  /* spazio sopra e sotto: il primo e l'ultimo elemento possono arrivare alla linea di lettura */
+  padding: 22vh 0 60vh;
+}
+.pm-carousel__track--single { padding: 16px 0; min-height: 100%; box-sizing: border-box; }
+.pm-carousel__item { width: 100%; display: flex; justify-content: center; flex: none; }
+.pm-msg--newreply { border-style: dashed; background: transparent; color: var(--ink-muted); }
 .pm-carousel__hint { margin: 2px 0 0; font-size: var(--fs-md); color: var(--ink-label); display: flex; align-items: center; gap: 6px; flex: none; }
 
 .pm-msg-edge { width: 78%; height: 8px; background: var(--stack-edge); border: 1px solid #E0DDD5; flex: none; padding: 0; cursor: pointer; }
@@ -44,7 +54,6 @@
 .pm-msg--focused {
   width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-4xl);
   padding: 26px 32px; box-shadow: var(--shadow-focus); display: flex; flex-direction: column; gap: 20px;
-  flex: 1 1 auto; min-height: 0; overflow-y: auto;
 }
 .pm-msg__head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
 .pm-msg__headmain { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -58,7 +67,7 @@
 .pm-bookmark { color: var(--important-stroke); fill: var(--important); flex: none; }
 
 .pm-msg__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-bottom: 18px; border-bottom: 1px solid var(--border-subtle); }
-.pm-msg__body { flex: 1 0 auto; font-size: var(--fs-lg); line-height: var(--lh-read); max-width: 760px; text-wrap: pretty; min-height: 120px; }
+.pm-msg__body { font-size: var(--fs-lg); line-height: var(--lh-read); max-width: 760px; text-wrap: pretty; min-height: 120px; }
 .pm-msg__body pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .pm-msg__body iframe { min-height: 320px; }
 .pm-msg__quoted { color: var(--ink-muted); border-left: 2px solid var(--border); padding-left: 14px; margin-top: 12px; }
@@ -68,14 +77,16 @@
 /* Bozza */
 .pm-draft {
   width: 100%; box-sizing: border-box; background: var(--surface); border: 1.5px solid var(--ink); border-radius: var(--r-4xl);
-  box-shadow: var(--shadow-focus); display: flex; flex-direction: column; overflow: hidden; flex: 1 1 auto; min-height: 0;
+  box-shadow: var(--shadow-focus); display: flex; flex-direction: column; overflow: clip;
+  /* la bozza riempie lo spazio visibile; il testo cresce con quello che si scrive */
+  min-height: max(420px, calc(100vh - 220px));
 }
-.pm-draft__scroll { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; }
+.pm-draft__scroll { flex: 1 1 auto; display: flex; flex-direction: column; }
 .pm-draft__row { display: flex; align-items: center; gap: 10px; padding: 12px 24px; border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap; flex: none; position: relative; }
 .pm-draft__label { width: 52px; font-size: var(--fs-md); color: var(--ink-muted); flex: none; }
 .pm-draft__subject { border: 0; outline: none; flex: 1; min-width: 0; font-size: 15px; font-weight: 600; background: transparent; }
 .pm-draft__body {
-  flex: 1 1 auto; min-height: 200px; border: 0; outline: none; resize: none; padding: 20px 24px;
+  flex: 1 1 auto; min-height: 200px; border: 0; outline: none; resize: none; overflow: hidden; field-sizing: content; padding: 20px 24px;
   font: inherit; font-size: var(--fs-lg); line-height: var(--lh-read); background: transparent; white-space: pre-wrap;
 }
 .pm-draft__tools { display: flex; align-items: center; gap: 6px; padding: 0 24px 14px; flex-wrap: wrap; flex: none; position: relative; }
@@ -145,6 +156,7 @@
   .pm-mailview { overflow-y: auto; }
   /* Il carosello resta alto quanto lo spazio visibile (le schede scorrono al loro interno); l'Assistente va sotto. */
   .pm-carousel { flex-basis: 100%; height: 100%; }
+  .pm-draft { min-height: 360px; }
   .pm-assistant { max-width: none; flex-basis: 100%; min-height: 420px; border-left: 0; border-top: 1px solid var(--border); }
   .pm-assistant--collapsed { min-height: 0; flex-direction: row; justify-content: flex-start; padding: 8px 16px; gap: 8px; }
 }
