@@ -7,9 +7,9 @@ import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { useOpenMenu } from '../ui/contextMenu.tsx';
 import { useToast } from '../ui/toast.tsx';
-import { Composer } from '../compose/Composer.tsx';
-import { MessageView } from '../workspace/MessageView.tsx';
-import type { ComposeRequest, PaneAction } from '../workspace/pane.ts';
+import type { PaneAction } from '../workspace/pane.ts';
+import { MailView } from '../mail/MailView.tsx';
+import { composeTarget, seedOf } from '../mail/seed.ts';
 import { paths, SYSTEM_INBOX, SYSTEM_NEWS } from '../shell/paths.ts';
 import { ConversationItem } from './ConversationItem.tsx';
 import { Rail } from './Rail.tsx';
@@ -34,10 +34,11 @@ const writeFocus = (k: string, id: string | null) => {
 };
 
 /** S1 · Progetto: barra contatti | conversazioni (una in focus) | barra dei task. */
-export function ProjectPage({ projectKey, conversationId, messageId, onEditProject }: {
+export function ProjectPage({ projectKey, conversationId, messageId, draftId, onEditProject }: {
   projectKey: string;
   conversationId: string | null;
   messageId: string | null;
+  draftId: string | null;
   onEditProject: (p: ProjectDto) => void;
 }) {
   const navigate = useNavigate();
@@ -47,11 +48,9 @@ export function ProjectPage({ projectKey, conversationId, messageId, onEditProje
   const isProject = projectKey !== SYSTEM_INBOX && projectKey !== SYSTEM_NEWS;
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const { data: counts } = useQuery({ queryKey: ['counts'], queryFn: api.conversationCounts });
-  const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
   const project = isProject ? projects.find((p) => p.id === projectKey) : undefined;
   const [archived, setArchived] = useState(false);
   const [person, setPerson] = useState<string | null>(null);
-  const [compose, setCompose] = useState<{ request: ComposeRequest; key: number } | null>(null);
   const editing = useEditing();
 
   const query: ConversationQuery = useMemo(
@@ -74,11 +73,11 @@ export function ProjectPage({ projectKey, conversationId, messageId, onEditProje
   // Il focus si ricorda per progetto: tornando sulla tab si ritrova (§2.3, regola 1).
   useEffect(() => {
     if (conversationId) writeFocus(projectKey, conversationId);
-    else if (!list.isLoading) {
+    else if (!list.isLoading && !draftId) {
       const remembered = readFocus(projectKey);
       if (remembered && items.some((c) => c.id === remembered)) navigate(paths.conversation(projectKey, remembered), { replace: true });
     }
-  }, [conversationId, projectKey, list.isLoading, items, navigate]);
+  }, [conversationId, draftId, projectKey, list.isLoading, items, navigate]);
 
   const focus = (id: string) => navigate(paths.conversation(projectKey, id));
   const unfocus = () => {
@@ -90,10 +89,10 @@ export function ProjectPage({ projectKey, conversationId, messageId, onEditProje
   const pane: PaneAction = useMemo(
     () => ({
       openMessage: (cid, mid) => navigate(paths.message(projectKey, cid, mid)),
-      compose: (request) => setCompose({ request, key: Date.now() }),
+      compose: (request) => navigate(composeTarget(projectKey, request), { state: { seed: seedOf(request) } }),
       openNote: () => {},
       openTasks: () => {},
-      close: () => setCompose(null),
+      close: () => {},
     }),
     [navigate, projectKey],
   );
@@ -122,6 +121,11 @@ export function ProjectPage({ projectKey, conversationId, messageId, onEditProje
       'bar',
     );
   };
+
+  // S2/S3: il carosello prende il posto della lista; la conversazione resta in focus al ritorno.
+  if (messageId || draftId) {
+    return <MailView key={conversationId ?? 'new-mail'} projectKey={projectKey} conversationId={conversationId} messageId={messageId} draftId={draftId} />;
+  }
 
   return (
     <div className="pm-project">
@@ -176,7 +180,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, onEditProje
                 onFocus: () => focus(c.id),
                 onUnfocus: unfocus,
                 onOpenMessage: (mid) => pane.openMessage(c.id, mid),
-                onCompose: pane.compose,
+                onCompose: (r) => pane.compose({ conversationId: r.replyTo ? c.id : null, ...r }),
               }}
             />
           ))}
@@ -190,45 +194,6 @@ export function ProjectPage({ projectKey, conversationId, messageId, onEditProje
       {isProject && <TasksSidebar projectId={projectKey} />}
       </div>
 
-      {/* Provvisori fino al carosello (F4): lettura e scrittura in un pannello laterale. */}
-      {messageId && conversationId && (
-        <Sheet title="Messaggio" onClose={() => navigate(paths.conversation(projectKey, conversationId))}>
-          <MessageView conversationId={conversationId} messageId={messageId} pane={pane} />
-        </Sheet>
-      )}
-      {compose && (
-        <Sheet title={compose.request.replyTo ? 'Risposta' : 'Nuova mail'} onClose={() => setCompose(null)}>
-          <Composer
-            key={compose.key}
-            request={compose.request}
-            ownEmails={accounts.map((a) => a.email.toLowerCase())}
-            onClose={() => setCompose(null)}
-            onSent={(cid) => isProject && focus(cid)}
-          />
-        </Sheet>
-      )}
     </div>
-  );
-}
-
-function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return (
-    <>
-      <div className="pm-sheet-backdrop" onClick={onClose} />
-      <div className="pm-sheet" role="dialog" aria-label={title}>
-        <div className="pm-sheet__head">
-          <span style={{ fontWeight: 600, flex: 1 }}>{title}</span>
-          <button type="button" className="pm-iconbtn pm-iconbtn--sm" onClick={onClose} aria-label="Chiudi">
-            <Ic icon={X} />
-          </button>
-        </div>
-        <div className="pm-sheet__body">{children}</div>
-      </div>
-    </>
   );
 }

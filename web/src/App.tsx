@@ -28,6 +28,8 @@ export function App() {
           <Route path="/p/:projectId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
           <Route path="/p/:projectId/c/:conversationId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
           <Route path="/p/:projectId/c/:conversationId/m/:messageId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
+          <Route path="/p/:projectId/c/:conversationId/draft/:draftId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
+          <Route path="/p/:projectId/draft/:draftId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
           <Route path="/contacts" element={<ContactsRoute />} />
           <Route path="/activities" element={<div className="h-full overflow-y-auto"><ActivitiesPage /></div>} />
           <Route path="/settings" element={<div className="h-full overflow-y-auto"><SettingsPage /></div>} />
@@ -50,8 +52,17 @@ export function App() {
 
 /** S1 · Progetto (con conversazione in focus e, per ora, messaggio in un pannello). */
 function ProjectRoute({ onEditProject }: { onEditProject: (p: ProjectDto) => void }) {
-  const { projectId = SYSTEM_INBOX, conversationId, messageId } = useParams();
-  return <ProjectPage key={projectId} projectKey={projectId} conversationId={conversationId ?? null} messageId={messageId ?? null} onEditProject={onEditProject} />;
+  const { projectId = SYSTEM_INBOX, conversationId, messageId, draftId } = useParams();
+  return (
+    <ProjectPage
+      key={projectId}
+      projectKey={projectId}
+      conversationId={conversationId ?? null}
+      messageId={messageId ?? null}
+      draftId={draftId ?? null}
+      onEditProject={onEditProject}
+    />
+  );
 }
 
 function ContactsRoute() {

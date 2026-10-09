@@ -33,8 +33,7 @@ export function HtmlFrame({ src }: { src: string }) {
       src={src}
       title="Contenuto email"
       sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-      className="w-full rounded border-0 bg-white"
-      style={{ height }}
+      style={{ height, width: '100%', border: 0, borderRadius: 6, background: '#fff', display: 'block' }}
     />
   );
 }

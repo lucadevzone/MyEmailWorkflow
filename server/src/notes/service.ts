@@ -1,6 +1,6 @@
 // Note personali e risorse (file caricati) di conversazioni e progetti.
 
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { z } from 'zod';
 import type { NoteDto, ResourceDto } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
@@ -86,6 +86,25 @@ export class NotesService {
       .from(resources)
       .leftJoin(blobs, eq(blobs.sha256, resources.blobSha))
       .where(and(eq(resources.conversationId, conversationId), isNull(resources.deletedAt)))
+      .orderBy(desc(resources.createdAt))
+      .all();
+    return rows.map(({ r, size, mime }) => resourceDto(r, size, mime));
+  }
+
+  /** File del progetto: risorse sue e delle sue conversazioni (per allegarli a una bozza). */
+  resourcesForProject(projectId: string): ResourceDto[] {
+    const rows = this.db
+      .select({ r: resources, size: blobs.size, mime: blobs.mime })
+      .from(resources)
+      .leftJoin(blobs, eq(blobs.sha256, resources.blobSha))
+      .leftJoin(conversations, eq(conversations.id, resources.conversationId))
+      .where(
+        and(
+          or(eq(resources.projectId, projectId), eq(conversations.projectId, projectId)),
+          eq(resources.kind, 'file'),
+          isNull(resources.deletedAt),
+        ),
+      )
       .orderBy(desc(resources.createdAt))
       .all();
     return rows.map(({ r, size, mime }) => resourceDto(r, size, mime));

@@ -1,8 +1,11 @@
 import type { MessageDto } from '@mmw/shared';
 
 export interface ComposeRequest {
+  /** Conversazione del messaggio a cui si risponde (o da inoltrare). */
+  conversationId?: string | null;
   replyTo?: MessageDto;
   replyAll?: boolean;
+  forward?: MessageDto;
   to?: string[];
   projectId: string | null;
   /** Bozza proposta dall'analizzatore, messa sopra la citazione. */

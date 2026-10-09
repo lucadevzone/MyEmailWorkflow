@@ -13,6 +13,8 @@ import type {
   ProjectMembersDto,
   ProjectSuggestion,
   ResourceDto,
+  DraftDto,
+  DraftPatch,
   TaskDto,
   TaskInput,
   UnreadCountsDto,
@@ -138,4 +140,27 @@ export const api = {
     return (await res.json()) as ResourceDto;
   },
   deleteResource: (id: string) => request<void>('DELETE', `/api/resources/${id}`),
+  projectResources: (projectId: string) => request<ResourceDto[]>('GET', `/api/projects/${projectId}/resources`),
+
+  setImportant: (messageId: string, important: boolean) =>
+    request<{ activityIds: string[] }>('POST', `/api/messages/${messageId}/important`, { important }),
+
+  createDraft: (input: Partial<Omit<DraftDto, 'id' | 'attachments' | 'updatedAt'>>) => request<DraftDto>('POST', '/api/drafts', input),
+  draft: (id: string) => request<DraftDto>('GET', `/api/drafts/${id}`),
+  conversationDrafts: (conversationId: string) => request<DraftDto[]>('GET', `/api/conversations/${conversationId}/drafts`),
+  updateDraft: (id: string, patch: DraftPatch) => request<DraftDto>('PUT', `/api/drafts/${id}`, patch),
+  deleteDraft: (id: string) => request<void>('DELETE', `/api/drafts/${id}`),
+  addDraftResource: (id: string, resourceId: string) => request<DraftDto>('POST', `/api/drafts/${id}/resources`, { resourceId }),
+  removeDraftAttachment: (id: string, attId: string) => request<DraftDto>('DELETE', `/api/drafts/${id}/attachments/${attId}`),
+  sendDraft: (id: string, urgent: boolean) =>
+    request<{ activityId: string; conversationId: string; messageId: string }>('POST', `/api/drafts/${id}/send`, { urgent }),
+  uploadDraftFile: async (id: string, file: File): Promise<DraftDto> => {
+    const res = await fetch(`/api/drafts/${id}/attachments?filename=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      headers: { 'x-mmw': '1', 'content-type': 'application/octet-stream', 'x-file-type': file.type || '' },
+      body: file,
+    });
+    if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
+    return (await res.json()) as DraftDto;
+  },
 };

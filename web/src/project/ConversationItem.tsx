@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Download, Ellipsis, FileText, FolderInput, FolderPlus, History, Paperclip, Plus, Reply, SquareCheck, StickyNote, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Bookmark, Download, Ellipsis, FileText, FolderInput, FolderPlus, History, Paperclip, Plus, Reply, SquareCheck, StickyNote, Trash2, X } from 'lucide-react';
 import type { ConversationDetail, ConversationListItem, MessageDto, SuggestionDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { fileSize, personLabel, shortDate } from '../lib/format.ts';
@@ -89,6 +89,8 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
           <div className="pm-conv__head">
             <span className="pm-conv__title">{title}</span>
             <span className="pm-conv__date">
+              {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}
+              {c.important && <Ic icon={Bookmark} size={14} className="pm-bookmark" label="Contiene messaggi importanti" />}
               {c.unreadCount > 0 && <span className="pm-conv__unread" title={`${c.unreadCount} da leggere`} />}
               {shortDate(c.lastMessageAt)}
             </span>
@@ -186,7 +188,11 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
       <div className="pm-conv__main">
         <div className="pm-conv__head" style={{ alignItems: 'flex-start' }}>
           <h2 className="pm-conv__title" style={{ margin: 0 }}>{title}</h2>
-          <span className="pm-conv__date" style={{ paddingTop: 3 }}>{shortDate(c.lastMessageAt)}</span>
+          <span className="pm-conv__date" style={{ paddingTop: 3 }}>
+            {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}
+            {c.important && <Ic icon={Bookmark} size={14} className="pm-bookmark" label="Contiene messaggi importanti" />}
+            {shortDate(c.lastMessageAt)}
+          </span>
         </div>
         <div className="pm-conv__chips">
           {people.map((p) => (

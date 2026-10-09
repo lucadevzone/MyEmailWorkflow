@@ -479,6 +479,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return reply.code(201).send(resource);
   });
 
+  app.get<{ Params: { id: string } }>('/api/projects/:id/resources', async (req) => deps.notes.resourcesForProject(req.params.id));
+
   app.get<{ Params: { id: string } }>('/api/resources/:id', async (req, reply) => {
     const r = deps.notes.getResource(req.params.id);
     if (!r?.blobSha) return reply.code(404).send({ error: 'Risorsa non trovata' });
