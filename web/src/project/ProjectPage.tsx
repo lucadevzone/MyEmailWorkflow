@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Ellipsis, X } from 'lucide-react';
@@ -78,6 +78,23 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
       if (remembered && items.some((c) => c.id === remembered)) navigate(paths.conversation(projectKey, remembered), { replace: true });
     }
   }, [conversationId, draftId, projectKey, list.isLoading, items, navigate]);
+
+  // Arrivando da un link (ricerca, contatti, task) la conversazione in focus può stare più in basso:
+  // si caricano altre pagine finché non compare, poi la si porta in vista.
+  const found = !!conversationId && items.some((c) => c.id === conversationId);
+  const pagesLoaded = list.data?.pages.length ?? 0;
+  useEffect(() => {
+    if (conversationId && !found && !list.isLoading && list.hasNextPage && !list.isFetchingNextPage && pagesLoaded < 20) void list.fetchNextPage();
+  }, [conversationId, found, list.isLoading, list.hasNextPage, list.isFetchingNextPage, pagesLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  const scrolledTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (!conversationId || !found || scrolledTo.current === conversationId) return;
+    scrolledTo.current = conversationId;
+    const el = document.querySelector(`[data-conversation="${CSS.escape(conversationId)}"]`);
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [conversationId, found]);
 
   const focus = (id: string) => navigate(paths.conversation(projectKey, id));
   const unfocus = () => {

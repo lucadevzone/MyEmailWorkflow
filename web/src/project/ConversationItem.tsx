@@ -84,7 +84,7 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
 
   if (!focused) {
     return (
-      <article ref={ref} className="pm-conv" {...ctx}>
+      <article ref={ref} className="pm-conv" data-conversation={c.id} {...ctx}>
         <button type="button" onClick={cb.onFocus} style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="pm-conv__head">
             <span className="pm-conv__title">{title}</span>
@@ -110,7 +110,7 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
   }
 
   return (
-    <article ref={ref} className="pm-conv pm-conv--focused" {...ctx}>
+    <article ref={ref} className="pm-conv pm-conv--focused" data-conversation={c.id} {...ctx}>
       <div className="pm-conv__actions" role="toolbar" aria-label="Azioni sulla conversazione">
         <button type="button" className="pm-btn pm-btn--primary" onClick={() => void actions.reply()}>
           <Ic icon={Reply} size={15} /> Rispondi
