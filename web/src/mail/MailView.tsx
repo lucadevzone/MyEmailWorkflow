@@ -10,6 +10,7 @@ import { paths, SYSTEM_INBOX, SYSTEM_NEWS } from '../shell/paths.ts';
 import type { ComposeRequest } from '../workspace/pane.ts';
 import { CompactMessage, MessageCard } from './MessageCard.tsx';
 import { DraftCard, type SentInfo } from './DraftCard.tsx';
+import { Assistant, type DraftHandle } from './Assistant.tsx';
 import { composeTarget, NEW_DRAFT, seedOf, type DraftSeed } from './seed.ts';
 
 const time = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -50,6 +51,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const track = useRef<HTMLDivElement>(null);
   const wheel = useRef({ acc: 0, until: 0 });
+  const draftHandle = useRef<DraftHandle | null>(null);
 
   const messages: MessageDto[] = useMemo(() => [...(d?.messages ?? [])].sort((a, b) => a.date - b.date), [d]);
   const saved = drafts.data?.[0] ?? null;
@@ -171,6 +173,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
       onSaved={setSavedAt}
       onSent={onSent}
       onCancel={backToConversation}
+      handle={draftHandle}
     />
   );
 
@@ -270,6 +273,14 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
             {items}
           </div>
         </main>
+        <Assistant
+          conversationId={conversationId}
+          draftId={draftId}
+          mode={draftId ? 'compose' : 'read'}
+          messageId={draftId ? null : (messages[focus]?.id ?? null)}
+          context={draftId ? (conversationId ? 'legge questa conversazione' : 'ti aiuta a scrivere') : `sul messaggio ${focus + 1} di ${n}`}
+          draft={draftHandle}
+        />
       </div>
     </div>
   );

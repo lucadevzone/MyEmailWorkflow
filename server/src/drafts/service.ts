@@ -9,6 +9,7 @@ import { drafts, resources } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
 import type { BlobStore } from '../store/blobs.ts';
 import { ActionError, type MailActions } from '../actions/mail-actions.ts';
+import type { AssistantService } from '../ai/assistant.ts';
 
 const emails = z.array(z.string().trim().min(1)).max(200);
 
@@ -54,7 +55,7 @@ const toDto = (r: Row): DraftDto => ({
 });
 
 export class DraftService {
-  constructor(private deps: { db: Db; blobs: BlobStore; actions: MailActions }) {}
+  constructor(private deps: { db: Db; blobs: BlobStore; actions: MailActions; assistant?: AssistantService }) {}
 
   private row(id: string): Row {
     const r = this.deps.db.select().from(drafts).where(eq(drafts.id, id)).get();
@@ -118,6 +119,7 @@ export class DraftService {
   remove(id: string): string | null {
     const r = this.row(id);
     this.deps.db.delete(drafts).where(eq(drafts.id, id)).run();
+    this.deps.assistant?.clear(`draft:${id}`);
     return r.conversationId;
   }
 
@@ -168,6 +170,7 @@ export class DraftService {
       urgent,
     });
     this.deps.db.delete(drafts).where(eq(drafts.id, id)).run();
+    this.deps.assistant?.moveThread(`draft:${id}`, res.conversationId);
     return { ...res, previousConversationId: d.conversationId };
   }
 }

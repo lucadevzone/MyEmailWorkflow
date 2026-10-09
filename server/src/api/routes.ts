@@ -19,6 +19,8 @@ import type { ActivityRunner } from '../activities/runner.ts';
 import { ActionError, composeSchema, type MailActions } from '../actions/mail-actions.ts';
 import type { ActivityQueueDto, ConversationView } from '@mmw/shared';
 import { ZodError, type ZodType } from 'zod';
+import { Readable } from 'node:stream';
+import { chatInputSchema, threadOf, type AssistantService } from '../ai/assistant.ts';
 import { draftCreateSchema, draftPatchSchema, type DraftService } from '../drafts/service.ts';
 
 import { PeopleError, contactInputSchema, groupInputSchema, type PeopleService } from '../people/service.ts';
@@ -42,6 +44,7 @@ export interface RouteDeps {
   suggestions: SuggestionService;
   tasks: TaskService;
   drafts: DraftService;
+  assistant: AssistantService;
 }
 
 function parse<T>(schema: ZodType<T>, body: unknown): T {
@@ -526,6 +529,60 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     const res = deps.drafts.send(req.params.id, req.body?.urgent === true);
     touched(res.previousConversationId);
     return reply.code(201).send(res);
+  });
+
+  // ─── Assistente ────────────────────────────────────────────────────────────
+
+  const threadParam = (q: { conversationId?: string; draftId?: string }) => {
+    const t = threadOf(q);
+    if (!t) throw new ActionError('Serve una conversazione o una bozza salvata');
+    return t;
+  };
+  app.get<{ Querystring: { conversationId?: string; draftId?: string } }>('/api/assistant/thread', async (req) => {
+    const t = threadOf(req.query);
+    return t ? deps.assistant.thread(t) : [];
+  });
+  app.delete<{ Querystring: { conversationId?: string; draftId?: string } }>('/api/assistant/thread', async (req, reply) => {
+    deps.assistant.clear(threadParam(req.query));
+    return reply.code(204).send();
+  });
+  app.get<{ Params: { id: string } }>('/api/conversations/:id/reply-ideas', async (req) => deps.assistant.replyIdeas(req.params.id));
+
+  // Risposta in streaming (testo semplice, a pezzi). Un errore a metà arriva come riga "[errore] …".
+  app.post('/api/assistant/chat', async (req, reply) => {
+    const input = parse(chatInputSchema, req.body);
+    const abort = new AbortController();
+    reply.raw.on('close', () => abort.abort());
+    const gen = deps.assistant.chat(input, abort.signal);
+    // Il primo pezzo si attende qui: così gli errori iniziali (Ollama spento, niente da ritoccare) diventano un 400/502.
+    let first: IteratorResult<string>;
+    try {
+      first = await gen.next();
+    } catch (err) {
+      if (err instanceof ActionError || (err instanceof Error && err.message.startsWith('Non c'))) return reply.code(400).send({ error: err.message });
+      return reply.code(502).send({ error: `Assistente non disponibile: ${(err as Error).message}` });
+    }
+    async function* body() {
+      if (!first.done) yield first.value;
+      try {
+        for await (const piece of { [Symbol.asyncIterator]: () => gen }) yield piece;
+      } catch (err) {
+        if (!abort.signal.aborted) yield `\n[errore] ${(err as Error).message}`;
+      }
+    }
+    return reply
+      .header('content-type', 'text/plain; charset=utf-8')
+      .header('cache-control', 'no-cache')
+      .header('x-content-type-options', 'nosniff')
+      .send(Readable.from(body()));
+  });
+
+  app.put<{ Params: { id: string }; Body: { summary?: string } }>('/api/conversations/:id/summary', async (req) => {
+    const text = String(req.body?.summary ?? '').trim();
+    if (!text) throw new ActionError('La sintesi è vuota');
+    conversationsSvc.setSummary(req.params.id, text);
+    bus.publish({ type: 'conversations', ids: [req.params.id] });
+    return { ok: true };
   });
 
   // ─── Suggerimenti ──────────────────────────────────────────────────────────

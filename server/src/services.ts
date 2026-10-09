@@ -24,6 +24,7 @@ import { TaskService } from './tasks/service.ts';
 import { extractTasks } from './ai/extract-tasks.ts';
 import { suggestActions } from './ai/suggest-actions.ts';
 import { DraftService } from './drafts/service.ts';
+import { AssistantService, ollamaStream, type ChatStream } from './ai/assistant.ts';
 
 export interface ServiceOverrides {
   createProvider?: (account: AccountDto) => MailProviderClient;
@@ -31,6 +32,7 @@ export interface ServiceOverrides {
   summarizer?: Summarizer;
   embedder?: Embedder;
   llm?: Llm;
+  chatStream?: ChatStream;
 }
 
 export function buildServices(db: Db, sqlite: Database.Database, blobDir: string, o: ServiceOverrides = {}) {
@@ -63,6 +65,7 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
   jobs.register('suggest_actions', (p) => suggestActions(db, (p as { messageId: string }).messageId, llm));
   const tasks = new TaskService(db);
   const suggestions = new SuggestionService(db, actions, tasks);
-  const drafts = new DraftService({ db, blobs, actions });
-  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions, tasks, drafts };
+  const assistant = new AssistantService({ db, stream: o.chatStream ?? ollamaStream, llm });
+  const drafts = new DraftService({ db, blobs, actions, assistant });
+  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions, tasks, drafts, assistant };
 }

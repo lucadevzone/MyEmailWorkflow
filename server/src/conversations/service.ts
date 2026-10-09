@@ -468,6 +468,16 @@ export class ConversationService {
     return changed;
   }
 
+  /** "Usa come sintesi" dell'assistente: sostituisce la sintesi estesa (la riga breve fa da titolo e resta). */
+  setSummary(id: string, text: string) {
+    const res = this.db
+      .update(conversations)
+      .set({ summaryDetailed: text, summaryUpdatedAt: Date.now() })
+      .where(and(eq(conversations.id, id), isNull(conversations.deletedAt)))
+      .run();
+    if (!res.changes) throw new Error('Conversazione non trovata');
+  }
+
   setImportant(messageIds: string[], important: boolean): string[] {
     if (!messageIds.length) return [];
     const changed = this.db

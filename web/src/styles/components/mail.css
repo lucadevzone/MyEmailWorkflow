@@ -107,3 +107,43 @@
 @media (prefers-reduced-motion: reduce) {
   .pm-minimap__dot { transition: none; }
 }
+
+/* Assistente (D12) */
+.pm-assistant { flex: 1 1 360px; max-width: var(--assistant-w); min-width: 0; min-height: 0; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+.pm-assistant--collapsed { flex: 0 0 56px; align-items: center; padding-top: 12px; }
+.pm-assistant__head { display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px; height: 56px; border-bottom: 1px solid var(--border-subtle); flex: none; }
+.pm-assistant__logo { width: 32px; height: 32px; border-radius: var(--r-lg); background: var(--ink); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; border: 0; }
+.pm-assistant__title { font-weight: 600; }
+.pm-assistant__sub { font-size: var(--fs-sm); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pm-assistant__body { flex: 1; min-height: 0; padding: 16px; display: flex; flex-direction: column; gap: 14px; overflow: auto; }
+.pm-assistant__section { font-size: var(--fs-xs); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-label); }
+.pm-assistant__sep { height: 1px; background: var(--border-subtle); flex: none; }
+.pm-assistant__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pm-assistant__foot { padding: 10px 12px 12px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px; flex: none; }
+.pm-quick { height: 32px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--border-control); background: var(--surface-muted); font-size: var(--fs-md); color: var(--ink); }
+.pm-quick:hover:not(:disabled) { border-color: var(--ink-muted); }
+.pm-quick:disabled { opacity: .5; }
+.pm-suggestion { text-align: left; padding: 10px 12px; border-radius: var(--r-xl); border: 1px solid var(--border); background: var(--surface-muted); display: flex; flex-direction: column; gap: 3px; width: 100%; }
+.pm-suggestion:hover:not(:disabled) { border-color: var(--border-strong); }
+.pm-suggestion__title { font-weight: 600; }
+.pm-suggestion__desc { font-size: var(--fs-md); color: var(--ink-muted); }
+.pm-bubble { line-height: var(--lh-body); padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pm-bubble--user { align-self: flex-end; max-width: 85%; background: var(--ink); color: #fff; border-radius: 14px 14px 4px 14px; }
+.pm-bubble--ai { align-self: flex-start; max-width: 94%; background: #F3F2EE; border-radius: 14px 14px 14px 4px; }
+.pm-bubble--error { background: #FBE9EC; color: var(--danger); }
+.pm-bubble__quote { padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.pm-bubble__actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.pm-bubble__cursor { display: inline-block; width: 7px; height: 1em; background: var(--ink-muted); vertical-align: text-bottom; animation: pm-blink 1s steps(2) infinite; }
+@keyframes pm-blink { 50% { opacity: 0; } }
+.pm-assistant__input { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 12px; border: 1px solid var(--border-control); border-radius: var(--r-xl); background: var(--surface); }
+.pm-assistant__input:focus-within { border-color: var(--ink-2); }
+.pm-assistant__input textarea { flex: 1; border: 0; outline: none; resize: none; font: inherit; line-height: var(--lh-body); background: transparent; max-height: 140px; min-height: 22px; }
+.pm-assistant__send { width: 36px; height: 36px; border-radius: var(--r-md); background: var(--ink); color: #fff; border: 0; display: flex; align-items: center; justify-content: center; flex: none; }
+.pm-assistant__send:disabled { opacity: .4; }
+@media (prefers-reduced-motion: reduce) { .pm-bubble__cursor { animation: none; } }
+@media (max-width: 1100px) {
+  .pm-mailview { overflow-y: auto; }
+  .pm-carousel { height: auto; min-height: 100%; }
+  .pm-assistant { max-width: none; flex-basis: 100%; min-height: 420px; border-left: 0; border-top: 1px solid var(--border); }
+  .pm-assistant--collapsed { min-height: 0; flex-direction: row; justify-content: flex-start; padding: 8px 16px; gap: 8px; }
+}

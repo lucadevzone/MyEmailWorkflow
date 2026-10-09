@@ -440,6 +440,22 @@ export const drafts = sqliteTable(
   (t) => [index('drafts_conversation').on(t.conversationId)],
 );
 
+/** Chat con l'assistente (D12): una per conversazione, o per bozza di nuova mail. */
+export const assistantMessages = sqliteTable(
+  'assistant_messages',
+  {
+    id: text('id').primaryKey(),
+    /** conversationId, oppure "draft:<id>" per una nuova mail. */
+    thread: text('thread').notNull(),
+    role: text('role', { enum: ['user', 'assistant'] }).notNull(),
+    /** read = risposta su una conversazione; compose = testo proposto per la bozza. */
+    mode: text('mode', { enum: ['read', 'compose'] }).notNull(),
+    content: text('content').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [index('assistant_messages_thread').on(t.thread, t.createdAt)],
+);
+
 export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
   /** JSON. */

@@ -15,6 +15,8 @@ import type {
   ResourceDto,
   DraftDto,
   DraftPatch,
+  AssistantMessageDto,
+  ReplyIdea,
   TaskDto,
   TaskInput,
   UnreadCountsDto,
@@ -38,6 +40,24 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   }
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }
+
+export interface AssistantScope {
+  conversationId?: string | null;
+  draftId?: string | null;
+}
+
+export type AssistantAction = 'summarize' | 'needs_reply' | 'extract_tasks' | 'translate' | 'formal' | 'shorter' | 'english' | 'fix' | 'rephrase';
+
+export interface AssistantChatInput extends AssistantScope {
+  mode: 'read' | 'compose';
+  messageId?: string | null;
+  draftBody?: string;
+  action?: AssistantAction;
+  text: string;
+}
+
+const scopeQuery = (q: AssistantScope) =>
+  q.conversationId ? `conversationId=${encodeURIComponent(q.conversationId)}` : `draftId=${encodeURIComponent(q.draftId ?? '')}`;
 
 export const api = {
   health: () => request<HealthDto>('GET', '/api/health'),
@@ -154,6 +174,29 @@ export const api = {
   removeDraftAttachment: (id: string, attId: string) => request<DraftDto>('DELETE', `/api/drafts/${id}/attachments/${attId}`),
   sendDraft: (id: string, urgent: boolean) =>
     request<{ activityId: string; conversationId: string; messageId: string }>('POST', `/api/drafts/${id}/send`, { urgent }),
+  assistantThread: (q: AssistantScope) => request<AssistantMessageDto[]>('GET', `/api/assistant/thread?${scopeQuery(q)}`),
+  clearAssistantThread: (q: AssistantScope) => request<void>('DELETE', `/api/assistant/thread?${scopeQuery(q)}`),
+  replyIdeas: (conversationId: string) => request<ReplyIdea[]>('GET', `/api/conversations/${conversationId}/reply-ideas`),
+  setSummary: (conversationId: string, summary: string) => request<{ ok: true }>('PUT', `/api/conversations/${conversationId}/summary`, { summary }),
+  /** Risposta dell'assistente in streaming: onPiece riceve i pezzi man mano. */
+  assistantChat: async (input: AssistantChatInput, onPiece: (piece: string) => void, signal?: AbortSignal): Promise<string> => {
+    const res = await fetch('/api/assistant/chat', {
+      method: 'POST',
+      headers: { 'x-mmw': '1', 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+      signal,
+    });
+    if (!res.ok || !res.body) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let out = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      out += value;
+      onPiece(value);
+    }
+    return out;
+  },
   uploadDraftFile: async (id: string, file: File): Promise<DraftDto> => {
     const res = await fetch(`/api/drafts/${id}/attachments?filename=${encodeURIComponent(file.name)}`, {
       method: 'POST',

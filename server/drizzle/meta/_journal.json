@@ -71,6 +71,13 @@
       "when": 1791553578362,
       "tag": "0009_drafts_important",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1791555808770,
+      "tag": "0010_assistant",
+      "breakpoints": true
     }
   ]
 }

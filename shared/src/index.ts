@@ -443,3 +443,19 @@ export interface DraftDto {
 }
 
 export type DraftPatch = Partial<Pick<DraftDto, 'projectId' | 'to' | 'cc' | 'bcc' | 'subject' | 'body' | 'includeQuote'>>;
+
+// ─── Assistente ──────────────────────────────────────────────────────────────
+
+export interface AssistantMessageDto {
+  id: string;
+  role: 'user' | 'assistant';
+  /** read = risposta sulla conversazione; compose = testo proposto per la bozza. */
+  mode: 'read' | 'compose';
+  content: string;
+  createdAt: number;
+}
+
+export interface ReplyIdea {
+  title: string;
+  description: string;
+}

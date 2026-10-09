@@ -9,6 +9,7 @@ import { usePeopleIndex } from '../ui/People.tsx';
 import { useConfirm } from '../ui/confirm.tsx';
 import { useToast } from '../ui/toast.tsx';
 import { RecipientField } from './RecipientField.tsx';
+import type { DraftHandle } from './Assistant.tsx';
 import { NEW_DRAFT, normalizeSubject, replyRecipients, type DraftSeed } from './seed.ts';
 
 interface Fields {
@@ -52,8 +53,10 @@ const fieldsOf = (x: DraftDto): Fields => ({
 });
 
 /** Bozza nel carosello (D11): A, Cc/Ccn, Oggetto, Testo, allegati, fascia di invio. Si salva da sola. */
-export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCancel }: {
+export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCancel, handle }: {
   draftId: string;
+  /** Per l'assistente: leggere il testo e inserirvi le proposte. */
+  handle?: React.RefObject<DraftHandle | null>;
   seed: DraftSeed;
   d: ConversationDetail | null;
   /** La bozza è stata creata sul server (alla prima modifica). */
@@ -86,6 +89,7 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
   const latest = useRef<Fields | null>(f);
   latest.current = f;
   const fileInput = useRef<HTMLInputElement>(null);
+  const textarea = useRef<HTMLTextAreaElement>(null);
   const replyTo = isNew ? seed.replyToMessageId : saved.data?.replyToMessageId;
   const forwardOf = isNew ? seed.forwardMessageId : saved.data?.forwardMessageId;
 
@@ -163,6 +167,27 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
     setError(null);
     setF((cur) => (cur ? { ...cur, ...patch } : cur));
   };
+
+  // L'assistente inserisce le proposte dove sta il cursore (o in fondo).
+  useEffect(() => {
+    if (!handle) return;
+    handle.current = {
+      body: () => latest.current?.body ?? '',
+      insert: (text) => {
+        const cur = latest.current?.body ?? '';
+        const el = textarea.current;
+        const at = el && document.activeElement === el ? el.selectionStart : el && el.selectionStart > 0 ? el.selectionStart : cur.length;
+        const before = cur.slice(0, at);
+        const after = cur.slice(at);
+        const sepBefore = before && !before.endsWith('\n') ? '\n\n' : '';
+        const sepAfter = after && !after.startsWith('\n') ? '\n\n' : '';
+        set({ body: before + sepBefore + text + sepAfter + after });
+      },
+    };
+    return () => {
+      handle.current = null;
+    };
+  });
 
   const active = useMemo(() => projects.filter((p) => !p.archived), [projects]);
   const project = projects.find((p) => p.id === f?.projectId);
@@ -280,6 +305,7 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
           <input className="pm-draft__subject" value={f.subject} onChange={(e) => set({ subject: e.target.value })} />
         </label>
         <textarea
+          ref={textarea}
           className="pm-draft__body"
           aria-label="Testo"
           value={f.body}
