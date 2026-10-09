@@ -178,7 +178,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
   onUpload: () => void;
 }) {
   const { data: d } = useQuery({ queryKey: ['conversation', c.id], queryFn: () => api.conversation(c.id) });
-  const { data: tasks = [] } = useQuery({ queryKey: ['tasks', 'conversation', c.id], queryFn: () => api.conversationTasks(c.id), enabled: !!c.projectId });
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({ queryKey: ['tasks', 'conversation', c.id], queryFn: () => api.conversationTasks(c.id), enabled: !!c.projectId });
   const openTasks = tasks.filter((t) => t.status === 'open');
   const me = useMe();
   const people = me ? [...c.participants, me] : c.participants;
@@ -215,7 +215,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
         <div className="pm-areas">
           {c.projectId && (
             <section className="pm-area pm-area--task" aria-label="Task">
-              <h3><Ic icon={SquareCheck} size={15} /> Task · {openTasks.length}</h3>
+              <h3><Ic icon={SquareCheck} size={15} /> Task · {tasksLoading ? c.taskCount : openTasks.length}</h3>
               <div className="pm-tags">
                 {openTasks.map((t) => (
                   <button key={t.id} type="button" className="pm-tag pm-tag--task" title={t.details ?? t.title} aria-label={`Modifica task: ${t.title}`}
@@ -253,6 +253,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
 
       <section className="pm-conv__tree" aria-label="Messaggi della conversazione">
         <div className="pm-tree__head">Messaggi · {d?.messages.length ?? c.messageCount}</div>
+        {!d && <div className="pm-empty">Caricamento…</div>}
         {d && <MessageTree d={d} selectedId={selectedMessageId} onOpen={cb.onOpenMessage} onCompose={cb.onCompose} />}
       </section>
     </div>
@@ -273,8 +274,8 @@ function Attachments({ d }: { d?: ConversationDetail }) {
   });
   return (
     <section className="pm-area pm-area--neutral" aria-label="Allegati di posta">
-      <h3><Ic icon={Paperclip} size={15} /> Allegati di posta · {files.length}</h3>
-      {files.length === 0 && <span className="pm-muted" style={{ fontSize: 'var(--fs-md)' }}>Nessun allegato.</span>}
+      <h3><Ic icon={Paperclip} size={15} /> Allegati di posta · {d ? files.length : '…'}</h3>
+      {d && files.length === 0 && <span className="pm-muted" style={{ fontSize: 'var(--fs-md)' }}>Nessun allegato.</span>}
       {files.map((f) => (
         <div key={f.key}>
           <div className="pm-file">
@@ -326,9 +327,10 @@ function Resources({ d, conversationId, onUpload }: { d?: ConversationDetail; co
     },
   });
   const list = d?.resources ?? [];
+  const loading = !d;
   return (
     <section className="pm-area pm-area--neutral" aria-label="Risorse">
-      <h3><Ic icon={FolderPlus} size={15} /> Risorse · {list.length}</h3>
+      <h3><Ic icon={FolderPlus} size={15} /> Risorse · {loading ? '…' : list.length}</h3>
       {list.map((r) => (
         <div key={r.id} className="pm-file">
           <Ic icon={FileText} className="pm-muted" />

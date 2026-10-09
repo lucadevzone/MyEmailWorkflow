@@ -31,6 +31,8 @@
 .pm-subtab { height: 48px; display: flex; align-items: center; border: 0; background: transparent; padding: 0; color: var(--ink-muted); }
 .pm-subtab[aria-current="true"] { color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--ink); }
 .pm-convstack { padding: 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-height: 0; flex: 1; }
+/* Le schede non si restringono per stare nell'altezza: scorre la lista, non si taglia il contenuto. */
+.pm-convstack > * { flex-shrink: 0; }
 .pm-empty { padding: 32px 16px; text-align: center; color: var(--ink-muted); }
 
 .pm-conv {
