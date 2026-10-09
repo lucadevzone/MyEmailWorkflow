@@ -149,7 +149,8 @@ export const api = {
   updateGroup: (id: string, name: string, contactIds: string[]) => request<{ id: string }>('PUT', `/api/groups/${id}`, { name, contactIds }),
   deleteGroup: (id: string) => request<void>('DELETE', `/api/groups/${id}`),
 
-  createNote: (conversationId: string, body: string) => request<NoteDto>('POST', '/api/notes', { conversationId, body }),
+  createNote: (conversationId: string, body: string, messageId?: string | null) =>
+    request<NoteDto>('POST', '/api/notes', { conversationId, body, ...(messageId ? { messageId } : {}) }),
   updateNote: (id: string, body: string) => request<NoteDto>('PATCH', `/api/notes/${id}`, { body }),
   deleteNote: (id: string) => request<void>('DELETE', `/api/notes/${id}`),
   uploadResource: async (conversationId: string, file: File): Promise<ResourceDto> => {

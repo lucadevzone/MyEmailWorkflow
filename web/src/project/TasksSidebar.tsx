@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, GripVertical, Plus } from 'lucide-react';
+import { Calendar, GripVertical, Mail, Plus } from 'lucide-react';
 import type { TaskDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
@@ -203,6 +203,11 @@ function TaskItem({ t, open, onToggle, onEdit, onClose, onMove, drag }: {
             {t.conversationId && t.projectId && (
               <button type="button" className="pm-infochip" onClick={() => navigate(paths.conversation(t.projectId!, t.conversationId!))}>
                 <span className="pm-truncate" style={{ maxWidth: 220 }}>{t.conversationSubject ?? 'Conversazione'}</span>
+              </button>
+            )}
+            {t.messageId && t.conversationId && t.projectId && (
+              <button type="button" className="pm-infochip" onClick={() => navigate(paths.message(t.projectId!, t.conversationId!, t.messageId!))} title="Apri la mail da cui è nato">
+                <Ic icon={Mail} size={15} /> dalla mail
               </button>
             )}
             {!t.conversationId && <span className="pm-infochip" style={{ textDecoration: 'none' }}>task del progetto</span>}

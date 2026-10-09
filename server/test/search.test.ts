@@ -100,3 +100,13 @@ describe('ricerca unica', () => {
     expect((await s.search.search('  ?! ')).conversations).toEqual([]);
   });
 });
+
+describe('fonte di note e task', () => {
+  it('la nota ricorda il messaggio da cui è nata', async () => {
+    const a = await mail('<g@x>', 7, 'Verbale', 'Il verbale della riunione è in allegato.');
+    const n = s.notes.createNote({ conversationId: a.conversationId!, messageId: a.messageId!, body: '> verbale\n\nda rileggere' });
+    expect(n.messageId).toBe(a.messageId);
+    const d = new (await import('../src/conversations/service.ts')).ConversationService(s.db).get(a.conversationId!)!;
+    expect(d.notes[0]!.messageId).toBe(a.messageId);
+  });
+});

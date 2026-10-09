@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Bookmark, Download, Ellipsis, FileText, FolderInput, FolderPlus, History, Paperclip, Plus, Reply, SquareCheck, StickyNote, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Bookmark, Mail, Download, Ellipsis, FileText, FolderInput, FolderPlus, History, Paperclip, Plus, Reply, SquareCheck, StickyNote, Trash2, X } from 'lucide-react';
 import type { ConversationDetail, ConversationListItem, MessageDto, SuggestionDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { fileSize, personLabel, shortDate } from '../lib/format.ts';
@@ -234,6 +234,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
                   <button key={t.id} type="button" className="pm-tag pm-tag--task" title={t.details ?? t.title} aria-label={`Modifica task: ${t.title}`}
                     onClick={(e) => onEditor({ target: { kind: 'task', task: t, projectId: c.projectId!, conversationId: c.id }, anchor: e.currentTarget.getBoundingClientRect() })}>
                     <span className="pm-tag__text">{t.title}</span>
+                    {t.messageId && <Ic icon={Mail} size={12} className="pm-tag__source" label="nato da una mail" />}
                   </button>
                 ))}
                 <button type="button" className="pm-tag pm-tag--task pm-tag--add"
@@ -250,7 +251,8 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
                 <button key={n.id} type="button" className="pm-tag pm-tag--note" title={n.body} aria-label="Modifica nota"
                   onClick={(e) => onEditor({ target: { kind: 'note', note: n, conversationId: c.id }, anchor: e.currentTarget.getBoundingClientRect() })}>
                   <Ic icon={StickyNote} size={15} className="pm-note-icon" />
-                  <span className="pm-tag__text">{n.body.split('\n')[0]}</span>
+                  <span className="pm-tag__text">{n.body.split('\n').find((l) => l.trim() && !l.startsWith('>')) ?? n.body.split('\n')[0]}</span>
+                  {n.messageId && <Ic icon={Mail} size={12} className="pm-tag__source" label="nata da una mail" />}
                 </button>
               ))}
               <button type="button" className="pm-tag pm-tag--note pm-tag--add"

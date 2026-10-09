@@ -192,3 +192,11 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
   .pm-convstack { padding: 10px; }
   .pm-conv__main { padding: 14px; }
 }
+
+/* Fonte di task e note: la mail da cui sono nati */
+.pm-source {
+  display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--border-control);
+  border-radius: var(--r-sm); background: var(--surface); color: var(--ink); font: inherit; font-size: var(--fs-md); text-align: left; cursor: pointer;
+}
+.pm-source:hover { background: var(--surface-muted); border-color: var(--ink-muted); }
+.pm-tag__source { flex: none; opacity: .7; }

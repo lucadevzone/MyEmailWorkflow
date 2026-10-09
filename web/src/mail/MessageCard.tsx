@@ -115,7 +115,7 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
           { id: 'quote', icon: 'format_quote', label: 'Rispondi citando', primary: true, run: () => compose({ replyTo: m, replyAll: true, draft: `${quoteText(text)}\n\n` }) },
           {
             id: 'note', icon: 'sticky_note_2', label: 'Crea una nota', primary: true,
-            run: () => setEditor({ target: { kind: 'note', conversationId: d.id, initialBody: `${quoteText(text)}\n\n` }, anchor: rect }),
+            run: () => setEditor({ target: { kind: 'note', conversationId: d.id, messageId: m.id, initialBody: `${quoteText(text)}\n\n` }, anchor: rect }),
           },
           ...(d.projectId
             ? [

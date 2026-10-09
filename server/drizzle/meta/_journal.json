@@ -78,6 +78,13 @@
       "when": 1791555808770,
       "tag": "0010_assistant",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1791575322481,
+      "tag": "0011_note_source",
+      "breakpoints": true
     }
   ]
 }

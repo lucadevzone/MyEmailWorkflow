@@ -347,6 +347,7 @@ export class ConversationService {
         id: n.id,
         conversationId: n.conversationId,
         projectId: n.projectId,
+        messageId: n.messageId,
         body: n.body,
         createdAt: n.createdAt,
         updatedAt: n.updatedAt,

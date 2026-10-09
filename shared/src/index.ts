@@ -223,6 +223,8 @@ export interface NoteDto {
   id: string;
   conversationId: string | null;
   projectId: string | null;
+  /** Messaggio da cui è nata la nota. */
+  messageId: string | null;
   body: string;
   createdAt: number;
   updatedAt: number;

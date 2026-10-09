@@ -310,6 +310,8 @@ export const notes = sqliteTable(
     projectId: text('project_id').references(() => projects.id),
     conversationId: text('conversation_id').references(() => conversations.id),
     annotationId: text('annotation_id').references(() => annotations.id),
+    /** Messaggio da cui è nata la nota (la "fonte"). */
+    messageId: text('message_id').references(() => messages.id),
     body: text('body').notNull(),
     ...meta(),
   },

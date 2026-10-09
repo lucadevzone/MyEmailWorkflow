@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { SquareCheck, StickyNote } from 'lucide-react';
+import { Mail, SquareCheck, StickyNote } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { personLabel, shortDate } from '../lib/format.ts';
+import { paths, projectKeyOf } from '../shell/paths.ts';
 import type { NoteDto, TaskDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
@@ -8,7 +11,7 @@ import { useConfirm } from '../ui/confirm.tsx';
 
 export type TagEditorTarget =
   | { kind: 'task'; task?: TaskDto; projectId: string; conversationId: string | null; messageId?: string | null; initialTitle?: string; initialBody?: string }
-  | { kind: 'note'; note?: NoteDto; conversationId: string; initialBody?: string };
+  | { kind: 'note'; note?: NoteDto; conversationId: string; messageId?: string | null; initialBody?: string };
 
 /**
  * Maschera di modifica di task e note (O1): popover di 360 px ancorato all'elemento.
@@ -17,6 +20,7 @@ export type TagEditorTarget =
 export function TagEditor({ target, anchor, onClose }: { target: TagEditorTarget; anchor: DOMRect; onClose: () => void }) {
   const qc = useQueryClient();
   const ask = useConfirm();
+  const navigate = useNavigate();
   const ref = useRef<HTMLFormElement>(null);
   const isTask = target.kind === 'task';
   const task = isTask ? target.task : undefined;
@@ -57,7 +61,7 @@ export function TagEditor({ target, anchor, onClose }: { target: TagEditorTarget
         if (task) return api.updateTask(task.id, { title, details: body || null, dueDate: due || null });
         return api.createTask({ projectId: target.projectId, title, details: body || null, dueDate: due || null, conversationId, messageId: target.messageId ?? null });
       }
-      return note ? api.updateNote(note.id, body) : api.createNote(target.conversationId, body);
+      return note ? api.updateNote(note.id, body) : api.createNote(target.conversationId, body, target.messageId);
     },
     onSuccess: () => {
       refresh();
@@ -78,6 +82,15 @@ export function TagEditor({ target, anchor, onClose }: { target: TagEditorTarget
       onClose();
     },
   });
+
+  // Fonte: la mail da cui è nato il task o la nota; un clic la apre nel carosello.
+  const sourceId = isTask ? (task?.messageId ?? target.messageId ?? null) : (note?.messageId ?? (target.kind === 'note' ? target.messageId : null) ?? null);
+  const source = sourceId ? conv?.messages.find((m) => m.id === sourceId) : undefined;
+  const openSource = () => {
+    if (!conv || !source) return;
+    onClose();
+    navigate(paths.message(projectKeyOf(conv), conv.id, source.id));
+  };
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -110,12 +123,24 @@ export function TagEditor({ target, anchor, onClose }: { target: TagEditorTarget
             <input className="pm-input" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
           </label>
         )}
-        <div className="pm-field">
-          Conversazione collegata
-          <span style={{ color: 'var(--ink)' }} className="pm-truncate">
-            {conversationId ? (conv?.summary ?? conv?.subject ?? '…') : 'nessuna · task del progetto'}
-          </span>
-        </div>
+        {source && conv ? (
+          <div className="pm-field">
+            Dalla mail
+            <button type="button" className="pm-source" onClick={openSource} title="Apri la mail da cui è nato">
+              <Ic icon={Mail} size={15} />
+              <span className="pm-truncate">
+                <strong>{source.from ? personLabel(source.from) : 'Mittente sconosciuto'}</strong> · {shortDate(source.date)} · {source.subject || conv.subject || '(nessun oggetto)'}
+              </span>
+            </button>
+          </div>
+        ) : (
+          <div className="pm-field">
+            Conversazione collegata
+            <span style={{ color: 'var(--ink)' }} className="pm-truncate">
+              {conversationId ? (conv?.summary ?? conv?.subject ?? '…') : 'nessuna · task del progetto'}
+            </span>
+          </div>
+        )}
         {error && <div style={{ color: 'var(--danger)', fontSize: 'var(--fs-md)' }}>{error.message}</div>}
         <div className="pm-popover__actions">
           {editing && (

@@ -12,6 +12,7 @@ export const noteInputSchema = z
   .object({
     conversationId: z.string().optional(),
     projectId: z.string().optional(),
+    messageId: z.string().optional(),
     body: z.string().trim().min(1, 'La nota è vuota'),
   })
   .refine((n) => n.conversationId || n.projectId, { message: 'Serve una conversazione o un progetto' });
@@ -25,6 +26,7 @@ const noteDto = (n: NoteRow): NoteDto => ({
   id: n.id,
   conversationId: n.conversationId,
   projectId: n.projectId,
+  messageId: n.messageId,
   body: n.body,
   createdAt: n.createdAt,
   updatedAt: n.updatedAt,
@@ -58,6 +60,7 @@ export class NotesService {
       conversationId: input.conversationId ?? null,
       projectId: this.projectOf(input.conversationId, input.projectId),
       annotationId: null,
+      messageId: input.messageId ?? null,
       body: input.body,
       createdAt: t,
       updatedAt: t,

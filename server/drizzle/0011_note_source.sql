@@ -1,0 +1,1 @@
+ALTER TABLE `notes` ADD `message_id` text REFERENCES messages(id);
