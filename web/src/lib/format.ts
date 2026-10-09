@@ -39,3 +39,17 @@ export function colorFor(key: string): string {
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
   return PALETTE[Math.abs(h) % PALETTE.length]!;
 }
+
+/** Colore dell'avatar dalla palette della specifica (--avatar-1…6), deterministico sull'email. */
+export function avatarColor(email: string): string {
+  let h = 0;
+  for (let i = 0; i < email.length; i++) h = (h * 31 + email.toLowerCase().charCodeAt(i)) | 0;
+  return `var(--avatar-${(Math.abs(h) % 6) + 1})`;
+}
+
+/** Etichetta breve sotto le bolle: "Luca Sabatucci" → "Luca S.". */
+export function shortName(p: PersonRef): string {
+  const parts = (p.name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return p.email.split('@')[0]!;
+  return parts.length === 1 ? parts[0]! : `${parts[0]} ${parts[parts.length - 1]![0]}.`;
+}

@@ -1,68 +1,66 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { NavLink, useMatch, useNavigate } from 'react-router-dom';
+import { Inbox, Plus, SlidersHorizontal, Users } from 'lucide-react';
 import type { ProjectDto } from '@mmw/shared';
+import { api } from '../api.ts';
+import { Ic } from '../ui/Ic.tsx';
 import { useContextMenu, type MenuAction } from '../ui/contextMenu.tsx';
 import { useToast } from '../ui/toast.tsx';
-import { api } from '../api.ts';
-import { Badge } from '../ui/Badge.tsx';
-import { Icon } from '../ui/Icon.tsx';
-import { sameNav, type Nav } from './nav.ts';
+import { paths, SYSTEM_INBOX, SYSTEM_NEWS } from './paths.ts';
 
-/** Barra superiore: [totale non letti] Da smistare · progetti · Rumore · + */
-export type ProjectIntent = 'compose' | 'tasks';
-
-export function TopBar({ nav, onNav, onNewProject, onEditProject, onProjectIntent }: {
-  nav: Nav;
-  onNav: (n: Nav) => void;
-  onNewProject: () => void;
-  onEditProject: (p: ProjectDto) => void;
-  onProjectIntent: (projectId: string, intent: ProjectIntent) => void;
-}) {
+/** Barra superiore (D1/D2): tab dei progetti tra i due progetti di sistema; a destra Contatti e Impostazioni. */
+export function TopBar({ onNewProject, onEditProject }: { onNewProject: () => void; onEditProject: (p: ProjectDto) => void }) {
   const { data: counts } = useQuery({ queryKey: ['counts'], queryFn: api.conversationCounts });
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const active = projects.filter((p) => !p.archived);
 
-  const tab = (n: Nav, label: string, unread?: number) => (
-    <Tab key={n.kind === 'project' ? n.projectId : n.kind} n={n} label={label} unread={unread} selected={sameNav(nav, n)} onNav={onNav} project={n.kind === 'project' ? active.find((p) => p.id === n.projectId) : undefined} onEditProject={onEditProject} onProjectIntent={onProjectIntent} />
-  );
-
   return (
-    <header className="flex items-center gap-1 overflow-x-auto border-b border-stone-200 bg-white px-3 dark:border-stone-800 dark:bg-stone-900">
-      {!!counts?.totalUnread && (
-        <span className="mr-1" title="Messaggi da leggere (escluso il rumore)">
-          <Badge n={counts.totalUnread} tone="red" />
-        </span>
-      )}
-      {tab({ kind: 'inbox' }, 'Da smistare', counts?.inboxUnread)}
-      {active.map((p) => tab({ kind: 'project', projectId: p.id }, p.name, p.unreadCount))}
-      {tab({ kind: 'noise' }, 'Rumore', counts?.noiseUnread)}
-      <button
-        onClick={onNewProject}
-        className="ml-1 flex size-8 shrink-0 items-center justify-center rounded-full text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:hover:bg-stone-800 dark:hover:text-stone-100"
-        title="Nuovo progetto"
-      >
-        <Icon name="add" />
-      </button>
+    <header className="pm-topbar">
+      <nav className="pm-topbar__tabs" aria-label="Progetti">
+        <Tab to={paths.project(SYSTEM_INBOX)} label="Da smistare" icon unread={counts?.inboxUnread} total={counts?.inbox} />
+        <span className="pm-topbar__tabsep" aria-hidden="true" />
+        {active.map((p) => (
+          <Tab key={p.id} to={paths.project(p.id)} label={p.name} unread={p.unreadCount} project={p} onEditProject={onEditProject} />
+        ))}
+        <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Nuovo progetto" title="Nuovo progetto" onClick={onNewProject}>
+          <Ic icon={Plus} size={15} />
+        </button>
+        <span className="pm-topbar__tabsep" aria-hidden="true" />
+        <Tab to={paths.project(SYSTEM_NEWS)} label="News" unread={counts?.noiseUnread} />
+      </nav>
+      <div className="pm-topbar__tools">
+        <NavLink to={paths.contacts()} className="pm-iconbtn" aria-label="Contatti e gruppi" title="Contatti e gruppi">
+          <Ic icon={Users} />
+        </NavLink>
+        <NavLink to={paths.settings()} className="pm-iconbtn" aria-label="Impostazioni" title="Impostazioni">
+          <Ic icon={SlidersHorizontal} />
+        </NavLink>
+      </div>
     </header>
   );
 }
 
-function Tab({ n, label, unread, selected, onNav, project, onEditProject, onProjectIntent }: {
-  n: Nav;
+function Tab({ to, label, icon, unread, total, project, onEditProject }: {
+  to: string;
   label: string;
+  icon?: boolean;
   unread?: number;
-  selected: boolean;
-  onNav: (n: Nav) => void;
+  /** Solo "Da smistare": quante conversazioni attendono di essere smistate. */
+  total?: number;
   project?: ProjectDto;
-  onEditProject: (p: ProjectDto) => void;
-  onProjectIntent: (projectId: string, intent: ProjectIntent) => void;
+  onEditProject?: (p: ProjectDto) => void;
 }) {
   const qc = useQueryClient();
   const toast = useToast();
+  const navigate = useNavigate();
+  // La tab resta attiva anche dentro conversazioni e messaggi del progetto.
+  const current = !!useMatch({ path: to, end: false });
   const refresh = () => {
     for (const k of [['conversations'], ['counts'], ['projects'], ['activities']]) qc.invalidateQueries({ queryKey: k });
   };
+  const view = to.endsWith(`/${SYSTEM_INBOX}`) ? 'inbox' : to.endsWith(`/${SYSTEM_NEWS}`) ? 'noise' : 'project';
   const markRead = async () => {
-    const res = n.kind === 'project' ? await api.markViewRead('project', n.projectId) : await api.markViewRead(n.kind as 'inbox' | 'noise');
+    const res = view === 'project' ? await api.markViewRead('project', project!.id) : await api.markViewRead(view);
     refresh();
     toast({
       text: res.count ? `${res.count} messaggi segnati come letti` : 'Niente da segnare come letto',
@@ -70,41 +68,20 @@ function Tab({ n, label, unread, selected, onNav, project, onEditProject, onProj
     });
   };
   const ctx = useContextMenu(() => {
-    const actions: MenuAction[] = [{ id: 'open', icon: 'open_in_new', label: `Apri ${label}`, run: () => onNav(n) }];
-    if (project) {
-      actions.push(
-        { id: 'compose', icon: 'edit', label: 'Nuova email', primary: true, run: () => onProjectIntent(project.id, 'compose') },
-        { id: 'tasks', icon: 'checklist', label: 'Task', primary: true, run: () => onProjectIntent(project.id, 'tasks') },
-        { id: 'edit', icon: 'tune', label: 'Modifica progetto', primary: true, run: () => onEditProject(project) },
-        { id: 'read', icon: 'mark_email_read', label: 'Segna tutto come letto', run: markRead },
-        {
-          id: 'archive', icon: 'inventory_2', label: 'Archivia progetto', tone: 'danger',
-          confirm: { message: `Archiviare il progetto «${project.name}»?`, okLabel: 'Archivia', danger: true },
-          run: async () => {
-            await api.updateProject(project.id, { archived: true });
-            refresh();
-            toast({ text: `Progetto «${project.name}» archiviato`, action: { label: 'Annulla', run: () => void api.updateProject(project.id, { archived: false }).then(refresh) } });
-          },
-        },
-      );
-    } else {
-      actions.push({ id: 'read', icon: 'mark_email_read', label: 'Segna tutto come letto', primary: true, run: markRead });
-    }
+    const actions: MenuAction[] = [
+      { id: 'open', icon: 'open_in_new', label: `Apri ${label}`, run: () => navigate(to) },
+      { id: 'read', icon: 'mark_email_read', label: 'Segna tutto come letto', primary: true, run: markRead },
+    ];
+    if (project && onEditProject) actions.push({ id: 'edit', icon: 'tune', label: 'Modifica progetto', primary: true, run: () => onEditProject(project) });
     return { title: label, actions };
   });
 
+  const count = unread ? unread : total;
   return (
-    <button
-      {...ctx}
-      onClick={() => onNav(n)}
-      className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm ${
-        selected
-          ? 'border-stone-900 font-semibold dark:border-stone-100'
-          : 'border-transparent text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100'
-      }`}
-    >
+    <NavLink to={to} className="pm-tab" aria-current={current ? 'page' : undefined} {...ctx}>
+      {icon && <Ic icon={Inbox} size={15} />}
       {label}
-      <Badge n={unread} tone="sky" />
-    </button>
+      {!!count && <span className={`pm-tab__count${unread ? ' pm-tab__count--unread' : ''}`}>{count > 99 ? '99+' : count}</span>}
+    </NavLink>
   );
 }

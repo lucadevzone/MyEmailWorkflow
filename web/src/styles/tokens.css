@@ -1,0 +1,94 @@
+/* Design token: valori da docs (specifica UI "posta per progetti", §3.2). */
+:root {
+  /* Superfici */
+  --bg: #F6F5F1;
+  --surface: #FFFFFF;
+  --surface-muted: #FBFAF7;
+  --surface-sunken: #FCFBF8;
+  --surface-soft: #F7F6F2;
+  --surface-chip: #F1EFEA;
+  --surface-track: #EDEBE5;
+  --stack-edge: #ECEAE4;
+
+  /* Bordi */
+  --border: #E4E1DA;
+  --border-strong: #D6D2C8;
+  --border-control: #DDD9D0;
+  --border-subtle: #ECE9E2;
+  --border-dashed: #C9C5BB;
+
+  /* Testo */
+  --ink: #1B1A17;
+  --ink-2: #3D3B36;
+  --ink-muted: #5F5C55;
+  --ink-label: #6B6861;
+  --ink-faint: #A19D94; /* solo maniglie e icone, mai testo */
+
+  /* Accenti */
+  --accent: #2B5BD7;
+  --accent-soft: #F1F4FD;
+  --danger: #A3263A;
+  --online: #2E9A5E;
+  --mark: #FBE7A1;
+  --important: #B8860B;
+  --important-stroke: #8A6D12;
+
+  /* Task (verde) */
+  --task-bg: #EEF6F0;
+  --task-border: #B9D8C4;
+  --task-border-add: #9CC3AB;
+  --task-ink: #1E4A36;
+  --task-heading: #24553F;
+  --task-dot: #2E8A5A;
+
+  /* Note (giallo) */
+  --note-bg: #FBF6E3;
+  --note-border: #E6D598;
+  --note-border-add: #D2BC6A;
+  --note-ink: #4F3E0B;
+  --note-heading: #6A5413;
+  --note-icon: #8A6D12;
+
+  /* Avatar: uno per persona, hash dell'email (testo bianco ≥ 4.5:1) */
+  --avatar-1: #2F7D5B;
+  --avatar-2: #2C6E9E;
+  --avatar-3: #9A5B2E;
+  --avatar-4: #7A4E9A;
+  --avatar-5: #8A3B4F;
+  --avatar-6: #3F6470;
+
+  /* Tipografia */
+  --font: 'Geist Sans', 'Geist', 'Helvetica Neue', system-ui, sans-serif;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-base: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 19px;
+  --fs-2xl: 22px;
+  --fs-3xl: 24px;
+  --lh-body: 1.55;
+  --lh-read: 1.65;
+
+  /* Spazi */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-8: 32px;
+
+  /* Raggi */
+  --r-xs: 5px; --r-sm: 8px; --r-md: 9px; --r-lg: 10px; --r-xl: 12px;
+  --r-2xl: 14px; --r-3xl: 16px; --r-4xl: 18px; --r-pill: 999px; --r-group: 30%;
+
+  /* Ombre */
+  --shadow-sm: 0 1px 2px rgba(27, 26, 23, .08);
+  --shadow-card: 0 1px 2px rgba(27, 26, 23, .04), 0 8px 24px rgba(27, 26, 23, .06);
+  --shadow-focus: 0 2px 4px rgba(27, 26, 23, .04), 0 18px 40px rgba(27, 26, 23, .10);
+  --shadow-pop: 0 16px 40px rgba(27, 26, 23, .14);
+  --shadow-lift: 0 6px 18px rgba(27, 26, 23, .08);
+
+  /* Layout */
+  --topbar-h: 56px;
+  --statusbar-h: 40px;
+  --rail-w: 84px;
+  --tasks-w: 330px;
+  --assistant-w: 400px;
+  --carousel-max: 980px;
+}

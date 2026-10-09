@@ -1,0 +1,9 @@
+.pm-statusbar {
+  display: flex; align-items: center; justify-content: flex-end; gap: 18px; padding: 0 16px; flex: none;
+  height: var(--statusbar-h); background: var(--surface); border-top: 1px solid var(--border);
+  font-size: var(--fs-md); color: var(--ink-2);
+}
+.pm-status { display: flex; align-items: center; gap: 6px; }
+.pm-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--online); }
+.pm-status--off::before { background: var(--danger); }
+.pm-status__detail { color: var(--ink-muted); }

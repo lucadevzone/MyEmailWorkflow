@@ -1,0 +1,2 @@
+.pm-app { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+.pm-content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
