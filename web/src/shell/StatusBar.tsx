@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { NavLink } from 'react-router-dom';
+import { useState } from 'react';
 import { Clock, ListTodo } from 'lucide-react';
 import type { SyncStatusDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { useSyncStatuses } from '../events.ts';
-import { paths } from './paths.ts';
+import { ActivitiesPanel } from '../activities/ActivitiesPanel.tsx';
 
 const PHASE: Record<SyncStatusDto['phase'], string> = {
   stopped: 'fermo',
@@ -25,15 +25,24 @@ export function StatusBar() {
   const queued = activities?.activities.filter((a) => a.status === 'pending' || a.status === 'running').length ?? 0;
   const failed = activities?.activities.filter((a) => a.status === 'failed').length ?? 0;
   const ollamaOk = !!health?.ollama.ok && !!health.config.llmAvailable;
+  const [panel, setPanel] = useState(false);
 
   return (
     <footer className="pm-statusbar">
-      <NavLink to={paths.activities()} className="pm-btn pm-btn--secondary pm-btn--xs" title="Coda delle attività">
+      <button
+        type="button"
+        className="pm-btn pm-btn--secondary pm-btn--xs"
+        title="Coda delle attività"
+        aria-expanded={panel}
+        data-activities-toggle
+        onClick={() => setPanel(!panel)}
+      >
         <Ic icon={ListTodo} size={15} />
         <Ic icon={Clock} size={15} />
         Attività{queued ? ` · ${queued} in coda` : ''}
         {failed ? <span style={{ color: 'var(--danger)' }}> · {failed} fallite</span> : null}
-      </NavLink>
+      </button>
+      {panel && <ActivitiesPanel onClose={() => setPanel(false)} />}
       {accounts.map((a) => {
         const s = statuses.find((x) => x.accountId === a.id);
         const online = !!s && s.phase !== 'error' && s.phase !== 'stopped' && s.phase !== 'connecting';

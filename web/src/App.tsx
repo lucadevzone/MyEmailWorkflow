@@ -7,7 +7,6 @@ import { StatusBar } from './shell/StatusBar.tsx';
 import { paths, projectKeyOf, SYSTEM_INBOX } from './shell/paths.ts';
 import { ProjectPage } from './project/ProjectPage.tsx';
 import { ContactsPage } from './people/ContactsPage.tsx';
-import { ActivitiesPage } from './activities/ActivitiesPage.tsx';
 import { SettingsPage } from './settings/SettingsPage.tsx';
 import { ProjectDialog } from './projects/ProjectDialog.tsx';
 import { EditingDimmer, useEditing } from './ui/editing.tsx';
@@ -33,7 +32,6 @@ export function App() {
           <Route path="/p/:projectId/c/:conversationId/draft/:draftId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
           <Route path="/p/:projectId/draft/:draftId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
           <Route path="/contacts" element={<ContactsRoute />} />
-          <Route path="/activities" element={<div className="h-full overflow-y-auto"><ActivitiesPage /></div>} />
           <Route path="/settings" element={<div className="h-full overflow-y-auto"><SettingsPage /></div>} />
           <Route path="*" element={<Navigate to={paths.project(SYSTEM_INBOX)} replace />} />
         </Routes>

@@ -7,3 +7,26 @@
 .pm-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--online); }
 .pm-status--off::before { background: var(--danger); }
 .pm-status__detail { color: var(--ink-muted); }
+
+/* O3 · Pannello Attività, sopra la barra di stato */
+.pm-activities {
+  position: fixed; right: 16px; bottom: calc(var(--statusbar-h) + 8px); z-index: 50; width: min(520px, calc(100vw - 32px));
+  max-height: min(70vh, 640px); display: flex; flex-direction: column; background: var(--surface);
+  border: 1px solid var(--border-control); border-radius: var(--r-2xl); box-shadow: var(--shadow-pop); overflow: hidden;
+}
+.pm-activities__head { display: flex; align-items: center; gap: 10px; padding: 14px 12px 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+.pm-activities__title { font-weight: 600; font-size: var(--fs-lg); }
+.pm-activities__body { overflow-y: auto; padding-bottom: 8px; }
+.pm-activities__section { padding: 12px 16px 4px; }
+.pm-activities__empty { padding: 4px 16px 8px; color: var(--ink-muted); font-size: var(--fs-md); }
+.pm-activity { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: 1px solid #F0EEE9; }
+.pm-activity:last-child { border-bottom: 0; }
+.pm-activity__label { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--fs-md); }
+.pm-activity__error { font-size: var(--fs-sm); color: var(--danger); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-activity__actions { display: flex; gap: 2px; flex: none; }
+.pm-activity__urgent { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; color: var(--danger); background: #FBE9EC; border-radius: var(--r-xs); padding: 0 4px; flex: none; }
+.pm-activity__status { font-size: var(--fs-xs); font-weight: 600; border-radius: var(--r-xs); padding: 2px 6px; flex: none; background: var(--surface-chip); color: var(--ink-2); }
+.pm-activity__status--pending { background: var(--note-bg); color: var(--note-heading); }
+.pm-activity__status--running { background: var(--accent-soft); color: var(--accent); }
+.pm-activity__status--failed { background: #FBE9EC; color: var(--danger); }
+.pm-activity__status--done { background: var(--task-bg); color: var(--task-heading); }

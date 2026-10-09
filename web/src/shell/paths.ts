@@ -11,7 +11,6 @@ export const paths = {
   newMail: (projectId: string, draftId: string) => `/p/${projectId}/draft/${draftId}`,
   contacts: () => '/contacts',
   settings: () => '/settings',
-  activities: () => '/activities',
 };
 
 /** Progetto (o vista di sistema) a cui appartiene una conversazione. */
