@@ -1,0 +1,46 @@
+/* S4 · Contatti e gruppi (D13) */
+.pm-contacts { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; box-sizing: border-box; }
+.pm-contacts__head { max-width: 1240px; margin: 0 auto 20px; }
+.pm-contacts__head h1 { margin: 0; font-size: var(--fs-3xl); font-weight: 600; letter-spacing: -.01em; }
+.pm-contacts__head p { margin: 6px 0 0; color: var(--ink-muted); }
+.pm-contacts__grid { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(480px, 100%), 1fr)); gap: 20px; align-items: start; }
+
+.pm-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-3xl); overflow: hidden; }
+.pm-panel__head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap; }
+.pm-panel__head h2 { margin: 0; font-size: var(--fs-lg); font-weight: 600; flex: 1; white-space: nowrap; }
+.pm-panel__search { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--border-control); border-radius: var(--r-sm); color: var(--ink-muted); flex: 0 1 220px; min-width: 120px; }
+.pm-panel__search input { border: 0; outline: none; background: transparent; font: inherit; flex: 1; min-width: 0; color: var(--ink); }
+.pm-panel__section { display: flex; align-items: center; gap: 8px; width: 100%; padding: 12px 16px; border: 0; border-bottom: 1px solid #F0EEE9; background: var(--surface-muted); font-weight: 600; text-align: left; flex-wrap: wrap; }
+.pm-panel__section .pm-row__sub { font-weight: 400; }
+
+.pm-row { border-bottom: 1px solid #F0EEE9; }
+.pm-row:last-child { border-bottom: 0; }
+.pm-row__line { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; }
+.pm-row__line[draggable="true"] { cursor: grab; }
+.pm-row__main { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; border: 0; background: transparent; padding: 0; text-align: left; color: inherit; }
+.pm-row[aria-selected="true"] > .pm-row__line, .pm-row--open > .pm-row__line { background: var(--accent-soft); }
+.pm-row__name { display: block; font-weight: 600; }
+.pm-row__sub { display: block; font-size: var(--fs-md); color: var(--ink-muted); }
+.pm-row__chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 45%; }
+.pm-row__detail { padding: 4px 16px 16px 68px; display: flex; flex-direction: column; gap: 12px; }
+.pm-row__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pm-row--dropover { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
+.pm-badge-me { font-size: var(--fs-sm); font-weight: 500; color: var(--ink-muted); background: var(--surface-chip); padding: 1px 6px; border-radius: var(--r-xs); }
+.pm-group-row--open { background: var(--surface-muted); }
+.pm-group-members { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pm-dropzone {
+  display: inline-flex; align-items: center; height: 32px; padding: 0 12px; border-radius: var(--r-pill);
+  border: 1.5px dashed var(--accent); color: var(--accent); background: var(--accent-soft); font-size: var(--fs-md);
+}
+
+.pm-inlineform { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; }
+.pm-row__detail .pm-inlineform { padding: 0; }
+.pm-inlineform--row { flex-direction: row; align-items: center; flex-wrap: wrap; border-bottom: 1px solid #F0EEE9; }
+.pm-inlineform--row .pm-input { flex: 1; min-width: 160px; height: 34px; }
+.pm-inlineform__actions { display: flex; justify-content: flex-end; gap: 6px; }
+.pm-picklist { display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; border: 1px solid var(--border-subtle); border-radius: var(--r-lg); padding: 4px; }
+
+.pm-convmini { display: flex; flex-direction: column; gap: 2px; }
+.pm-convmini .pm-label { margin-bottom: 4px; }
+.pm-convmini__item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; background: transparent; border-radius: var(--r-sm); text-align: left; color: inherit; }
+.pm-convmini__item:hover { background: var(--surface-chip); }

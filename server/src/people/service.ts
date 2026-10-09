@@ -14,6 +14,7 @@ import {
   groupMembers,
   projectContacts,
   projectGroups,
+  projects,
   messages,
   messageAddresses,
   conversations,
@@ -186,10 +187,27 @@ export class PeopleService {
         );
       })
       .sort((a, b) => b.conversationCount - a.conversationCount || (a.name ?? '').localeCompare(b.name ?? ''));
+    // Uso nei progetti attivi: diretto (contatto nella barra) o tramite i gruppi della barra.
+    const live = new Set(
+      this.db.select({ id: projects.id }).from(projects).where(and(isNull(projects.deletedAt), eq(projects.archived, false))).all().map((p) => p.id),
+    );
+    const groupProjects: Record<string, string[]> = {};
+    for (const pg of this.db.select().from(projectGroups).all()) {
+      if (live.has(pg.projectId)) (groupProjects[pg.groupId] ??= []).push(pg.projectId);
+    }
+    const contactProjects: Record<string, Set<string>> = {};
+    for (const pc of this.db.select().from(projectContacts).all()) {
+      if (live.has(pc.projectId)) (contactProjects[pc.contactId] ??= new Set()).add(pc.projectId);
+    }
+    for (const m of this.db.select().from(groupMembers).all()) {
+      for (const pid of groupProjects[m.groupId] ?? []) (contactProjects[m.contactId] ??= new Set()).add(pid);
+    }
     return {
       contacts: contactsList,
       suggested: active.filter((p) => !p.contactId).slice(0, 60),
       groups: this.groups(contactsList),
+      contactProjects: Object.fromEntries(Object.entries(contactProjects).map(([k, v]) => [k, [...v]])),
+      groupProjects,
     };
   }
 

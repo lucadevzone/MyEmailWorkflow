@@ -6,7 +6,7 @@ import { TopBar } from './shell/TopBar.tsx';
 import { StatusBar } from './shell/StatusBar.tsx';
 import { paths, projectKeyOf, SYSTEM_INBOX } from './shell/paths.ts';
 import { ProjectPage } from './project/ProjectPage.tsx';
-import { PeoplePage } from './people/PeoplePage.tsx';
+import { ContactsPage } from './people/ContactsPage.tsx';
 import { ActivitiesPage } from './activities/ActivitiesPage.tsx';
 import { SettingsPage } from './settings/SettingsPage.tsx';
 import { ProjectDialog } from './projects/ProjectDialog.tsx';
@@ -70,5 +70,5 @@ function ProjectRoute({ onEditProject }: { onEditProject: (p: ProjectDto) => voi
 function ContactsRoute() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  return <PeoplePage focusKey={params.get('focus')} onOpenConversation={(c) => navigate(paths.conversation(projectKeyOf(c), c.id))} />;
+  return <ContactsPage focusKey={params.get('focus')} onOpenConversation={(c) => navigate(paths.conversation(projectKeyOf(c), c.id))} />;
 }

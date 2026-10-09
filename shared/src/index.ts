@@ -303,6 +303,10 @@ export interface PeopleDirectoryDto {
   /** Indirizzi frequenti non ancora confermati come contatti. */
   suggested: PersonDto[];
   groups: GroupDto[];
+  /** Progetti (attivi) nella cui barra compare ogni contatto, direttamente o tramite un gruppo. */
+  contactProjects: Record<string, string[]>;
+  /** Progetti (attivi) in cui è usato ogni gruppo. */
+  groupProjects: Record<string, string[]>;
 }
 
 /** Contatti e gruppi inseriti in un progetto: scorciatoie per scrivere. */
