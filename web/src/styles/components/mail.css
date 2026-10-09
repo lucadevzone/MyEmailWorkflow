@@ -13,13 +13,19 @@
 .pm-squarebtn:disabled { opacity: .4; }
 
 .pm-mailview { flex: 1; min-height: 0; display: flex; align-items: stretch; overflow: hidden; }
+/* Il carosello scorre (spazio di scorrimento); la scena resta ferma e mostra i messaggi in base alla posizione. */
 .pm-carousel {
-  flex: 999 1 640px; min-width: 0; min-height: 0; height: 100%; box-sizing: border-box; padding: 0 24px;
-  display: flex; justify-content: center; align-items: flex-start; gap: 20px; overflow-y: auto; overscroll-behavior: contain;
-  position: relative;
+  flex: 999 1 640px; min-width: 0; min-height: 0; height: 100%; box-sizing: border-box;
+  overflow-y: auto; overscroll-behavior: contain; position: relative;
 }
+.pm-carousel__stage {
+  position: sticky; top: 0; height: var(--carousel-h, 100%); box-sizing: border-box; padding: 0 24px;
+  display: flex; justify-content: center; gap: 20px; overflow: hidden;
+}
+.pm-carousel__column { flex: 1 1 auto; max-width: var(--carousel-max); min-width: 0; position: relative; }
+.pm-carousel--single { display: flex; justify-content: center; padding: 0 24px; }
 
-.pm-minimap { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; position: sticky; top: 30%; padding-top: 4px; }
+.pm-minimap { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; align-self: center; }
 .pm-minimap__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-dashed); border: 0; padding: 0; transition: height .2s ease-out, width .2s ease-out; }
 .pm-minimap__dot--important { background: var(--important); }
 .pm-minimap__dot[aria-current="true"] { width: 10px; height: 28px; border-radius: 6px; background: var(--ink); }
@@ -29,14 +35,14 @@
 }
 
 .pm-carousel__track {
-  flex: 1 1 auto; max-width: var(--carousel-max); min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px;
-  /* spazio sopra e sotto: il primo e l'ultimo elemento possono arrivare alla linea di lettura */
-  padding: calc(var(--carousel-h, 600px) * var(--reading-line, .2) - 12px) 0 calc(var(--carousel-h, 600px) * (1 - var(--reading-line, .2)));
+  position: absolute; top: 0; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  will-change: transform;
 }
-/* bozza in focus: è l'ultimo elemento, la colonna finisce con lei (resta ferma sul bordo inferiore) */
-.pm-carousel__track--end { padding-bottom: 16px; }
-.pm-carousel__track--single { padding: 16px 0; min-height: 100%; box-sizing: border-box; }
-.pm-carousel__item { width: 100%; display: flex; justify-content: center; flex: none; }
+.pm-carousel__track--single { position: static; flex: 1 1 auto; max-width: var(--carousel-max); padding: 16px 0; min-height: 100%; box-sizing: border-box; will-change: auto; }
+.pm-carousel__item { width: 100%; position: relative; flex: none; }
+.pm-carousel__card { position: absolute; top: 0; left: 0; right: 0; }
+.pm-carousel__row { position: absolute; top: 0; left: 0; right: 0; height: 34px; display: flex; justify-content: center; }
+.pm-carousel__row .pm-msg--compact { height: 34px; }
 .pm-msg--newreply { border-style: dashed; background: transparent; color: var(--ink-muted); }
 .pm-carousel__hint { margin: 2px 0 0; font-size: var(--fs-md); color: var(--ink-label); display: flex; align-items: center; gap: 6px; flex: none; }
 

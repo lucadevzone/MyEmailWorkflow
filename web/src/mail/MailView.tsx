@@ -14,53 +14,70 @@ import { Assistant, type DraftHandle } from './Assistant.tsx';
 import { composeTarget, NEW_DRAFT, seedOf, type DraftSeed } from './seed.ts';
 
 const time = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' });
+
 /** Linea di lettura (frazione dell'altezza visibile): il messaggio che la attraversa è quello in focus. */
 const READING_LINE = 0.2;
-
-const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const SWAP_MS = 260;
-
-/** Fotografia della scheda in focus prima del cambio: una copia statica (gli iframe diventano riquadri bianchi). */
-function snapshot(root: HTMLElement | null, idx: number, dir: 'down' | 'up') {
-  const card = root?.querySelector<HTMLElement>(`[data-idx="${idx}"] > :first-child`);
-  if (!card || reducedMotion()) return null;
-  const clone = card.cloneNode(true) as HTMLElement;
-  clone.querySelectorAll('iframe').forEach((f) => {
-    const box = document.createElement('div');
-    box.style.cssText = `height:${f.getBoundingClientRect().height}px;background:#fff`;
-    f.replaceWith(box);
-  });
-  return { idx, clone, rect: card.getBoundingClientRect(), dir };
-}
-
-/** Passaggio di focus: la vecchia scheda si richiude sulla sua riga, la nuova si apre dal bordo da cui entra. */
-function animateSwap(root: HTMLElement, from: NonNullable<ReturnType<typeof snapshot>>, newItem: HTMLElement) {
-  const box = root.getBoundingClientRect();
-  const at = (r: DOMRect) => ({ top: `${r.top - box.top + root.scrollTop}px`, left: `${r.left - box.left + root.scrollLeft}px`, width: `${r.width}px`, height: `${r.height}px` });
-  const row = root.querySelector<HTMLElement>(`[data-idx="${from.idx}"] > :first-child`);
-  const ghost = from.clone;
-  Object.assign(ghost.style, { position: 'absolute', margin: '0', zIndex: '2', pointerEvents: 'none', overflow: 'hidden', boxSizing: 'border-box', ...at(from.rect) });
-  ghost.setAttribute('aria-hidden', 'true');
-  root.appendChild(ghost);
-  const end = row ? at(row.getBoundingClientRect()) : { ...at(from.rect), height: '34px' };
-  ghost
-    .animate([{ ...at(from.rect), opacity: 1 }, { ...end, opacity: 0 }], { duration: SWAP_MS, easing: 'cubic-bezier(.4,0,.2,1)' })
-    .finished.catch(() => {})
-    .finally(() => ghost.remove());
-  // Se la pagina non disegna (finestra nascosta) l'animazione resta ferma: la copia va tolta comunque.
-  window.setTimeout(() => ghost.remove(), SWAP_MS + 150);
-
-  const card = newItem.firstElementChild as HTMLElement | null;
-  const closed = from.dir === 'down' ? 'inset(0 0 calc(100% - 34px) 0 round 18px)' : 'inset(calc(100% - 34px) 0 0 0 round 18px)';
-  card?.animate([{ clipPath: closed, opacity: 0.5 }, { clipPath: 'inset(0 0 0 0 round 18px)', opacity: 1 }], { duration: SWAP_MS, easing: 'cubic-bezier(.4,0,.2,1)' });
-}
+/** Riga compressa e spazio tra le schede (px). */
+const COMPACT = 34;
+const GAP = 6;
+/** Tratto di scorrimento in cui un messaggio si apre mentre il precedente si chiude (px). */
+const RAMP = 220;
+/** Altezza stimata di una scheda non ancora misurata. */
+const ESTIMATE = 420;
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
 
+const smoothstep = (x: number) => {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+};
+
+interface Layout {
+  /** Inizio del tratto di scorrimento di ogni elemento. */
+  starts: number[];
+  lengths: number[];
+  total: number;
+}
+
+/**
+ * Spazio di scorrimento: ogni elemento occupa un tratto lungo quanto la sua scheda piena;
+ * l'ultimo solo quanto basta perché il suo fondo arrivi al bordo inferiore.
+ */
+function scrollLayout(full: number[], viewport: number): Layout {
+  const starts: number[] = [];
+  const lengths: number[] = [];
+  let at = 0;
+  full.forEach((h, i) => {
+    const last = i === full.length - 1;
+    const len = last ? Math.max(RAMP, h - viewport * (1 - READING_LINE) + RAMP) : Math.max(RAMP, h + GAP);
+    starts.push(at);
+    lengths.push(len);
+    at += len;
+  });
+  return { starts, lengths, total: at };
+}
+
+/** Quanto è aperto l'elemento i alla posizione s: 0 = riga compressa, 1 = scheda piena. */
+function openness(i: number, s: number, L: Layout): number {
+  const a = L.starts[i]!;
+  const b = a + L.lengths[i]!;
+  const up = i === 0 ? 1 : smoothstep((s - (a - RAMP / 2)) / RAMP);
+  const down = i === L.starts.length - 1 ? 1 : smoothstep((b + RAMP / 2 - s) / RAMP);
+  return Math.min(up, down);
+}
+
+const indexAt = (s: number, L: Layout) => {
+  const k = L.starts.findIndex((a, i) => s >= a && s < a + L.lengths[i]!);
+  return k >= 0 ? k : s <= 0 ? 0 : L.starts.length - 1;
+};
+
 /**
  * S2/S3 · Email: carosello verticale sull'intera conversazione (D10, D11).
  * Lettura e scrittura sono la stessa schermata: la bozza è l'ultimo elemento.
+ *
+ * Lo scorrimento è continuo: ogni messaggio ha un suo tratto dello spazio di scorrimento e, in una
+ * scena ferma (sticky), si apre e si chiude in proporzione alla posizione, senza soglie.
  */
 export function MailView({ projectKey, conversationId, messageId, draftId }: {
   projectKey: string;
@@ -76,16 +93,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   const drafts = useQuery({ queryKey: ['drafts', conversationId], queryFn: () => api.conversationDrafts(conversationId!), enabled: !!conversationId });
   const d = conv.data ?? null;
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const carousel = useRef<HTMLElement>(null);
-  // Cambio di focus dallo scorrimento: si tiene fermo l'elemento che entra in focus (le altezze cambiano sopra di lui).
-  // Scendendo resta fermo il bordo superiore (si legge dall'alto), salendo quello inferiore (si legge risalendo).
-  const anchor = useRef<{ idx: number; edge: 'top' | 'bottom'; y: number; at: number } | null>(null);
-  // Cambio di focus da comando (tasti, frecce, mini-mappa, clic): si scorre fino all'elemento.
-  const scrollTo = useRef<{ idx: number; smooth: boolean } | null>(null);
-  // Durante uno scorrimento programmato il focus non segue la posizione.
-  const quietUntil = useRef(0);
-  // Copia della scheda che si chiude, per l'animazione di passaggio.
-  const closing = useRef<{ idx: number; clone: HTMLElement; rect: DOMRect; dir: 'down' | 'up' } | null>(null);
+  const scroller = useRef<HTMLElement>(null);
   const draftHandle = useRef<DraftHandle | null>(null);
 
   const messages: MessageDto[] = useMemo(() => [...(d?.messages ?? [])].sort((a, b) => a.date - b.date), [d]);
@@ -109,32 +117,139 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     }
   }, [conversationId, draftId, saved, stateSeed, projectKey, navigate]);
 
-  // Posizione "viva": tasti premuti in rapida successione partono dall'ultima richiesta, non dall'ultimo render.
+  // ─── Geometria: altezza visibile, altezze piene misurate, posizione di scorrimento ───
+
+  const [viewport, setViewport] = useState(600);
+  const [s, setS] = useState(0);
+  const [measured, setMeasured] = useState<Record<string, number>>({});
+  const keys = useMemo(() => [...messages.map((m) => m.id), 'draft'], [messages]);
+  // La riga "Bozza" / "scrivi una risposta" non ha una scheda finché la bozza non è aperta.
+  const full = keys.map((k, i) => (i === n && focus !== n ? COMPACT : Math.max(COMPACT, measured[k] ?? ESTIMATE)));
+  const fullKey = full.join(',');
+  const L = useMemo(() => scrollLayout(full, viewport), [fullKey, viewport]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const apply = () => {
+      setViewport(el.clientHeight);
+      el.style.setProperty('--carousel-h', `${el.clientHeight}px`);
+      el.style.setProperty('--reading-line', String(READING_LINE));
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [conversationId]);
+
+  // Altezza piena di ogni scheda (cambia, per esempio, quando l'HTML dell'email finisce di caricare).
+  const observer = useMemo(
+    () =>
+      new ResizeObserver((entries) => {
+        setMeasured((prev) => {
+          let next = prev;
+          for (const e of entries) {
+            const el = e.target as HTMLElement;
+            const h = Math.round(el.offsetHeight);
+            if (h && prev[el.dataset.key!] !== h) next = { ...next, [el.dataset.key!]: h };
+          }
+          return next;
+        });
+      }),
+    [],
+  );
+  useEffect(() => () => observer.disconnect(), [observer]);
+  const refs = useRef(new Map<string, (el: HTMLElement | null) => void>());
+  const cardRef = (key: string) => {
+    let fn = refs.current.get(key);
+    if (!fn) {
+      let current: HTMLElement | null = null;
+      fn = (el) => {
+        if (current) observer.unobserve(current);
+        current = el;
+        if (el) {
+          el.dataset.key = key;
+          observer.observe(el);
+        }
+      };
+      refs.current.set(key, fn);
+    }
+    return fn;
+  };
+
+  /** Posizione di scorrimento in cui l'elemento i è aperto del tutto. */
+  const target = useCallback((i: number) => L.starts[i]! + (i === 0 ? 0 : Math.min(RAMP / 2, L.lengths[i]! / 2)), [L]);
+
+  // Elemento in focus = quello il cui tratto contiene la posizione; l'indirizzo lo segue.
   const pos = useRef(focus);
   useEffect(() => {
     pos.current = focus;
   }, [focus]);
   const select = useCallback(
-    (i: number, how: 'scroll' | 'command') => {
-      if (!conversationId) return;
-      const target = Math.max(0, Math.min(n, i));
-      if (target === pos.current) return;
-      closing.current = snapshot(carousel.current, pos.current, target > pos.current ? 'down' : 'up');
-      if (how === 'scroll') {
-        const el = carousel.current?.querySelector<HTMLElement>(`[data-idx="${target}"]`);
-        const r = el?.getBoundingClientRect();
-        const edge = target > pos.current ? 'top' : 'bottom';
-        anchor.current = r ? { idx: target, edge, y: edge === 'top' ? r.top : r.bottom, at: performance.now() } : null;
-      } else {
-        scrollTo.current = { idx: target, smooth: true };
-      }
-      pos.current = target;
-      if (target < n) navigate(paths.message(projectKey, conversationId, messages[target]!.id), { replace: true });
+    (i: number) => {
+      if (!conversationId || i === pos.current) return;
+      pos.current = i;
+      scrolledTo.current = i;
+      if (i < n) navigate(paths.message(projectKey, conversationId, messages[i]!.id), { replace: true });
       else navigate(paths.draft(projectKey, conversationId, saved?.id ?? NEW_DRAFT), { replace: true });
     },
     [conversationId, n, navigate, projectKey, messages, saved],
   );
-  const goTo = useCallback((i: number) => select(i, 'command'), [select]);
+
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el) return;
+    if (placedAt.current === null || Math.abs(el.scrollTop - placedAt.current) > 2) pinned.current = false;
+    setS(el.scrollTop);
+    select(indexAt(el.scrollTop, L));
+  };
+
+  // Comandi (tasti, frecce, mini-mappa, clic): si scorre fino all'elemento; la transizione segue lo scorrimento.
+  const goTo = useCallback(
+    (i: number) => {
+      const el = scroller.current;
+      if (!el || !conversationId) return;
+      const k = Math.max(0, Math.min(n, i));
+      pinned.current = false;
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      el.scrollTo({ top: target(k), behavior: reduce ? 'auto' : 'smooth' });
+    },
+    [conversationId, n, target],
+  );
+
+  // All'apertura, e quando il focus cambia per un motivo esterno allo scorrimento (es. "Rispondi"), si va
+  // all'elemento e ci si resta agganciati mentre le schede vengono misurate, finché l'utente non scorre.
+  const pinned = useRef(true);
+  // Posizione impostata dal codice: uno scorrimento che se ne allontana è dell'utente e sgancia.
+  const placedAt = useRef<number | null>(null);
+  // Ultimo focus deciso dallo scorrimento: un focus diverso arriva da fuori (link, "Rispondi"…).
+  const scrolledTo = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el || !d) return;
+    if (scrolledTo.current !== focus && indexAt(el.scrollTop, L) !== focus) pinned.current = true;
+    if (pinned.current) {
+      el.scrollTop = target(focus);
+      placedAt.current = el.scrollTop;
+      setS(el.scrollTop);
+    }
+  }, [d, focus, L]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const release = () => {
+      pinned.current = false;
+    };
+    const opts = { passive: true } as const;
+    el.addEventListener('wheel', release, opts);
+    el.addEventListener('touchstart', release, opts);
+    el.addEventListener('pointerdown', release, opts);
+    return () => {
+      el.removeEventListener('wheel', release);
+      el.removeEventListener('touchstart', release);
+      el.removeEventListener('pointerdown', release);
+    };
+  }, [conversationId]);
 
   const backToConversation = useCallback(() => {
     if (conversationId) navigate(paths.conversation(projectKey, conversationId));
@@ -167,74 +282,6 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [goTo, focus, n, compose, conversationId, messages, d?.projectId, backToConversation]);
-
-  // Scorrimento nativo e continuo: il focus passa all'elemento che attraversa la linea di lettura.
-  useEffect(() => {
-    const el = carousel.current;
-    if (!el || !conversationId) return;
-    // Pochi elementi da misurare: il calcolo si fa direttamente a ogni evento di scorrimento.
-    const onScroll = () => {
-      const now = performance.now();
-      if (now < quietUntil.current) return;
-      // Un cambio di focus è in corso: il layout misurato ora è quello vecchio.
-      if (anchor.current && now - anchor.current.at < 400) return;
-      const box = el.getBoundingClientRect();
-      const line = box.top + box.height * READING_LINE;
-      for (const item of el.querySelectorAll<HTMLElement>('[data-idx]')) {
-        const r = item.getBoundingClientRect();
-        if (r.top <= line && r.bottom > line) {
-          select(Number(item.dataset.idx), 'scroll');
-          break;
-        }
-      }
-    };
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
-  }, [select, conversationId]);
-
-  // Altezza visibile del carosello: da qui gli spazi sopra/sotto e l'altezza minima della scheda in focus (CSS).
-  useLayoutEffect(() => {
-    const el = carousel.current;
-    if (!el) return;
-    const apply = () => {
-      el.style.setProperty('--carousel-h', `${el.clientHeight}px`);
-      el.style.setProperty('--reading-line', String(READING_LINE));
-    };
-    apply();
-    const ro = new ResizeObserver(apply);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Dopo il cambio di focus: compensa le altezze cambiate sopra, oppure porta l'elemento alla linea di lettura.
-  const ready = !conversationId || !!d;
-  const firstScroll = useRef(true);
-  useLayoutEffect(() => {
-    const el = carousel.current;
-    if (!el || !ready) return;
-    const item = el.querySelector<HTMLElement>(`[data-idx="${focus}"]`);
-    if (!item) return;
-    if (firstScroll.current) {
-      firstScroll.current = false;
-      scrollTo.current = { idx: focus, smooth: false };
-    }
-    if (anchor.current?.idx === focus) {
-      const r = item.getBoundingClientRect();
-      el.scrollTop += (anchor.current.edge === 'top' ? r.top : r.bottom) - anchor.current.y;
-      anchor.current = null;
-    } else if (scrollTo.current?.idx === focus) {
-      const box = el.getBoundingClientRect();
-      const delta = item.getBoundingClientRect().top - (box.top + box.height * READING_LINE) + 24;
-      const smooth = scrollTo.current.smooth && !reducedMotion();
-      quietUntil.current = performance.now() + (smooth ? 700 : 100);
-      el.scrollTo({ top: el.scrollTop + delta, behavior: smooth ? 'smooth' : 'auto' });
-      scrollTo.current = null;
-    }
-    if (closing.current) {
-      animateSwap(el, closing.current, item);
-      closing.current = null;
-    }
-  }, [focus, ready, draftId]);
 
   const onSent = (info: SentInfo) => navigate(paths.conversation(info.projectId, info.conversationId));
   // La scheda resta montata quando è lei stessa a creare la bozza (new → id); per ogni altra bozza si rimonta.
@@ -269,51 +316,89 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     />
   );
 
-  // Tutta la conversazione in una colonna che scorre: in focus la scheda intera, gli altri compressi; in fondo la bozza.
-  const items: React.ReactNode[] = [];
+  // ─── Scena: ogni elemento alto in proporzione alla sua apertura; la colonna segue la linea di lettura ───
+
+  let stage: React.ReactNode = null;
   if (conversationId && d) {
-    messages.forEach((m, i) => {
-      items.push(
-        i === focus ? (
-          <div key={m.id} data-idx={i} className="pm-carousel__item">
-            <MessageCard m={m} d={d} index={i} total={n} onCompose={compose} />
-          </div>
-        ) : (
-          <div key={m.id} data-idx={i} className="pm-carousel__item pm-carousel__item--compact">
-            <CompactMessage m={m} label={`Messaggio ${i + 1} di ${n}`} onClick={() => goTo(i)} />
-          </div>
-        ),
-      );
-    });
-    items.push(
-      focus === n ? (
-        <div key="draft" data-idx={n} className="pm-carousel__item">{draftCard}</div>
-      ) : (
-        <div key="draft" data-idx={n} className="pm-carousel__item pm-carousel__item--compact">
-          {saved ? (
-            <button type="button" className="pm-msg--compact" onClick={() => goTo(n)}>
-              <span className="pm-msg__draftmark">Bozza</span>
-              <span className="pm-msg__preview">{saved.body.replace(/\s+/g, ' ').trim() || saved.subject || '(vuota)'}</span>
-              <span className="pm-msg__time">{shortDate(saved.updatedAt)}</span>
-            </button>
-          ) : (
-            <button type="button" className="pm-msg--compact pm-msg--newreply" onClick={() => goTo(n)}>
-              <Ic icon={PenLine} size={15} />
-              <span className="pm-msg__preview">Scorri qui o fai clic per scrivere una risposta</span>
-            </button>
-          )}
-        </div>
-      ),
+    const open = keys.map((_, i) => openness(i, s, L));
+    const heights = full.map((h, i) => COMPACT + (h - COMPACT) * open[i]!);
+    const tops: number[] = [];
+    heights.reduce((y, h) => {
+      tops.push(y);
+      return y + h + GAP;
+    }, 0);
+    // Punto della colonna che sta sulla linea di lettura: avanza dentro l'elemento corrente con lo scorrimento.
+    const k = indexAt(s, L);
+    const lastIdx = keys.length - 1;
+    const progress = Math.min(1, Math.max(0, (s - L.starts[k]!) / L.lengths[k]!));
+    const local = k === lastIdx ? Math.min(progress * L.lengths[k]!, heights[k]!) : progress * (heights[k]! + GAP);
+    const lineY = viewport * READING_LINE;
+    let shift = lineY - (tops[k]! + local);
+    // La colonna non sale oltre il fondo dell'ultimo elemento: resta ferma sul bordo inferiore.
+    const contentBottom = tops[lastIdx]! + heights[lastIdx]!;
+    shift = Math.max(shift, Math.min(lineY, viewport - 16 - contentBottom));
+
+    stage = (
+      <div className="pm-carousel__track" role="feed" style={{ transform: `translateY(${shift}px)` }}>
+        {keys.map((key, i) => {
+          const o = open[i]!;
+          const h = heights[i]!;
+          const isDraft = i === n;
+          const hasCard = !isDraft || focus === n;
+          // Aprendosi dal basso (salendo) si vede prima la fine della scheda, dall'alto l'inizio.
+          const fromBottom = i !== lastIdx && s > L.starts[i]! + L.lengths[i]! / 2;
+          const offset = fromBottom ? h - full[i]! : 0;
+          return (
+            <div key={key} className="pm-carousel__item" style={{ height: h }} data-idx={i}>
+              {hasCard && (
+                <div
+                  className="pm-carousel__card"
+                  style={{
+                    transform: offset ? `translateY(${offset}px)` : undefined,
+                    opacity: Math.min(1, o * 1.6),
+                    clipPath: o < 1 ? `inset(${-offset}px 0 ${full[i]! - h + offset}px 0 round 18px)` : undefined,
+                  }}
+                  inert={o < 0.5}
+                >
+                  <div ref={cardRef(key)}>
+                    {isDraft ? draftCard : <MessageCard m={messages[i]!} d={d} index={i} total={n} onCompose={compose} active={i === focus} />}
+                  </div>
+                </div>
+              )}
+              {o < 1 && (
+                <div className="pm-carousel__row" style={{ opacity: hasCard ? Math.max(0, 1 - o * 2.5) : 1 }} inert={hasCard && o >= 0.5}>
+                  {isDraft ? (
+                    saved ? (
+                      <button type="button" className="pm-msg--compact" onClick={() => goTo(n)}>
+                        <span className="pm-msg__draftmark">Bozza</span>
+                        <span className="pm-msg__preview">{saved.body.replace(/\s+/g, ' ').trim() || saved.subject || '(vuota)'}</span>
+                        <span className="pm-msg__time">{shortDate(saved.updatedAt)}</span>
+                      </button>
+                    ) : (
+                      <button type="button" className="pm-msg--compact pm-msg--newreply" onClick={() => goTo(n)}>
+                        <Ic icon={PenLine} size={15} />
+                        <span className="pm-msg__preview">Scorri qui o fai clic per scrivere una risposta</span>
+                      </button>
+                    )
+                  ) : (
+                    <CompactMessage m={messages[i]!} label={`Messaggio ${i + 1} di ${n}`} onClick={() => goTo(i)} />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     );
-  } else if (!conversationId) {
-    items.push(<div key="draft" className="pm-carousel__item">{draftCard}</div>);
   }
 
-  const position = draftId
+  // Contatore e mini-mappa seguono la posizione in diretta (l'indirizzo si aggiorna appena lo scorrimento rallenta).
+  const live = conversationId && d ? indexAt(s, L) : focus;
+  const position = live === n && draftId
     ? `${draftKind} · ${savedAt ? `bozza salvata alle ${time.format(new Date(savedAt))}` : 'non ancora salvata'}`
-    : n
-      ? `Messaggio ${focus + 1} di ${n}`
-      : '';
+    : n && live < n
+      ? `Messaggio ${live + 1} di ${n}`
+      : n ? 'Nuova risposta' : '';
 
   return (
     <div className="pm-mailpage">
@@ -338,33 +423,43 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
         )}
       </div>
       <div className="pm-mailview">
-        <main className="pm-carousel" ref={carousel}>
-          {conversationId && n > 0 && (
-            <nav className="pm-minimap" aria-label="Posizione nella conversazione">
-              {messages.map((m, i) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={`pm-minimap__dot${m.important && i !== focus ? ' pm-minimap__dot--important' : ''}`}
-                  aria-current={i === focus ? 'true' : undefined}
-                  aria-label={`Messaggio ${i + 1}${i === focus ? ', aperto' : ''}`}
-                  onClick={() => goTo(i)}
-                />
-              ))}
-              {focus === n ? (
-                <span className="pm-minimap__dot" aria-current="true" aria-label={`${draftKind}, aperta`} />
-              ) : (
-                <button type="button" className="pm-minimap__new" aria-label={saved ? 'Apri la bozza' : 'Scrivi una risposta'} onClick={() => goTo(n)}>
-                  <Ic icon={Plus} size={12} />
-                </button>
+        {conversationId ? (
+          <main className="pm-carousel" ref={scroller} onScroll={onScroll}>
+            <div className="pm-carousel__stage">
+              {n > 0 && (
+                <nav className="pm-minimap" aria-label="Posizione nella conversazione">
+                  {messages.map((m, i) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={`pm-minimap__dot${m.important && i !== live ? ' pm-minimap__dot--important' : ''}`}
+                      aria-current={i === live ? 'true' : undefined}
+                      aria-label={`Messaggio ${i + 1}${i === live ? ', aperto' : ''}`}
+                      onClick={() => goTo(i)}
+                    />
+                  ))}
+                  {live === n ? (
+                    <span className="pm-minimap__dot" aria-current="true" aria-label={`${draftKind}, aperta`} />
+                  ) : (
+                    <button type="button" className="pm-minimap__new" aria-label={saved ? 'Apri la bozza' : 'Scrivi una risposta'} onClick={() => goTo(n)}>
+                      <Ic icon={Plus} size={12} />
+                    </button>
+                  )}
+                </nav>
               )}
-            </nav>
-          )}
-          <div className={`pm-carousel__track${!conversationId ? ' pm-carousel__track--single' : focus === n ? ' pm-carousel__track--end' : ''}`} role="feed" aria-busy={conv.isLoading}>
-            {conversationId && conv.isLoading && <div className="pm-empty">Caricamento…</div>}
-            {items}
-          </div>
-        </main>
+              <div className="pm-carousel__column">
+                {conv.isLoading && <div className="pm-empty">Caricamento…</div>}
+                {stage}
+              </div>
+            </div>
+            {/* Spazio di scorrimento: la scena resta ferma, la posizione decide cosa mostrare. */}
+            <div aria-hidden="true" style={{ height: L.total }} />
+          </main>
+        ) : (
+          <main className="pm-carousel pm-carousel--single" ref={scroller}>
+            <div className="pm-carousel__track pm-carousel__track--single">{draftCard}</div>
+          </main>
+        )}
         <Assistant
           conversationId={conversationId}
           draftId={draftId}

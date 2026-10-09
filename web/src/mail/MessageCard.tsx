@@ -60,8 +60,10 @@ export function CompactMessage({ m, onClick, label }: { m: MessageDto; onClick: 
 }
 
 /** Messaggio in focus (D10): intestazione, azioni, corpo, testo citato in fondo. */
-export function MessageCard({ m, d, index, total, onCompose }: {
+export function MessageCard({ m, d, index, total, onCompose, active = true }: {
   m: MessageDto;
+  /** In focus: solo allora il messaggio si segna come letto. */
+  active?: boolean;
   d: ConversationDetail;
   index: number;
   total: number;
@@ -81,12 +83,12 @@ export function MessageCard({ m, d, index, total, onCompose }: {
 
   // Aprire un messaggio lo segna come letto (su Gmail al prossimo batch).
   useEffect(() => {
-    if (m.seen || m.direction !== 'in' || marked.current === m.id) return;
+    if (!active || m.seen || m.direction !== 'in' || marked.current === m.id) return;
     marked.current = m.id;
     void api.markMessageRead(m.id).then(() => {
       for (const k of [['conversation', d.id], ['conversations'], ['counts'], ['projects']]) qc.invalidateQueries({ queryKey: k });
     });
-  }, [m, d.id, qc]);
+  }, [m, d.id, qc, active]);
 
   const compose = (r: Omit<ComposeRequest, 'projectId' | 'conversationId'>) => onCompose({ ...r, projectId: d.projectId, conversationId: d.id });
 
