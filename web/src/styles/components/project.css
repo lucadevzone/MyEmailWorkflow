@@ -58,6 +58,9 @@ button.pm-conv:hover { border-color: var(--border-strong); }
 .pm-conv__body { display: flex; flex-wrap: wrap; align-items: stretch; }
 .pm-conv__main { flex: 1 1 380px; min-width: 0; padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 14px; }
 .pm-conv--focused .pm-conv__title { font-size: var(--fs-xl); line-height: 1.3; text-wrap: pretty; }
+.pm-conv__titlelink { all: unset; cursor: pointer; text-wrap: pretty; border-radius: 4px; }
+.pm-conv__titlelink:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+.pm-conv__titlelink:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pm-conv__tree { flex: 1 1 380px; min-width: 0; background: var(--surface-sunken); border-left: 1px solid var(--border-subtle); display: flex; flex-direction: column; }
 .pm-conv__chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 

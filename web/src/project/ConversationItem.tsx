@@ -187,7 +187,20 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
     <div className="pm-conv__body">
       <div className="pm-conv__main">
         <div className="pm-conv__head" style={{ alignItems: 'flex-start' }}>
-          <h2 className="pm-conv__title" style={{ margin: 0 }}>{title}</h2>
+          <h2 className="pm-conv__title" style={{ margin: 0 }}>
+            <button
+              type="button"
+              className="pm-conv__titlelink"
+              disabled={!d?.messages.length}
+              title="Apri il primo messaggio da leggere (o l'ultimo ricevuto)"
+              onClick={() => {
+                const id = d && entryMessage(d.messages);
+                if (id) cb.onOpenMessage(id);
+              }}
+            >
+              {title}
+            </button>
+          </h2>
           <span className="pm-conv__date" style={{ paddingTop: 3 }}>
             {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}
             {c.important && <Ic icon={Bookmark} size={14} className="pm-bookmark" label="Contiene messaggi importanti" />}
@@ -399,4 +412,13 @@ function TreeNode({ m, depth, current, onOpen, onCompose, projectId }: { m: Mess
       </span>
     </button>
   );
+}
+
+/** Messaggio da cui entrare: il primo non letto; se sono tutti letti, l'ultimo ricevuto (o l'ultimo in assoluto). */
+function entryMessage(messages: MessageDto[]): string | null {
+  const byDate = [...messages].sort((a, b) => a.date - b.date);
+  const unread = byDate.find((m) => m.direction === 'in' && !m.seen);
+  if (unread) return unread.id;
+  const received = byDate.filter((m) => m.direction === 'in');
+  return (received.at(-1) ?? byDate.at(-1))?.id ?? null;
 }
