@@ -21,7 +21,7 @@ import { newId, now } from '../lib/ids.ts';
 import type { BlobStore } from '../store/blobs.ts';
 import { cleanBody, makeSnippet, normalizeSubject } from './clean-text.ts';
 import { detectNoise } from './noise.ts';
-import { pendingSeenIntent } from '../activities/service.ts';
+import { pendingFlagIntent, pendingSeenIntent } from '../activities/service.ts';
 import { enqueueSummary } from '../ai/summarize.ts';
 import { bus } from '../events/bus.ts';
 import { enqueueEmbedding } from '../ai/embed.ts';
@@ -149,6 +149,7 @@ export async function ingestMessage(
         flags: JSON.stringify(raw.flags),
         labels: JSON.stringify(raw.labels),
         seen: raw.flags.includes('\\Seen'),
+        important: raw.flags.includes('\\Flagged'),
         hasAttachments: atts.some((a) => !a.isInline),
         createdAt: t,
         updatedAt: t,
@@ -369,12 +370,14 @@ export function updateFlags(
 ) {
   // Un "letto/non letto" ancora in coda prevale sullo stato del server, che non è ancora aggiornato.
   const intent = pendingSeenIntent(db, [messageId]).get(messageId);
+  const importantIntent = pendingFlagIntent(db, [messageId], '\\Flagged').get(messageId);
   const t = now();
   db.update(messages)
     .set({
       flags: JSON.stringify(raw.flags),
       labels: JSON.stringify(raw.labels),
       seen: intent ?? raw.flags.includes('\\Seen'),
+      important: importantIntent ?? raw.flags.includes('\\Flagged'),
       ...(raw.uid != null ? { uid: raw.uid, mailbox: raw.mailbox } : {}),
       ...(raw.gmMsgid ? { gmMsgid: raw.gmMsgid } : {}),
       ...(raw.gmThreadId ? { gmThreadId: raw.gmThreadId } : {}),

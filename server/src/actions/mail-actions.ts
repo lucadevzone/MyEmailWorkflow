@@ -6,7 +6,7 @@ import { ulid } from 'ulid';
 import type { AccountDto } from '@mmw/shared';
 import type Database from 'better-sqlite3';
 import type { Db } from '../db/client.ts';
-import { conversations, messageAddresses, messages, projects } from '../db/schema.ts';
+import { attachments, blobs, conversations, messageAddresses, messages, projects } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
 import { bus } from '../events/bus.ts';
 import { ConversationService } from '../conversations/service.ts';
@@ -24,6 +24,11 @@ export const composeSchema = z
   .object({
     projectId: z.string().min(1, 'Serve un progetto'),
     replyToMessageId: z.string().optional(),
+    forwardMessageId: z.string().optional(),
+    includeQuote: z.boolean().default(false),
+    attachments: z
+      .array(z.object({ blobSha: z.string().regex(/^[0-9a-f]{64}$/), filename: z.string().min(1).max(255), mime: z.string().nullable() }))
+      .default([]),
     to: z.array(z.email('Indirizzo non valido')).default([]),
     cc: z.array(z.email('Indirizzo non valido')).default([]),
     bcc: z.array(z.email('Indirizzo non valido')).default([]),
@@ -55,6 +60,20 @@ export class MailActions {
     const changed = this.conv.setSeen(this.conv.unreadIncoming(conversationId), true);
     const ids = this.enqueueFlags(conversationId, changed, { add: ['\\Seen'] }, 'Segna come letto');
     if (changed.length) bus.publish({ type: 'conversations', ids: [conversationId] });
+    return ids;
+  }
+
+  /** Segnalibro "Importante": subito nell'app, su Gmail (\\Flagged) al prossimo batch. */
+  setImportant(messageId: string, important: boolean): string[] {
+    const msg = this.deps.db
+      .select({ conversationId: messages.conversationId })
+      .from(messages)
+      .where(and(eq(messages.id, messageId), isNull(messages.deletedAt)))
+      .get();
+    if (!msg) throw new ActionError('Messaggio non trovato');
+    const changed = this.conv.setImportant([messageId], important);
+    const ids = this.enqueueFlags(msg.conversationId, changed, important ? { add: ['\\Flagged'] } : { remove: ['\\Flagged'] }, important ? 'Segna come importante' : 'Togli importante');
+    if (changed.length) bus.publish({ type: 'conversations', ids: [msg.conversationId] });
     return ids;
   }
 
@@ -153,7 +172,8 @@ export class MailActions {
   }
 
   /** Nuova email o risposta, sempre da un progetto: il mittente è l'account del progetto. */
-  compose(input: z.infer<typeof composeSchema>): { activityId: string; conversationId: string; messageId: string } {
+  compose(raw: z.input<typeof composeSchema>): { activityId: string; conversationId: string; messageId: string } {
+    const input = composeSchema.parse(raw);
     const { db, sqlite } = this.deps;
     const project = db
       .select()
@@ -169,14 +189,31 @@ export class MailActions {
       : undefined;
     if (input.replyToMessageId && !parent) throw new ActionError('Messaggio a cui rispondere non trovato');
 
+    const forwarded = input.forwardMessageId
+      ? db.select().from(messages).where(and(eq(messages.id, input.forwardMessageId), isNull(messages.deletedAt))).get()
+      : undefined;
+    if (input.forwardMessageId && !forwarded) throw new ActionError('Messaggio da inoltrare non trovato');
+
     const t = now();
     const domain = account.email.split('@')[1] ?? 'localhost';
     const rfcMessageId = `<${ulid().toLowerCase()}@${domain}>`;
     const references = parent
       ? [...(JSON.parse(parent.references ?? '[]') as string[]), parent.rfcMessageId].filter((x): x is string => !!x).slice(-20)
       : [];
-    const subject = input.subject || (parent ? `Re: ${normalizeSubject(parent.subject)}` : '');
+    const subject =
+      input.subject || (parent ? `Re: ${normalizeSubject(parent.subject)}` : forwarded ? `Fwd: ${normalizeSubject(forwarded.subject)}` : '');
+    // Il testo citato (risposta) o il messaggio inoltrato si aggiungono in fondo, al momento dell'invio.
+    let fullBody = input.body;
+    if (parent && input.includeQuote) fullBody += quoteBlock(parent);
+    if (forwarded) fullBody += forwardBlock(forwarded);
     const bodyTextClean = cleanBody(input.body);
+    // Inoltro: si portano dietro gli allegati del messaggio originale.
+    const outgoing = [...input.attachments];
+    if (forwarded) {
+      for (const a of db.select().from(attachments).where(and(eq(attachments.messageId, forwarded.id), eq(attachments.isInline, false))).all()) {
+        outgoing.push({ blobSha: a.blobSha, filename: a.filename ?? 'allegato', mime: a.mime });
+      }
+    }
 
     const result = db.transaction((tx) => {
       let conversationId: string;
@@ -218,16 +255,25 @@ export class MailActions {
           subject,
           date: t,
           snippet: makeSnippet(bodyTextClean || input.body),
-          bodyText: input.body,
+          bodyText: fullBody,
           bodyTextClean,
           flags: JSON.stringify(['\\Seen']),
           labels: JSON.stringify([]),
           seen: true,
+          hasAttachments: outgoing.length > 0,
           outgoingStatus: 'queued',
           createdAt: t,
           updatedAt: t,
         })
         .run();
+
+      for (const a of outgoing) {
+        const blob = tx.select().from(blobs).where(eq(blobs.sha256, a.blobSha)).get();
+        if (!blob) throw new ActionError(`Allegato non trovato: ${a.filename}`);
+        tx.insert(attachments)
+          .values({ id: newId(), messageId, blobSha: a.blobSha, filename: a.filename, mime: a.mime, size: blob.size, createdAt: t })
+          .run();
+      }
 
       const roles = [
         [[account.email.toLowerCase()], 'from'],
@@ -260,9 +306,10 @@ export class MailActions {
         cc: input.cc,
         bcc: input.bcc,
         subject,
-        body: input.body,
+        body: fullBody,
         inReplyTo: parent?.rfcMessageId ?? null,
         references,
+        attachments: outgoing,
       };
       const activity = this.deps.activities.enqueue('send', account.id, payload, input.urgent);
       return { activityId: activity.id, conversationId, messageId };
@@ -325,4 +372,19 @@ function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
   const m = new Map<string, T[]>();
   for (const i of items) m.set(key(i), [...(m.get(key(i)) ?? []), i]);
   return m;
+}
+
+const quoteDate = (ms: number) => new Date(ms).toLocaleString('it-IT', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+/** Testo citato in coda alla risposta. */
+export function quoteBlock(m: { date: number; fromName: string | null; fromAddress: string | null; bodyText: string | null; bodyTextClean: string | null }): string {
+  const who = m.fromName ? `${m.fromName} <${m.fromAddress}>` : (m.fromAddress ?? 'qualcuno');
+  const text = (m.bodyTextClean || m.bodyText || '').split('\n').map((l) => `> ${l}`).join('\n');
+  return `\n\nIl ${quoteDate(m.date)}, ${who} ha scritto:\n${text}`;
+}
+
+/** Intestazione e testo del messaggio inoltrato. */
+export function forwardBlock(m: { date: number; fromName: string | null; fromAddress: string | null; subject: string | null; bodyText: string | null }): string {
+  const who = m.fromName ? `${m.fromName} <${m.fromAddress}>` : (m.fromAddress ?? '');
+  return `\n\n---------- Messaggio inoltrato ----------\nDa: ${who}\nData: ${quoteDate(m.date)}\nOggetto: ${m.subject ?? ''}\n\n${m.bodyText ?? ''}`;
 }

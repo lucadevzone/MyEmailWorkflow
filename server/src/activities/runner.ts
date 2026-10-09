@@ -154,6 +154,7 @@ export class ActivityRunner {
           inReplyTo: p.inReplyTo,
           references: p.references,
           date: new Date(),
+          attachments: (p.attachments ?? []).map((a) => ({ filename: a.filename, content: this.deps.blobs.read(a.blobSha), contentType: a.mime })),
         });
         await this.deps.sendSmtp(account, raw, { from: account.email, to: [...p.to, ...p.cc, ...p.bcc] });
         // Gmail salva da sé l'inviata in "Tutti i messaggi"; gli altri server no.

@@ -116,6 +116,10 @@ export interface ConversationListItem {
   /** Messaggi non letti (in arrivo). */
   unreadCount: number;
   hasAttachments: boolean;
+  /** Almeno un messaggio importante. */
+  important: boolean;
+  /** C'è una bozza salvata per questa conversazione. */
+  hasDraft: boolean;
   /** Numero di file distinti (non di invii: le versioni di uno stesso file contano una volta). */
   attachmentCount: number;
   /** Task aperti collegati alla conversazione. */
@@ -193,6 +197,8 @@ export interface MessageDto {
   bodyTextClean: string | null;
   hasHtml: boolean;
   seen: boolean;
+  /** Segnalibro "Importante" (D16). */
+  important: boolean;
   /** Solo per i messaggi scritti nell'app. */
   outgoingStatus: 'queued' | 'sent' | 'failed' | null;
   attachments: AttachmentDto[];
@@ -386,11 +392,22 @@ export interface ActivityQueueDto {
 
 // ─── Composizione ────────────────────────────────────────────────────────────
 
+export interface OutgoingAttachment {
+  blobSha: string;
+  filename: string;
+  mime: string | null;
+}
+
 export interface ComposeInput {
   /** Progetto da cui si scrive: determina l'account mittente. Obbligatorio. */
   projectId: string;
   /** Risposta: messaggio a cui si risponde (la conversazione viene spostata nel progetto). */
   replyToMessageId?: string;
+  /** Inoltro: messaggio inoltrato (testo e allegati); nasce una conversazione nuova. */
+  forwardMessageId?: string;
+  /** Aggiunge in fondo il testo citato del messaggio a cui si risponde. */
+  includeQuote?: boolean;
+  attachments?: OutgoingAttachment[];
   to: string[];
   cc?: string[];
   bcc?: string[];
@@ -398,3 +415,31 @@ export interface ComposeInput {
   body: string;
   urgent?: boolean;
 }
+
+// ─── Bozze ───────────────────────────────────────────────────────────────────
+
+export interface DraftAttachment {
+  id: string;
+  blobSha: string;
+  filename: string;
+  mime: string | null;
+  size: number;
+}
+
+export interface DraftDto {
+  id: string;
+  projectId: string | null;
+  conversationId: string | null;
+  replyToMessageId: string | null;
+  forwardMessageId: string | null;
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string;
+  body: string;
+  includeQuote: boolean;
+  attachments: DraftAttachment[];
+  updatedAt: number;
+}
+
+export type DraftPatch = Partial<Pick<DraftDto, 'projectId' | 'to' | 'cc' | 'bcc' | 'subject' | 'body' | 'includeQuote'>>;

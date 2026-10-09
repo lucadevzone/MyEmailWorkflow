@@ -19,6 +19,7 @@ import type { ActivityRunner } from '../activities/runner.ts';
 import { ActionError, composeSchema, type MailActions } from '../actions/mail-actions.ts';
 import type { ActivityQueueDto, ConversationView } from '@mmw/shared';
 import { ZodError, type ZodType } from 'zod';
+import { draftCreateSchema, draftPatchSchema, type DraftService } from '../drafts/service.ts';
 
 import { PeopleError, contactInputSchema, groupInputSchema, type PeopleService } from '../people/service.ts';
 import { NotesError, noteInputSchema, type NotesService } from '../notes/service.ts';
@@ -40,6 +41,7 @@ export interface RouteDeps {
   notes: NotesService;
   suggestions: SuggestionService;
   tasks: TaskService;
+  drafts: DraftService;
 }
 
 function parse<T>(schema: ZodType<T>, body: unknown): T {
@@ -217,6 +219,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   // ─── Azioni sulle conversazioni ────────────────────────────────────────────
 
   app.post<{ Params: { id: string } }>('/api/conversations/:id/read', async (req) => ({ activityIds: deps.actions.markRead(req.params.id) }));
+  app.post<{ Params: { id: string }; Body: { important?: boolean } }>('/api/messages/:id/important', async (req) => ({
+    activityIds: deps.actions.setImportant(req.params.id, req.body?.important !== false),
+  }));
   app.post<{ Params: { id: string } }>('/api/messages/:id/read', async (req) => ({ activityIds: deps.actions.markMessageRead(req.params.id) }));
   app.post<{ Params: { id: string } }>('/api/conversations/:id/unread', async (req) => ({ activityIds: deps.actions.markUnread(req.params.id) }));
   app.post<{ Params: { id: string } }>('/api/conversations/:id/archive', async (req) => ({ activityIds: deps.actions.archive(req.params.id) }));
@@ -488,6 +493,37 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   app.delete<{ Params: { id: string } }>('/api/resources/:id', async (req, reply) => {
     touched(deps.notes.deleteResource(req.params.id));
     return reply.code(204).send();
+  });
+
+  // ─── Bozze ─────────────────────────────────────────────────────────────────
+
+  app.post('/api/drafts', async (req, reply) => {
+    const d = deps.drafts.create(parse(draftCreateSchema, req.body));
+    touched(d.conversationId);
+    return reply.code(201).send(d);
+  });
+  app.get<{ Params: { id: string } }>('/api/drafts/:id', async (req) => deps.drafts.get(req.params.id));
+  app.get<{ Params: { id: string } }>('/api/conversations/:id/drafts', async (req) => deps.drafts.byConversation(req.params.id));
+  app.put<{ Params: { id: string } }>('/api/drafts/:id', async (req) => deps.drafts.update(req.params.id, parse(draftPatchSchema, req.body)));
+  app.delete<{ Params: { id: string } }>('/api/drafts/:id', async (req, reply) => {
+    touched(deps.drafts.remove(req.params.id));
+    return reply.code(204).send();
+  });
+  app.post<{ Params: { id: string }; Querystring: { filename?: string } }>('/api/drafts/:id/attachments', async (req) => {
+    const filename = (req.query.filename ?? 'file').slice(0, 255);
+    const mime = (req.headers['x-file-type'] as string | undefined) || null;
+    return deps.drafts.addFile(req.params.id, filename, req.body as Buffer, mime);
+  });
+  app.post<{ Params: { id: string }; Body: { resourceId?: string } }>('/api/drafts/:id/resources', async (req) =>
+    deps.drafts.addResource(req.params.id, String(req.body?.resourceId ?? '')),
+  );
+  app.delete<{ Params: { id: string; attId: string } }>('/api/drafts/:id/attachments/:attId', async (req) =>
+    deps.drafts.removeAttachment(req.params.id, req.params.attId),
+  );
+  app.post<{ Params: { id: string }; Body: { urgent?: boolean } }>('/api/drafts/:id/send', async (req, reply) => {
+    const res = deps.drafts.send(req.params.id, req.body?.urgent === true);
+    touched(res.previousConversationId);
+    return reply.code(201).send(res);
   });
 
   // ─── Suggerimenti ──────────────────────────────────────────────────────────

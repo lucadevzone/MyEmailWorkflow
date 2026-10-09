@@ -42,6 +42,7 @@ export interface SendPayload {
   body: string;
   inReplyTo: string | null;
   references: string[];
+  attachments?: { blobSha: string; filename: string; mime: string | null }[];
 }
 
 export type ActivityPayload = FlagsPayload | ConversationOpPayload | SendPayload;
@@ -175,6 +176,8 @@ export class ActivityService {
         const f = p as FlagsPayload;
         if (f.add?.includes('\\Seen')) this.conversations.setSeen(f.messageIds, false);
         if (f.remove?.includes('\\Seen')) this.conversations.setSeen(f.messageIds, true);
+        if (f.add?.includes('\\Flagged')) this.conversations.setImportant(f.messageIds, false);
+        if (f.remove?.includes('\\Flagged')) this.conversations.setImportant(f.messageIds, true);
         break;
       }
       case 'archive':
@@ -207,6 +210,11 @@ export class ActivityService {
  * con lo stato del server, che non è ancora stato aggiornato.
  */
 export function pendingSeenIntent(db: Db, messageIds: string[]): Map<string, boolean> {
+  return pendingFlagIntent(db, messageIds, '\\Seen');
+}
+
+/** Come pendingSeenIntent, per un flag qualsiasi (es. \\Flagged = Importante). */
+export function pendingFlagIntent(db: Db, messageIds: string[], flag: string): Map<string, boolean> {
   const out = new Map<string, boolean>();
   if (!messageIds.length) return out;
   const rows = db
@@ -220,8 +228,8 @@ export function pendingSeenIntent(db: Db, messageIds: string[]): Map<string, boo
     const p = JSON.parse(r.payload) as FlagsPayload;
     for (const id of p.messageIds) {
       if (!wanted.has(id)) continue;
-      if (p.add?.includes('\\Seen')) out.set(id, true);
-      if (p.remove?.includes('\\Seen')) out.set(id, false);
+      if (p.add?.includes(flag)) out.set(id, true);
+      if (p.remove?.includes(flag)) out.set(id, false);
     }
   }
   return out;

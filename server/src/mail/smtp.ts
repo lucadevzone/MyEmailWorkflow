@@ -14,6 +14,7 @@ export interface OutgoingMessage {
   inReplyTo?: string | null;
   references?: string[];
   date: Date;
+  attachments?: { filename: string; content: Buffer; contentType: string | null }[];
 }
 
 /**
@@ -32,6 +33,7 @@ export async function buildMime(msg: OutgoingMessage): Promise<Buffer> {
     inReplyTo: msg.inReplyTo ?? undefined,
     references: msg.references?.length ? msg.references : undefined,
     date: msg.date,
+    attachments: msg.attachments?.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType ?? undefined })),
   });
   return composer.compile().build();
 }

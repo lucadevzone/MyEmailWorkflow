@@ -139,6 +139,8 @@ export const messages = sqliteTable(
     /** JSON: string[] delle etichette Gmail (X-GM-LABELS). */
     labels: text('labels'),
     seen: integer('seen', { mode: 'boolean' }).notNull().default(false),
+    /** Segnalibro "Importante" (D16), sincronizzato con il flag \\Flagged (le "Speciali" di Gmail). */
+    important: integer('important', { mode: 'boolean' }).notNull().default(false),
     hasAttachments: integer('has_attachments', { mode: 'boolean' }).notNull().default(false),
     analyzedAt: integer('analyzed_at'),
     /** Solo per i messaggi scritti nell'app: stato dell'invio tramite coda attività. */
@@ -411,6 +413,31 @@ export const chunks = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   (t) => [index('chunks_message').on(t.messageId)],
+);
+
+/** Bozze (S3): salvate in automatico, riappaiono come ultimo elemento del carosello. */
+export const drafts = sqliteTable(
+  'drafts',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id').references(() => projects.id),
+    /** NULL = nuova mail (nessuna conversazione ancora). */
+    conversationId: text('conversation_id').references(() => conversations.id),
+    replyToMessageId: text('reply_to_message_id').references(() => messages.id),
+    forwardMessageId: text('forward_message_id').references(() => messages.id),
+    /** JSON: string[]. */
+    to: text('to').notNull().default('[]'),
+    cc: text('cc').notNull().default('[]'),
+    bcc: text('bcc').notNull().default('[]'),
+    subject: text('subject').notNull().default(''),
+    body: text('body').notNull().default(''),
+    includeQuote: integer('include_quote', { mode: 'boolean' }).notNull().default(false),
+    /** JSON: { id, blobSha, filename, mime, size }[]. */
+    attachments: text('attachments').notNull().default('[]'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [index('drafts_conversation').on(t.conversationId)],
 );
 
 export const settings = sqliteTable('settings', {

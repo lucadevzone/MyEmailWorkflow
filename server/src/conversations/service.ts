@@ -13,6 +13,7 @@ import {
   accounts,
   attachments,
   blobs,
+  drafts,
   contactAddresses,
   conversations,
   messageAddresses,
@@ -90,6 +91,7 @@ export class ConversationService {
         count: sql<number>`count(*)`,
         unread: sql<number>`sum(case when ${messages.seen} = 0 and ${messages.direction} = 'in' then 1 else 0 end)`,
         attachments: sql<number>`max(${messages.hasAttachments})`,
+        important: sql<number>`max(${messages.important})`,
         accountIds: sql<string>`group_concat(distinct ${messages.accountId})`,
       })
       .from(messages)
@@ -109,6 +111,9 @@ export class ConversationService {
       fileNames.set(r.c, (fileNames.get(r.c) ?? new Set()).add(normalizeFileName(r.filename)));
     }
     const pending = this.pendingSuggestions(ids);
+    const draftConvs = new Set(
+      this.db.select({ c: drafts.conversationId }).from(drafts).where(inArray(drafts.conversationId, ids)).all().map((r) => r.c),
+    );
     const taskCounts = new Map(
       this.db
         .select({ c: tasks.conversationId, n: sql<number>`count(*)` })
@@ -181,6 +186,8 @@ export class ConversationService {
         messageCount: s?.count ?? 0,
         unreadCount: s?.unread ?? 0,
         hasAttachments: !!s?.attachments,
+        important: !!s?.important,
+        hasDraft: draftConvs.has(r.id),
         attachmentCount: fileNames.get(r.id)?.size ?? 0,
         taskCount: taskCounts.get(r.id) ?? 0,
         noteCount: noteCounts.get(r.id) ?? 0,
@@ -371,6 +378,7 @@ export class ConversationService {
           bodyTextClean: m.bodyTextClean,
           hasHtml: !!m.htmlBlobSha,
           seen: m.seen,
+          important: m.important,
           outgoingStatus: m.outgoingStatus,
           attachments: atts
             .filter((a) => a.messageId === m.id)
@@ -457,6 +465,18 @@ export class ConversationService {
     if (changed.length) {
       this.db.update(messages).set({ seen, updatedAt: now() }).where(inArray(messages.id, changed)).run();
     }
+    return changed;
+  }
+
+  setImportant(messageIds: string[], important: boolean): string[] {
+    if (!messageIds.length) return [];
+    const changed = this.db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(inArray(messages.id, messageIds), eq(messages.important, !important)))
+      .all()
+      .map((m) => m.id);
+    if (changed.length) this.db.update(messages).set({ important, updatedAt: now() }).where(inArray(messages.id, changed)).run();
     return changed;
   }
 

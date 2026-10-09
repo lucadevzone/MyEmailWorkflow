@@ -267,3 +267,64 @@ describe('composizione e invio', () => {
     );
   });
 });
+
+describe('importante', () => {
+  it('segna subito nell\'app e invia \\Flagged a Gmail al batch; annullare ripristina', async () => {
+    const { conversationId, messageId } = await incoming('<imp@x>', 20);
+    const ids = s.actions.setImportant(messageId, true);
+    expect(conv().get(conversationId)!.messages[0]!.important).toBe(true);
+    expect(conv().list({ view: 'inbox' })[0]!.important).toBe(true);
+    s.activities.cancel(ids[0]!);
+    expect(conv().get(conversationId)!.messages[0]!.important).toBe(false);
+    s.actions.setImportant(messageId, true);
+    await s.runner.run();
+    expect(calls).toContainEqual(expect.objectContaining({ op: 'addFlags', uids: [20], flags: ['\\Flagged'] }));
+  });
+
+  it('il flag arrivato dal server si riflette, ma non sovrascrive un\'intenzione in coda', async () => {
+    const { conversationId, messageId } = await incoming('<imp2@x>', 21);
+    const msg = () => conv().get(conversationId)!.messages[0]!;
+    updateFlags(s.db, messageId, { flags: ['\\Flagged'], labels: ['\\Inbox'], uid: 21, mailbox: '[Gmail]/Tutti i messaggi', gmMsgid: 'gm-21' });
+    expect(msg().important).toBe(true);
+    s.actions.setImportant(messageId, false);
+    updateFlags(s.db, messageId, { flags: ['\\Flagged'], labels: ['\\Inbox'], uid: 21, mailbox: '[Gmail]/Tutti i messaggi', gmMsgid: 'gm-21' });
+    expect(msg().important).toBe(false);
+  });
+});
+
+describe('bozze, allegati, inoltro', () => {
+  it('bozza di risposta: indicatore sulla conversazione, testo citato e allegati all\'invio', async () => {
+    const { conversationId, messageId } = await incoming('<q@x>', 30);
+    const d = s.drafts.create({ projectId, conversationId, replyToMessageId: messageId, to: ['mario@x.it'] });
+    expect(conv().list({ view: 'inbox' })[0]!.hasDraft).toBe(true);
+    s.drafts.update(d.id, { body: 'Va bene.', includeQuote: true });
+    const withFile = s.drafts.addFile(d.id, 'nota.txt', Buffer.from('contenuto allegato'), 'text/plain');
+    expect(withFile.attachments).toHaveLength(1);
+
+    const r = s.drafts.send(d.id, false);
+    expect(() => s.drafts.get(d.id)).toThrow();
+    expect(r.conversationId).toBe(conversationId);
+    const out = conv().get(conversationId)!.messages.find((m) => m.id === r.messageId)!;
+    expect(out.attachments.map((a) => a.filename)).toEqual(['nota.txt']);
+    await s.runner.run();
+    expect(sent[0]!.raw).toContain('ha scritto:');
+    expect(sent[0]!.raw).toContain('> Ci vediamo?');
+    expect(sent[0]!.raw).toMatch(/filename="?nota\.txt/);
+    expect(sent[0]!.raw).toContain(Buffer.from('contenuto allegato').toString('base64'));
+  });
+
+  it('inoltro: nuova conversazione, oggetto Fwd: e testo originale', async () => {
+    const { conversationId, messageId } = await incoming('<f@x>', 31);
+    const r = s.actions.compose({ projectId, forwardMessageId: messageId, to: ['anna@y.it'], body: 'Guarda qui', urgent: false });
+    expect(r.conversationId).not.toBe(conversationId);
+    await s.runner.run();
+    expect(sent[0]!.raw).toContain('Subject: Fwd: Riunione');
+    expect(sent[0]!.raw).toContain('Messaggio inoltrato');
+    expect(sent[0]!.raw).toContain('Ci vediamo?');
+  });
+
+  it('bozza senza progetto non si invia', () => {
+    const d = s.drafts.create({ to: ['a@b.it'] });
+    expect(() => s.drafts.send(d.id, false)).toThrow(/progetto/);
+  });
+});
