@@ -185,6 +185,11 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
 
   /** Posizione di scorrimento in cui l'elemento i è aperto del tutto. */
   const target = useCallback((i: number) => L.starts[i]! + (i === 0 ? 0 : Math.min(RAMP / 2, L.lengths[i]! / 2)), [L]);
+  const targetRef = useRef(target);
+  targetRef.current = target;
+  // Elemento richiesto da un comando: a fine scorrimento si completa il movimento con le misure aggiornate
+  // (aprendosi, la bozza cambia la geometria mentre lo scorrimento animato è in corso).
+  const goal = useRef<number | null>(null);
 
   // Elemento in focus = quello il cui tratto contiene la posizione; l'indirizzo lo segue.
   const pos = useRef(focus);
@@ -217,6 +222,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
       if (!el || !conversationId) return;
       const k = Math.max(0, Math.min(n, i));
       pinned.current = false;
+      goal.current = k;
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       el.scrollTo({ top: target(k), behavior: reduce ? 'auto' : 'smooth' });
     },
@@ -245,7 +251,15 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     if (!el) return;
     const release = () => {
       pinned.current = false;
+      goal.current = null;
     };
+    const settle = () => {
+      if (goal.current === null) return;
+      const t = targetRef.current(goal.current);
+      if (Math.abs(el.scrollTop - t) > 4 && el.scrollHeight - el.clientHeight >= t - 4) el.scrollTo({ top: t, behavior: 'smooth' });
+      else goal.current = null;
+    };
+    el.addEventListener('scrollend', settle);
     const opts = { passive: true } as const;
     el.addEventListener('wheel', release, opts);
     el.addEventListener('touchstart', release, opts);
@@ -254,6 +268,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
       el.removeEventListener('wheel', release);
       el.removeEventListener('touchstart', release);
       el.removeEventListener('pointerdown', release);
+      el.removeEventListener('scrollend', settle);
     };
   }, [conversationId]);
 
