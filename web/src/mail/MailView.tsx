@@ -360,7 +360,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
               )}
             </nav>
           )}
-          <div className={`pm-carousel__track${conversationId ? '' : ' pm-carousel__track--single'}`} role="feed" aria-busy={conv.isLoading}>
+          <div className={`pm-carousel__track${!conversationId ? ' pm-carousel__track--single' : focus === n ? ' pm-carousel__track--end' : ''}`} role="feed" aria-busy={conv.isLoading}>
             {conversationId && conv.isLoading && <div className="pm-empty">Caricamento…</div>}
             {items}
           </div>
