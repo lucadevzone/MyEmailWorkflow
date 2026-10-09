@@ -13,7 +13,7 @@
 .pm-squarebtn:disabled { opacity: .4; }
 
 .pm-mailview { flex: 1; min-height: 0; display: flex; flex-wrap: wrap; align-items: stretch; }
-.pm-carousel { flex: 999 1 640px; min-width: 0; min-height: 0; height: 100%; box-sizing: border-box; padding: 20px 24px 28px; display: flex; justify-content: center; gap: 20px; }
+.pm-carousel { flex: 999 1 640px; min-width: 0; min-height: 0; height: 100%; box-sizing: border-box; padding: 12px 24px 16px; display: flex; justify-content: center; gap: 20px; }
 
 .pm-minimap { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; align-self: center; }
 .pm-minimap__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-dashed); border: 0; padding: 0; transition: height .2s ease-out, width .2s ease-out; }
@@ -24,15 +24,15 @@
   display: flex; align-items: center; justify-content: center; color: var(--ink-label);
 }
 
-.pm-carousel__track { flex: 1 1 auto; max-width: var(--carousel-max); min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.pm-carousel__hint { margin: 6px 0 0; font-size: var(--fs-md); color: var(--ink-label); display: flex; align-items: center; gap: 6px; flex: none; }
+.pm-carousel__track { flex: 1 1 auto; max-width: var(--carousel-max); min-width: 0; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.pm-carousel__hint { margin: 2px 0 0; font-size: var(--fs-md); color: var(--ink-label); display: flex; align-items: center; gap: 6px; flex: none; }
 
-.pm-msg-edge { width: 78%; height: 12px; background: var(--stack-edge); border: 1px solid #E0DDD5; flex: none; padding: 0; cursor: pointer; }
+.pm-msg-edge { width: 78%; height: 8px; background: var(--stack-edge); border: 1px solid #E0DDD5; flex: none; padding: 0; cursor: pointer; }
 .pm-msg-edge--top { border-top: 0; border-radius: 0 0 12px 12px; }
 .pm-msg-edge--bottom { border-bottom: 0; border-radius: 12px 12px 0 0; }
 
 .pm-msg--compact {
-  width: 88%; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 12px 18px; flex: none;
+  width: 88%; box-sizing: border-box; display: flex; align-items: center; gap: 10px; padding: 5px 14px; flex: none; font-size: var(--fs-md);
   background: var(--surface-muted); border: 1px solid var(--border); border-radius: var(--r-2xl); color: var(--ink-2); text-align: left;
 }
 .pm-msg--compact:hover { border-color: var(--border-strong); }
@@ -143,7 +143,8 @@
 @media (prefers-reduced-motion: reduce) { .pm-bubble__cursor { animation: none; } }
 @media (max-width: 1100px) {
   .pm-mailview { overflow-y: auto; }
-  .pm-carousel { height: auto; min-height: 100%; }
+  /* Il carosello resta alto quanto lo spazio visibile (le schede scorrono al loro interno); l'Assistente va sotto. */
+  .pm-carousel { flex-basis: 100%; height: 100%; }
   .pm-assistant { max-width: none; flex-basis: 100%; min-height: 420px; border-left: 0; border-top: 1px solid var(--border); }
   .pm-assistant--collapsed { min-height: 0; flex-direction: row; justify-content: flex-start; padding: 8px 16px; gap: 8px; }
 }

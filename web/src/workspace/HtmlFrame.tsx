@@ -15,6 +15,13 @@ export function HtmlFrame({ src }: { src: string }) {
     const onLoad = () => {
       const doc = frame.contentDocument;
       if (!doc) return;
+      // La rotella dentro l'iframe non arriva alla pagina: la si ripete sull'elemento iframe
+      // (lo scorrimento nativo prosegue comunque verso la scheda che lo contiene).
+      doc.addEventListener(
+        'wheel',
+        (e) => frame.dispatchEvent(new WheelEvent('wheel', { deltaX: e.deltaX, deltaY: e.deltaY, deltaMode: e.deltaMode, bubbles: true, cancelable: true })),
+        { passive: true },
+      );
       const measure = () => setHeight(Math.max(60, doc.documentElement.scrollHeight));
       measure();
       observer = new ResizeObserver(measure);

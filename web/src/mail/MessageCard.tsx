@@ -51,7 +51,7 @@ export function CompactMessage({ m, onClick, label }: { m: MessageDto; onClick: 
   const preview = (m.bodyTextClean || m.bodyText || '').replace(/\s+/g, ' ').trim();
   return (
     <button type="button" className="pm-msg--compact" onClick={onClick} aria-label={label}>
-      <PersonAvatar person={from} size={30} />
+      <PersonAvatar person={from} size={22} />
       <span className="pm-msg__who">{name(from)}</span>
       <span className="pm-msg__preview">{preview || m.subject || '(vuoto)'}</span>
       {m.important && <Ic icon={Bookmark} size={14} className="pm-bookmark" />}

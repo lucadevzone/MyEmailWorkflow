@@ -14,8 +14,9 @@ import { Assistant, type DraftHandle } from './Assistant.tsx';
 import { composeTarget, NEW_DRAFT, seedOf, type DraftSeed } from './seed.ts';
 
 const time = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' });
-const WHEEL_STEP = 60;
-const WHEEL_COOLDOWN = 380;
+const WHEEL_STEP = 50;
+/** Pausa senza eventi che chiude un gesto (l'inerzia del trackpad continua a mandarne per un po'). */
+const GESTURE_GAP = 220;
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
@@ -49,8 +50,9 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   const drafts = useQuery({ queryKey: ['drafts', conversationId], queryFn: () => api.conversationDrafts(conversationId!), enabled: !!conversationId });
   const d = conv.data ?? null;
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const track = useRef<HTMLDivElement>(null);
-  const wheel = useRef({ acc: 0, until: 0 });
+  const carousel = useRef<HTMLElement>(null);
+  // Un gesto (anche con l'inerzia) fa al massimo un passo; se ha fatto scorrere il testo della mail, nessuno.
+  const wheel = useRef({ acc: 0, stepped: false, inside: false, timer: 0 });
   const draftHandle = useRef<DraftHandle | null>(null);
 
   const messages: MessageDto[] = useMemo(() => [...(d?.messages ?? [])].sort((a, b) => a.date - b.date), [d]);
@@ -123,26 +125,39 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     return () => window.removeEventListener('keydown', onKey);
   }, [goTo, focus, n, compose, conversationId, messages, d?.projectId, backToConversation]);
 
-  // Rotella: dentro la scheda in focus scorre il contenuto; ai bordi passa al messaggio vicino.
+  // Rotella su tutta l'area del carosello: dentro la scheda in focus scorre il contenuto;
+  // a contenuto finito, un nuovo gesto passa al messaggio vicino.
   useEffect(() => {
-    const el = track.current;
+    const el = carousel.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
-      if (canScroll(e.target, el, e.deltaY)) return;
-      e.preventDefault();
       const w = wheel.current;
-      const now = performance.now();
-      if (now < w.until) return;
-      w.acc += e.deltaY;
+      window.clearTimeout(w.timer);
+      w.timer = window.setTimeout(() => {
+        w.acc = 0;
+        w.stepped = false;
+        w.inside = false;
+      }, GESTURE_GAP);
+      const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      if (canScroll(e.target, el, dy)) {
+        w.inside = true;
+        return;
+      }
+      e.preventDefault();
+      if (w.stepped || w.inside) return;
+      w.acc += dy;
       if (Math.abs(w.acc) >= WHEEL_STEP) {
         goTo(pos.current + Math.sign(w.acc));
         w.acc = 0;
-        w.until = now + WHEEL_COOLDOWN;
+        w.stepped = true;
       }
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [goTo, focus]);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      window.clearTimeout(wheel.current.timer);
+    };
+  }, [goTo]);
 
   const onSent = (info: SentInfo) => navigate(paths.conversation(info.projectId, info.conversationId));
   // La scheda resta montata quando è lei stessa a creare la bozza (new → id); per ogni altra bozza si rimonta.
@@ -246,7 +261,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
         )}
       </div>
       <div className="pm-mailview">
-        <main className="pm-carousel">
+        <main className="pm-carousel" ref={carousel}>
           {conversationId && n > 0 && (
             <nav className="pm-minimap" aria-label="Posizione nella conversazione">
               {messages.map((m, i) => (
@@ -268,7 +283,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
               )}
             </nav>
           )}
-          <div className="pm-carousel__track" ref={track} role="feed" aria-busy={conv.isLoading}>
+          <div className="pm-carousel__track" role="feed" aria-busy={conv.isLoading}>
             {conversationId && conv.isLoading && <div className="pm-empty">Caricamento…</div>}
             {items}
           </div>
