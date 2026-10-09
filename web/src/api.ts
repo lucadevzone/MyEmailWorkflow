@@ -16,6 +16,8 @@ import type {
   DraftDto,
   DraftPatch,
   AssistantMessageDto,
+  SearchResults,
+  SearchScope,
   ReplyIdea,
   TaskDto,
   TaskInput,
@@ -174,6 +176,7 @@ export const api = {
   removeDraftAttachment: (id: string, attId: string) => request<DraftDto>('DELETE', `/api/drafts/${id}/attachments/${attId}`),
   sendDraft: (id: string, urgent: boolean) =>
     request<{ activityId: string; conversationId: string; messageId: string }>('POST', `/api/drafts/${id}/send`, { urgent }),
+  search: (q: string, scope: SearchScope) => request<SearchResults>('GET', `/api/search?q=${encodeURIComponent(q)}&scope=${encodeURIComponent(scope)}`),
   assistantThread: (q: AssistantScope) => request<AssistantMessageDto[]>('GET', `/api/assistant/thread?${scopeQuery(q)}`),
   clearAssistantThread: (q: AssistantScope) => request<void>('DELETE', `/api/assistant/thread?${scopeQuery(q)}`),
   replyIdeas: (conversationId: string) => request<ReplyIdea[]>('GET', `/api/conversations/${conversationId}/reply-ideas`),

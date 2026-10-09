@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { NavLink, useMatch, useNavigate } from 'react-router-dom';
-import { ArrowRightLeft, Inbox, Plus, SlidersHorizontal, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowRightLeft, Inbox, Plus, Search, SlidersHorizontal, Users } from 'lucide-react';
+import { SearchBox } from './Search.tsx';
 import { useEditing } from '../ui/editing.tsx';
 import { ProjectsEditor } from './ProjectsEditor.tsx';
 import type { ProjectDto } from '@mmw/shared';
@@ -16,11 +18,33 @@ export function TopBar({ onNewProject, onEditProject }: { onNewProject: () => vo
   const { data: counts } = useQuery({ queryKey: ['counts'], queryFn: api.conversationCounts });
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const active = projects.filter((p) => !p.archived);
+  const [searching, setSearching] = useState(false);
+
+  // "/" apre la ricerca da qualunque punto (tranne mentre si scrive).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+      e.preventDefault();
+      setSearching(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   if (editing.mode === 'projects') return <ProjectsEditor onDone={() => editing.setMode(null)} />;
 
   return (
-    <header className="pm-topbar">
+    <header className={`pm-topbar${searching ? ' pm-topbar--searching' : ''}`}>
+      {searching ? (
+        <SearchBox onClose={() => setSearching(false)} />
+      ) : (
+        <button type="button" className="pm-iconbtn" aria-label="Cerca in tutti i progetti" title="Cerca (/)" onClick={() => setSearching(true)}>
+          <Ic icon={Search} />
+        </button>
+      )}
+      <span className="pm-topbar__sep" aria-hidden="true" />
       <nav className="pm-topbar__tabs" aria-label="Progetti">
         <Tab to={paths.project(SYSTEM_INBOX)} label="Da smistare" icon unread={counts?.inboxUnread} total={counts?.inbox} />
         <span className="pm-topbar__tabsep" aria-hidden="true" />

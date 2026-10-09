@@ -22,6 +22,7 @@ import './styles/components/people.css';
 import './styles/components/project.css';
 import './styles/components/manage.css';
 import './styles/components/mail.css';
+import './styles/components/search.css';
 import { BrowserRouter } from 'react-router-dom';
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } });
