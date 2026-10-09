@@ -415,7 +415,7 @@ function GroupsPanel({ dir, open, onOpen, onOpenConversation }: {
     <section className="pm-panel" aria-label="Gruppi">
       <div className="pm-panel__head">
         <h2>Gruppi · {dir?.groups.length ?? 0}</h2>
-        <button type="button" className="pm-btn pm-btn--primary pm-btn--sm" onClick={() => setCreating(true)}>
+        <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" onClick={() => setCreating(true)}>
           <Ic icon={Plus} size={15} /> Nuovo gruppo
         </button>
       </div>

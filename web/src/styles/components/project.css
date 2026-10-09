@@ -1,5 +1,6 @@
 /* S1 · Progetto */
 .pm-project { flex: 1; min-height: 0; display: flex; align-items: stretch; }
+.pm-project__main { flex: 999 1 480px; min-width: 0; display: flex; position: relative; }
 
 /* Barra contatti */
 .pm-rail {
@@ -161,14 +162,33 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
 .pm-due--late { color: var(--danger); }
 
 /* Pannello laterale provvisorio (lettura/scrittura fino al carosello) */
-.pm-sheet-backdrop { position: fixed; inset: 0; background: rgba(27, 26, 23, .18); z-index: 30; }
-.pm-sheet {
-  position: fixed; top: 0; right: 0; bottom: 0; width: min(760px, 100vw); background: var(--surface); z-index: 31;
-  box-shadow: var(--shadow-pop); display: flex; flex-direction: column;
-}
-.pm-sheet__head { display: flex; align-items: center; gap: 8px; padding: 0 12px 0 20px; height: 52px; border-bottom: 1px solid var(--border-subtle); flex: none; }
-.pm-sheet__body { flex: 1; min-height: 0; overflow-y: auto; }
-
 @media (max-width: 760px) {
   .pm-conv__tree { border-left: 0; border-top: 1px solid var(--border-subtle); }
+}
+
+/* Sotto i 1100 px la barra dei task va sotto la lista e scorre la pagina intera (§3.3). */
+@media (max-width: 1100px) {
+  .pm-project__main { flex-wrap: wrap; align-content: flex-start; overflow-y: auto; }
+  .pm-convlist { flex: 1 1 100%; min-height: auto; }
+  .pm-convstack { overflow: visible; flex: none; }
+  .pm-tasks { flex: 1 1 100%; max-width: none; min-height: auto; border-left: 0; border-top: 1px solid var(--border); }
+  .pm-tasks__body { overflow: visible; }
+}
+
+/* Telefono: la barra contatti diventa una riga orizzontale scorrevole. */
+@media (max-width: 640px) {
+  .pm-project { flex-direction: column; }
+  .pm-rail {
+    flex: none; flex-direction: row; align-items: flex-start; gap: 12px; padding: 10px 12px; overflow-x: auto; overflow-y: hidden;
+    border-right: 0; border-bottom: 1px solid var(--border);
+  }
+  .pm-rail .pm-label { display: none; }
+  .pm-rail__compose { border-bottom: 0; border-right: 1px solid var(--border); padding: 0 12px 0 0; align-self: stretch; justify-content: center; flex: none; }
+  .pm-rail__compose-hint { display: none; }
+  .pm-rail__sep { width: 1px; height: 44px; align-self: center; }
+  .pm-rail__item { flex: none; width: 64px; }
+  .pm-rail__add { align-self: flex-start; margin-top: 2px; }
+  .pm-subtabs { padding: 0 12px; gap: 14px; }
+  .pm-convstack { padding: 10px; }
+  .pm-conv__main { padding: 14px; }
 }

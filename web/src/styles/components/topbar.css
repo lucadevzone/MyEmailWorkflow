@@ -24,3 +24,16 @@
 .pm-iconbtn--sm { width: 36px; height: 36px; color: var(--ink-muted); }
 .pm-iconbtn:hover { background: var(--surface-chip); }
 .pm-iconbtn[aria-current="page"], .pm-iconbtn[aria-pressed="true"] { background: var(--ink); color: #fff; }
+
+/* Telefono: una sola riga, tab scorrevoli in orizzontale */
+@media (max-width: 640px) {
+  .pm-topbar { flex-wrap: nowrap; gap: 2px; padding: 0 6px; }
+  .pm-topbar > .pm-topbar__sep { display: none; }
+  .pm-topbar__tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .pm-topbar__tabs::-webkit-scrollbar { display: none; }
+  .pm-tab { padding: 0 10px; }
+  .pm-topbar__tools { gap: 0; }
+  .pm-topbar--searching .pm-topbar__tabs { display: none; }
+  .pm-searchwrap { flex: 1 1 auto; }
+  .pm-results { width: calc(100vw - 12px); left: -6px; }
+}

@@ -173,3 +173,23 @@
   .pm-assistant { max-width: none; flex-basis: 100%; height: min(560px, 85%); border-left: 0; border-top: 1px solid var(--border); }
   .pm-assistant--collapsed { min-height: 0; flex-direction: row; justify-content: flex-start; padding: 8px 16px; gap: 8px; }
 }
+
+/* Telefono: barra di contesto su una riga, niente mini-mappa, margini ridotti */
+@media (max-width: 640px) {
+  .pm-contextbar { padding: 8px 10px; gap: 8px; flex-wrap: nowrap; }
+  .pm-contextbar__path { display: none; }
+  .pm-contextbar__back { padding: 0 9px; }
+  .pm-contextbar__backtext { display: none; }
+  .pm-contextbar__pos { flex: 1; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pm-carousel__stage { padding: 0 8px; gap: 0; }
+  .pm-minimap { display: none; }
+  .pm-msg--focused { padding: 16px; gap: 12px; border-radius: var(--r-2xl); }
+  .pm-msg__head { gap: 10px; }
+  .pm-msg__side { align-items: flex-start; margin-left: 0; width: 100%; }
+  .pm-msg__actions { justify-content: flex-start; }
+  .pm-msg--compact { width: 94%; }
+  .pm-draft__row { padding: 10px 14px; }
+  .pm-draft__body { padding: 14px; }
+  .pm-draft__tools, .pm-draft__files { padding-left: 14px; padding-right: 14px; }
+  .pm-send { padding: 12px 14px; }
+}

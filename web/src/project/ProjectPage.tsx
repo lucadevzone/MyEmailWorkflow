@@ -146,6 +146,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
 
   return (
     <div className="pm-project">
+      <h1 className="pm-sr-only">{project?.name ?? (projectKey === SYSTEM_INBOX ? 'Da smistare' : 'News')}</h1>
       {isProject && editing.mode === 'rail' && <RailEditor projectId={projectKey} onDone={() => editing.setMode(null)} />}
       {isProject && editing.mode !== 'rail' && (
         <Rail
@@ -157,7 +158,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
           onOpenPerson={(key) => navigate(`${paths.contacts()}?focus=${encodeURIComponent(key)}`)}
         />
       )}
-      <div style={{ flex: '999 1 480px', minWidth: 0, display: 'flex', position: 'relative' }}>
+      <div className="pm-project__main">
       {editing.mode === 'rail' && <EditingDimmer />}
       <section className="pm-convlist" aria-label="Conversazioni">
         <div className="pm-subtabs">

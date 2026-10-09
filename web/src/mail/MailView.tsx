@@ -445,8 +445,14 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   return (
     <div className="pm-mailpage">
       <div className="pm-contextbar">
-        <button type="button" className="pm-btn pm-btn--secondary pm-contextbar__back" onClick={backToConversation}>
-          <Ic icon={ArrowLeft} size={17} /> {conversationId ? 'Torna alla conversazione' : 'Torna al progetto'}
+        <button
+          type="button"
+          className="pm-btn pm-btn--secondary pm-contextbar__back"
+          onClick={backToConversation}
+          aria-label={conversationId ? 'Torna alla conversazione' : 'Torna al progetto'}
+        >
+          <Ic icon={ArrowLeft} size={17} />
+          <span className="pm-contextbar__backtext">{conversationId ? 'Torna alla conversazione' : 'Torna al progetto'}</span>
         </button>
         <span className="pm-contextbar__path">
           {projectName}
