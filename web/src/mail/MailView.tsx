@@ -190,6 +190,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   // Elemento richiesto da un comando: a fine scorrimento si completa il movimento con le misure aggiornate
   // (aprendosi, la bozza cambia la geometria mentre lo scorrimento animato è in corso).
   const goal = useRef<number | null>(null);
+  const goalAt = useRef(0);
 
   // Elemento in focus = quello il cui tratto contiene la posizione; l'indirizzo lo segue.
   const pos = useRef(focus);
@@ -223,11 +224,28 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
       const k = Math.max(0, Math.min(n, i));
       pinned.current = false;
       goal.current = k;
+      goalAt.current = performance.now();
       const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       el.scrollTo({ top: target(k), behavior: reduce ? 'auto' : 'smooth' });
     },
     [conversationId, n, target],
   );
+  // Passo relativo: pressioni ravvicinate partono dalla meta già richiesta, non dal messaggio attuale.
+  const step = useCallback((delta: number) => goTo((goal.current ?? pos.current) + delta), [goTo]);
+
+  // Finché la meta di un comando non è raggiunta, ogni cambio di geometria (la bozza che si apre e si
+  // misura, l'HTML che finisce di caricare) riporta lo scorrimento sulla posizione aggiornata.
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el || goal.current === null) return;
+    if (performance.now() - goalAt.current > 4000) {
+      goal.current = null;
+      return;
+    }
+    if (indexAt(el.scrollTop, L) !== goal.current) return; // ancora in viaggio: ci pensa lo scorrimento in corso
+    const t = target(goal.current);
+    if (Math.abs(el.scrollTop - t) > 4) el.scrollTo({ top: t, behavior: 'smooth' });
+  }, [L, target]);
 
   // All'apertura, e quando il focus cambia per un motivo esterno allo scorrimento (es. "Rispondi"), si va
   // all'elemento e ci si resta agganciati mentre le schede vengono misurate, finché l'utente non scorre.
@@ -256,7 +274,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     const settle = () => {
       if (goal.current === null) return;
       const t = targetRef.current(goal.current);
-      if (Math.abs(el.scrollTop - t) > 4 && el.scrollHeight - el.clientHeight >= t - 4) el.scrollTo({ top: t, behavior: 'smooth' });
+      if (Math.abs(el.scrollTop - t) > 4) el.scrollTo({ top: t, behavior: 'smooth' });
       else goal.current = null;
     };
     el.addEventListener('scrollend', settle);
@@ -289,10 +307,10 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
       if (document.querySelector('[role="dialog"]')) return;
       if (e.key === 'j' || e.key === 'ArrowDown') {
         e.preventDefault();
-        goTo(pos.current + 1);
+        step(1);
       } else if (e.key === 'k' || e.key === 'ArrowUp') {
         e.preventDefault();
-        goTo(pos.current - 1);
+        step(-1);
       } else if (e.key === 'r' && focus < n) {
         e.preventDefault();
         compose({ conversationId, replyTo: messages[focus], replyAll: true, projectId: d?.projectId ?? null });
@@ -302,7 +320,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [goTo, focus, n, compose, conversationId, messages, d?.projectId, backToConversation]);
+  }, [step, focus, n, compose, conversationId, messages, d?.projectId, backToConversation]);
 
   const onSent = (info: SentInfo) => navigate(paths.conversation(info.projectId, info.conversationId));
   // La scheda resta montata quando è lei stessa a creare la bozza (new → id); per ogni altra bozza si rimonta.
@@ -437,10 +455,10 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
         <span className="pm-contextbar__pos" aria-live="polite">{position}</span>
         {conversationId && (
           <span className="pm-contextbar__nav">
-            <button type="button" className="pm-squarebtn" aria-label="Messaggio precedente" disabled={focus === 0} onClick={() => goTo(focus - 1)}>
+            <button type="button" className="pm-squarebtn" aria-label="Messaggio precedente" disabled={focus === 0} onClick={() => step(-1)}>
               <Ic icon={ChevronUp} />
             </button>
-            <button type="button" className="pm-squarebtn" aria-label="Messaggio successivo" disabled={focus >= n} onClick={() => goTo(focus + 1)}>
+            <button type="button" className="pm-squarebtn" aria-label="Messaggio successivo" disabled={focus >= n} onClick={() => step(1)}>
               <Ic icon={ChevronDown} />
             </button>
           </span>
