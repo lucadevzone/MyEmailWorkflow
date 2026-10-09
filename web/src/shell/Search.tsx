@@ -47,6 +47,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
   const [sel, setSel] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const t = window.setTimeout(() => setQ(text.trim()), 250);
@@ -66,18 +67,29 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
   const setScope = (only: boolean) => {
     setOnlyCurrent(only);
     setSel(0);
+    input.current?.focus();
     try {
       localStorage.setItem(SCOPE_KEY, only ? 'current' : 'all');
     } catch {}
   };
 
-  // Chiude con Esc o con un clic fuori dal campo e dal pannello.
+  // Chiude con Esc (ovunque sia il focus) o con un clic fuori dal campo e dal pannello.
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
       if (box.current && !box.current.contains(e.target as Node)) onClose();
     };
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || document.querySelector('[role="alertdialog"]')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    };
     document.addEventListener('pointerdown', onDown);
-    return () => document.removeEventListener('pointerdown', onDown);
+    window.addEventListener('keydown', onEsc, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('keydown', onEsc, true);
+    };
   }, [onClose]);
 
   const projectLabel = (h: { projectId: string | null; isNoise: boolean }) =>
@@ -168,10 +180,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
   }, [sel]);
 
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-    } else if (e.key === 'ArrowDown' && total) {
+    if (e.key === 'ArrowDown' && total) {
       e.preventDefault();
       setSel((sel + 1) % total);
     } else if (e.key === 'ArrowUp' && total) {
@@ -189,6 +198,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
       <label className="pm-search">
         <Ic icon={SearchIcon} size={17} />
         <input
+          ref={input}
           autoFocus
           role="combobox"
           aria-expanded={q.length >= 2}
