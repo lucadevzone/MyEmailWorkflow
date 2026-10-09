@@ -24,6 +24,7 @@ import { TaskService } from './tasks/service.ts';
 import { extractTasks } from './ai/extract-tasks.ts';
 import { suggestActions } from './ai/suggest-actions.ts';
 import { DraftService } from './drafts/service.ts';
+import { SearchService } from './search/service.ts';
 import { AssistantService, ollamaStream, type ChatStream } from './ai/assistant.ts';
 
 export interface ServiceOverrides {
@@ -67,5 +68,6 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
   const suggestions = new SuggestionService(db, actions, tasks);
   const assistant = new AssistantService({ db, stream: o.chatStream ?? ollamaStream, llm });
   const drafts = new DraftService({ db, blobs, actions, assistant });
-  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions, tasks, drafts, assistant };
+  const search = new SearchService({ sqlite, embedder });
+  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions, tasks, drafts, assistant, search };
 }

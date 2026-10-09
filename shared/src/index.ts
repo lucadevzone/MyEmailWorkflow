@@ -459,3 +459,52 @@ export interface ReplyIdea {
   title: string;
   description: string;
 }
+
+// ─── Ricerca unica (S5) ──────────────────────────────────────────────────────
+
+/** Ambito: tutto, un progetto, oppure le due viste di sistema. */
+export type SearchScope = 'all' | 'inbox' | 'news' | `project:${string}`;
+
+interface SearchHitBase {
+  conversationId: string | null;
+  projectId: string | null;
+  isNoise: boolean;
+}
+
+export interface SearchConversationHit extends SearchHitBase {
+  conversationId: string;
+  /** Messaggio più pertinente: è lì che porta il risultato. */
+  messageId: string;
+  title: string;
+  snippet: string;
+  participants: PersonRef[];
+  date: number;
+}
+
+export interface SearchFileHit extends SearchHitBase {
+  kind: 'attachment' | 'resource';
+  id: string;
+  title: string;
+  /** Conversazione o progetto di provenienza. */
+  context: string;
+  size: number | null;
+}
+
+export interface SearchItemHit extends SearchHitBase {
+  kind: 'task' | 'note';
+  id: string;
+  title: string;
+  snippet: string;
+  done: boolean;
+}
+
+export interface SearchResults {
+  query: string;
+  /** Parole cercate, per evidenziarle. */
+  terms: string[];
+  conversations: SearchConversationHit[];
+  files: SearchFileHit[];
+  items: SearchItemHit[];
+  /** false se la ricerca per significato non era disponibile (Ollama spento): solo parole esatte. */
+  semantic: boolean;
+}

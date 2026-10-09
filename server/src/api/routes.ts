@@ -20,6 +20,8 @@ import { ActionError, composeSchema, type MailActions } from '../actions/mail-ac
 import type { ActivityQueueDto, ConversationView } from '@mmw/shared';
 import { ZodError, type ZodType } from 'zod';
 import { Readable } from 'node:stream';
+import type { SearchScope } from '@mmw/shared';
+import type { SearchService } from '../search/service.ts';
 import { chatInputSchema, threadOf, type AssistantService } from '../ai/assistant.ts';
 import { draftCreateSchema, draftPatchSchema, type DraftService } from '../drafts/service.ts';
 
@@ -45,6 +47,7 @@ export interface RouteDeps {
   tasks: TaskService;
   drafts: DraftService;
   assistant: AssistantService;
+  search: SearchService;
 }
 
 function parse<T>(schema: ZodType<T>, body: unknown): T {
@@ -529,6 +532,15 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     const res = deps.drafts.send(req.params.id, req.body?.urgent === true);
     touched(res.previousConversationId);
     return reply.code(201).send(res);
+  });
+
+  // ─── Ricerca ───────────────────────────────────────────────────────────────
+
+  app.get<{ Querystring: { q?: string; scope?: string } }>('/api/search', async (req) => {
+    const q = String(req.query.q ?? '').slice(0, 300);
+    const raw = String(req.query.scope ?? 'all');
+    const scope: SearchScope = raw === 'inbox' || raw === 'news' || /^project:[\w-]+$/.test(raw) ? (raw as SearchScope) : 'all';
+    return deps.search.search(q, scope);
   });
 
   // ─── Assistente ────────────────────────────────────────────────────────────
