@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { ProjectDto } from '@mmw/shared';
 import { useServerEvents } from './events.ts';
 import { TopBar } from './shell/TopBar.tsx';
@@ -18,9 +18,11 @@ export function App() {
   const [dialog, setDialog] = useState<null | { project?: ProjectDto }>(null);
 
   const editing = useEditing();
+  // Nella vista email (lettura e scrittura) la barra dei progetti lascia il posto alla barra di contesto.
+  const mailMode = /^\/p\/[^/]+\/(c\/[^/]+\/)?(m|draft)\//.test(useLocation().pathname);
   return (
     <div className="pm-app">
-      <TopBar onNewProject={() => setDialog({})} onEditProject={(p) => setDialog({ project: p })} />
+      {!mailMode && <TopBar onNewProject={() => setDialog({})} onEditProject={(p) => setDialog({ project: p })} />}
       <main className="pm-content" style={{ position: 'relative' }}>
         {editing.mode === 'projects' && <EditingDimmer />}
         <Routes>

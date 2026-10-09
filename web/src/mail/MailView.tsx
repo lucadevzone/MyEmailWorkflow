@@ -17,6 +17,44 @@ const time = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digi
 /** Linea di lettura (frazione dell'altezza visibile): il messaggio che la attraversa è quello in focus. */
 const READING_LINE = 0.3;
 
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SWAP_MS = 260;
+
+/** Fotografia della scheda in focus prima del cambio: una copia statica (gli iframe diventano riquadri bianchi). */
+function snapshot(root: HTMLElement | null, idx: number, dir: 'down' | 'up') {
+  const card = root?.querySelector<HTMLElement>(`[data-idx="${idx}"] > :first-child`);
+  if (!card || reducedMotion()) return null;
+  const clone = card.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll('iframe').forEach((f) => {
+    const box = document.createElement('div');
+    box.style.cssText = `height:${f.getBoundingClientRect().height}px;background:#fff`;
+    f.replaceWith(box);
+  });
+  return { idx, clone, rect: card.getBoundingClientRect(), dir };
+}
+
+/** Passaggio di focus: la vecchia scheda si richiude sulla sua riga, la nuova si apre dal bordo da cui entra. */
+function animateSwap(root: HTMLElement, from: NonNullable<ReturnType<typeof snapshot>>, newItem: HTMLElement) {
+  const box = root.getBoundingClientRect();
+  const at = (r: DOMRect) => ({ top: `${r.top - box.top + root.scrollTop}px`, left: `${r.left - box.left + root.scrollLeft}px`, width: `${r.width}px`, height: `${r.height}px` });
+  const row = root.querySelector<HTMLElement>(`[data-idx="${from.idx}"] > :first-child`);
+  const ghost = from.clone;
+  Object.assign(ghost.style, { position: 'absolute', margin: '0', zIndex: '2', pointerEvents: 'none', overflow: 'hidden', boxSizing: 'border-box', ...at(from.rect) });
+  ghost.setAttribute('aria-hidden', 'true');
+  root.appendChild(ghost);
+  const end = row ? at(row.getBoundingClientRect()) : { ...at(from.rect), height: '34px' };
+  ghost
+    .animate([{ ...at(from.rect), opacity: 1 }, { ...end, opacity: 0 }], { duration: SWAP_MS, easing: 'cubic-bezier(.4,0,.2,1)' })
+    .finished.catch(() => {})
+    .finally(() => ghost.remove());
+  // Se la pagina non disegna (finestra nascosta) l'animazione resta ferma: la copia va tolta comunque.
+  window.setTimeout(() => ghost.remove(), SWAP_MS + 150);
+
+  const card = newItem.firstElementChild as HTMLElement | null;
+  const closed = from.dir === 'down' ? 'inset(0 0 calc(100% - 34px) 0 round 18px)' : 'inset(calc(100% - 34px) 0 0 0 round 18px)';
+  card?.animate([{ clipPath: closed, opacity: 0.5 }, { clipPath: 'inset(0 0 0 0 round 18px)', opacity: 1 }], { duration: SWAP_MS, easing: 'cubic-bezier(.4,0,.2,1)' });
+}
+
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
 
@@ -46,6 +84,8 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   const scrollTo = useRef<{ idx: number; smooth: boolean } | null>(null);
   // Durante uno scorrimento programmato il focus non segue la posizione.
   const quietUntil = useRef(0);
+  // Copia della scheda che si chiude, per l'animazione di passaggio.
+  const closing = useRef<{ idx: number; clone: HTMLElement; rect: DOMRect; dir: 'down' | 'up' } | null>(null);
   const draftHandle = useRef<DraftHandle | null>(null);
 
   const messages: MessageDto[] = useMemo(() => [...(d?.messages ?? [])].sort((a, b) => a.date - b.date), [d]);
@@ -79,6 +119,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
       if (!conversationId) return;
       const target = Math.max(0, Math.min(n, i));
       if (target === pos.current) return;
+      closing.current = snapshot(carousel.current, pos.current, target > pos.current ? 'down' : 'up');
       if (how === 'scroll') {
         const el = carousel.current?.querySelector<HTMLElement>(`[data-idx="${target}"]`);
         const r = el?.getBoundingClientRect();
@@ -170,10 +211,14 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     } else if (scrollTo.current?.idx === focus) {
       const box = el.getBoundingClientRect();
       const delta = item.getBoundingClientRect().top - (box.top + box.height * READING_LINE) + 24;
-      const smooth = scrollTo.current.smooth && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const smooth = scrollTo.current.smooth && !reducedMotion();
       quietUntil.current = performance.now() + (smooth ? 700 : 100);
       el.scrollTo({ top: el.scrollTop + delta, behavior: smooth ? 'smooth' : 'auto' });
       scrollTo.current = null;
+    }
+    if (closing.current) {
+      animateSwap(el, closing.current, item);
+      closing.current = null;
     }
   }, [focus, ready, draftId]);
 
