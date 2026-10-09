@@ -10,16 +10,19 @@ import { PeoplePage } from './people/PeoplePage.tsx';
 import { ActivitiesPage } from './activities/ActivitiesPage.tsx';
 import { SettingsPage } from './settings/SettingsPage.tsx';
 import { ProjectDialog } from './projects/ProjectDialog.tsx';
+import { EditingDimmer, useEditing } from './ui/editing.tsx';
 
 export function App() {
   useServerEvents();
   const navigate = useNavigate();
   const [dialog, setDialog] = useState<null | { project?: ProjectDto }>(null);
 
+  const editing = useEditing();
   return (
     <div className="pm-app">
       <TopBar onNewProject={() => setDialog({})} onEditProject={(p) => setDialog({ project: p })} />
-      <main className="pm-content">
+      <main className="pm-content" style={{ position: 'relative' }}>
+        {editing.mode === 'projects' && <EditingDimmer />}
         <Routes>
           <Route path="/" element={<Navigate to={paths.project(SYSTEM_INBOX)} replace />} />
           <Route path="/p/:projectId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />

@@ -74,6 +74,8 @@ export const projects = sqliteTable('projects', {
   outgoingAccountId: text('outgoing_account_id').notNull().references(() => accounts.id),
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
   color: text('color'),
+  /** Ordine nella barra dei progetti (indice frazionario); NULL = in fondo, per nome. */
+  rank: text('rank'),
   ...meta(),
 });
 
@@ -209,6 +211,8 @@ export const projectContacts = sqliteTable(
   {
     projectId: text('project_id').notNull().references(() => projects.id),
     contactId: text('contact_id').notNull().references(() => contacts.id),
+    /** Ordine nella barra contatti del progetto. */
+    rank: text('rank'),
     createdAt: integer('created_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.projectId, t.contactId] })],
@@ -220,6 +224,8 @@ export const projectGroups = sqliteTable(
   {
     projectId: text('project_id').notNull().references(() => projects.id),
     groupId: text('group_id').notNull().references(() => contactGroups.id),
+    /** Ordine nella barra contatti del progetto. */
+    rank: text('rank'),
     createdAt: integer('created_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.projectId, t.groupId] })],

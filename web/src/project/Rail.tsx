@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type MouseEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Users, X } from 'lucide-react';
+import { ArrowDownUp, Pencil, Plus, Users, X } from 'lucide-react';
 import type { GroupDto, PersonDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { shortName } from '../lib/format.ts';
@@ -14,8 +14,9 @@ type Pick = { key: string; emails: string[] };
  * Barra contatti del progetto (D4). Un clic su una persona o un gruppo apre una nuova mail indirizzata
  * a loro; con Ctrl/⌘ + clic se ne selezionano più d'uno. "Tutti" = contatti e membri dei gruppi, senza doppioni.
  */
-export function Rail({ projectId, filter, onFilter, onCompose, onOpenPerson }: {
+export function Rail({ projectId, filter, onFilter, onCompose, onOpenPerson, onManage }: {
   projectId: string;
+  onManage: () => void;
   filter: string | null;
   onFilter: (key: string | null) => void;
   onCompose: (emails: string[]) => void;
@@ -102,6 +103,9 @@ export function Rail({ projectId, filter, onFilter, onCompose, onOpenPerson }: {
 
       <button type="button" className="pm-rail__add" aria-label="Aggiungi persona o gruppo" title="Aggiungi persona o gruppo" onClick={() => setAdding(!adding)}>
         <Ic icon={Plus} size={15} />
+      </button>
+      <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Riordina o rimuovi persone e gruppi" title="Gestisci" onClick={onManage}>
+        <Ic icon={ArrowDownUp} size={15} />
       </button>
       {adding && <AddMember projectId={projectId} onDone={() => setAdding(false)} />}
     </aside>

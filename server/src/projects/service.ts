@@ -4,6 +4,7 @@ import type { ProjectDto } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
 import { accounts, conversations, messages, projects } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
+import { rankBetween } from '../lib/rank.ts';
 
 export const projectInputSchema = z.object({
   name: z.string().trim().min(1, 'Il nome è obbligatorio'),
@@ -24,7 +25,8 @@ export class ProjectService {
       .select()
       .from(projects)
       .where(isNull(projects.deletedAt))
-      .orderBy(asc(projects.archived), asc(projects.name))
+      // Ordine scelto dall'utente; i progetti mai riordinati vanno in fondo, per nome.
+      .orderBy(asc(projects.archived), sql`${projects.rank} is null`, asc(projects.rank), asc(projects.name))
       .all();
 
     const stats = this.db
@@ -100,6 +102,38 @@ export class ProjectService {
       .where(and(eq(projects.id, id), isNull(projects.deletedAt)))
       .run();
     return res.changes ? this.get(id) : undefined;
+  }
+
+  /** Nuovo ordine della barra dei progetti (gli id non elencati restano in fondo). */
+  reorder(ids: string[]) {
+    let prev: string | null = null;
+    const t = now();
+    this.db.transaction((tx) => {
+      for (const id of ids) {
+        const rank = rankBetween(prev, null);
+        tx.update(projects).set({ rank, updatedAt: t }).where(eq(projects.id, id)).run();
+        prev = rank;
+      }
+    });
+  }
+
+  /**
+   * Rimuove un progetto dalla barra: le sue conversazioni tornano in Da smistare, mentre note, task e
+   * risorse restano legati al progetto, che viene archiviato.
+   */
+  remove(id: string): { movedConversations: number } {
+    const p = this.db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, id), isNull(projects.deletedAt))).get();
+    if (!p) throw new ProjectError('Progetto non trovato');
+    const t = now();
+    return this.db.transaction((tx) => {
+      const res = tx
+        .update(conversations)
+        .set({ projectId: null, classifiedAt: null, updatedAt: t })
+        .where(and(eq(conversations.projectId, id), isNull(conversations.deletedAt)))
+        .run();
+      tx.update(projects).set({ archived: true, rank: null, updatedAt: t }).where(eq(projects.id, id)).run();
+      return { movedConversations: res.changes };
+    });
   }
 
   private assertAccount(accountId: string) {

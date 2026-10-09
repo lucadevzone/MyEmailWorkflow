@@ -57,6 +57,13 @@
       "when": 1791444156434,
       "tag": "0007_task_due_text",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791553337442,
+      "tag": "0008_ranks",
+      "breakpoints": true
     }
   ]
 }

@@ -259,6 +259,30 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return reply.code(201).send(project);
   });
 
+  app.put<{ Body: { ids?: unknown } }>('/api/projects/order', async (req, reply) => {
+    const ids = req.body?.ids;
+    if (!Array.isArray(ids) || !ids.every((x) => typeof x === 'string')) return reply.code(400).send({ error: 'ids deve essere un elenco' });
+    projectsSvc.reorder(ids as string[]);
+    bus.publish({ type: 'projects' });
+    return { ok: true };
+  });
+
+  app.post<{ Params: { id: string } }>('/api/projects/:id/remove', async (req) => {
+    const res = projectsSvc.remove(req.params.id);
+    reclassifyInbox(deps.db);
+    bus.publish({ type: 'projects' });
+    bus.publish({ type: 'conversations', ids: [] });
+    return res;
+  });
+
+  app.put<{ Params: { id: string }; Body: { keys?: unknown } }>('/api/projects/:id/members/order', async (req, reply) => {
+    const keys = req.body?.keys;
+    if (!Array.isArray(keys) || !keys.every((x) => typeof x === 'string')) return reply.code(400).send({ error: 'keys deve essere un elenco' });
+    deps.people.reorderProjectMembers(req.params.id, keys as string[]);
+    bus.publish({ type: 'people' });
+    return { ok: true };
+  });
+
   app.patch<{ Params: { id: string } }>('/api/projects/:id', async (req, reply) => {
     const patch = parse(projectPatchSchema, req.body);
     const project = projectsSvc.update(req.params.id, patch);

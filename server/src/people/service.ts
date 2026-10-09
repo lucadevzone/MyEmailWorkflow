@@ -1,7 +1,7 @@
 // Persone: contatti confermati (con più indirizzi) e indirizzi visti nelle email ma non ancora confermati.
 // Chiave di una persona: "c:<contactId>" oppure "a:<addressId>".
 
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { GroupDto, PeopleDirectoryDto, PersonDto, ProjectMembersDto, ProjectSuggestion } from '@mmw/shared';
 import type Database from 'better-sqlite3';
@@ -20,6 +20,7 @@ import {
 } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
 import type { BlobStore } from '../store/blobs.ts';
+import { rankBetween } from '../lib/rank.ts';
 
 /** URL della foto; la parte "v" cambia con l'immagine, così il browser non usa quella vecchia in cache. */
 const avatarUrl = (contactId: string, sha: string | null) => (sha ? `/api/contacts/${contactId}/avatar?v=${sha.slice(0, 12)}` : null);
@@ -378,7 +379,7 @@ export class PeopleService {
       .select({ id: projectContacts.contactId })
       .from(projectContacts)
       .where(eq(projectContacts.projectId, projectId))
-      .orderBy(projectContacts.createdAt)
+      .orderBy(sql`${projectContacts.rank} is null`, projectContacts.rank, projectContacts.createdAt)
       .all()
       .map((r) => r.id);
     const info = this.contactInfo(contactIds);
@@ -393,7 +394,7 @@ export class PeopleService {
       .from(projectGroups)
       .innerJoin(contactGroups, eq(contactGroups.id, projectGroups.groupId))
       .where(and(eq(projectGroups.projectId, projectId), isNull(contactGroups.deletedAt)))
-      .orderBy(projectGroups.createdAt)
+      .orderBy(sql`${projectGroups.rank} is null`, projectGroups.rank, projectGroups.createdAt)
       .all()
       .map((r) => r.id);
     return { contacts: people, groups: this.groupsById(groupIds) };
@@ -417,6 +418,26 @@ export class PeopleService {
             return { key: `c:${m.contactId}`, contactId: m.contactId, name: c.name, emails: c.emails, conversationCount: 0, lastSeenAt: null, avatarUrl: c.avatarUrl };
           }),
       }));
+  }
+
+  /** Nuovo ordine della barra contatti: chiavi "c:<contatto>" e "g:<gruppo>" (gruppi e persone ordinati a parte). */
+  reorderProjectMembers(projectId: string, keys: string[]) {
+    let prevC: string | null = null;
+    let prevG: string | null = null;
+    this.db.transaction((tx) => {
+      for (const key of keys) {
+        const id = key.slice(2);
+        if (key.startsWith('c:')) {
+          const rank = rankBetween(prevC, null);
+          tx.update(projectContacts).set({ rank }).where(and(eq(projectContacts.projectId, projectId), eq(projectContacts.contactId, id))).run();
+          prevC = rank;
+        } else if (key.startsWith('g:')) {
+          const rank = rankBetween(prevG, null);
+          tx.update(projectGroups).set({ rank }).where(and(eq(projectGroups.projectId, projectId), eq(projectGroups.groupId, id))).run();
+          prevG = rank;
+        }
+      }
+    });
   }
 
   addGroupToProject(projectId: string, groupId: string) {

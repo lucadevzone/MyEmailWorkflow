@@ -138,6 +138,31 @@ describe('contatti del progetto', () => {
   });
 });
 
+describe('gestione: ordine e rimozione', () => {
+  it('riordina i progetti e la barra contatti; rimuovere un progetto riporta le conversazioni in Da smistare', async () => {
+    const projectsSvc = new ProjectService(s.db);
+    const corso = projectsSvc.create({ name: 'Corso', outgoingAccountId: accountId }).id;
+    const zeta = projectsSvc.create({ name: 'Zeta', outgoingAccountId: accountId }).id;
+    expect(projectsSvc.list().map((p) => p.name)).toEqual(['Corso', 'PNRR', 'Zeta']);
+    projectsSvc.reorder([zeta, projectId, corso]);
+    expect(projectsSvc.list().map((p) => p.name)).toEqual(['Zeta', 'PNRR', 'Corso']);
+
+    const a = s.people.addToProject(projectId, { name: 'Anna', email: 'anna@y.it' });
+    const m = s.people.addToProject(projectId, { name: 'Mario', email: 'mario@x.it' });
+    s.people.reorderProjectMembers(projectId, [m.key, a.key]);
+    expect(s.people.projectMembers(projectId).contacts.map((c) => c.name)).toEqual(['Mario', 'Anna']);
+
+    const r = await mail({ id: '<1@x>', from: 'mario@x.it', subject: 'S', body: 'b' });
+    s.actions.move(r.conversationId, projectId);
+    s.notes.createNote({ conversationId: r.conversationId, body: 'nota' });
+    expect(projectsSvc.remove(projectId)).toEqual({ movedConversations: 1 });
+    expect(new ConversationService(s.db).list({ view: 'inbox' }).map((c) => c.id)).toEqual([r.conversationId]);
+    expect(projectsSvc.get(projectId)!.archived).toBe(true);
+    // La nota resta legata al progetto archiviato.
+    expect(new ConversationService(s.db).get(r.conversationId)!.notes[0]!.projectId).toBe(projectId);
+  });
+});
+
 describe('unione dei contatti', () => {
   it('unisce due contatti: indirizzi, gruppi, progetti e foto passano al primo', async () => {
     await mail({ id: '<1@x>', from: 'luca@cnr.it', subject: 'A', body: 'b' });

@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { NavLink, useMatch, useNavigate } from 'react-router-dom';
-import { Inbox, Plus, SlidersHorizontal, Users } from 'lucide-react';
+import { ArrowRightLeft, Inbox, Plus, SlidersHorizontal, Users } from 'lucide-react';
+import { useEditing } from '../ui/editing.tsx';
+import { ProjectsEditor } from './ProjectsEditor.tsx';
 import type { ProjectDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
@@ -10,9 +12,12 @@ import { paths, SYSTEM_INBOX, SYSTEM_NEWS } from './paths.ts';
 
 /** Barra superiore (D1/D2): tab dei progetti tra i due progetti di sistema; a destra Contatti e Impostazioni. */
 export function TopBar({ onNewProject, onEditProject }: { onNewProject: () => void; onEditProject: (p: ProjectDto) => void }) {
+  const editing = useEditing();
   const { data: counts } = useQuery({ queryKey: ['counts'], queryFn: api.conversationCounts });
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const active = projects.filter((p) => !p.archived);
+
+  if (editing.mode === 'projects') return <ProjectsEditor onDone={() => editing.setMode(null)} />;
 
   return (
     <header className="pm-topbar">
@@ -25,6 +30,11 @@ export function TopBar({ onNewProject, onEditProject }: { onNewProject: () => vo
         <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Nuovo progetto" title="Nuovo progetto" onClick={onNewProject}>
           <Ic icon={Plus} size={15} />
         </button>
+        {active.length > 0 && (
+          <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Riordina o rimuovi progetti" title="Gestisci progetti" onClick={() => editing.setMode('projects')}>
+            <Ic icon={ArrowRightLeft} size={15} />
+          </button>
+        )}
         <span className="pm-topbar__tabsep" aria-hidden="true" />
         <Tab to={paths.project(SYSTEM_NEWS)} label="News" unread={counts?.noiseUnread} />
       </nav>

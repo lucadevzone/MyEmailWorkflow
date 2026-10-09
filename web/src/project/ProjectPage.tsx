@@ -14,6 +14,8 @@ import { paths, SYSTEM_INBOX, SYSTEM_NEWS } from '../shell/paths.ts';
 import { ConversationItem } from './ConversationItem.tsx';
 import { Rail } from './Rail.tsx';
 import { TasksSidebar } from './TasksSidebar.tsx';
+import { RailEditor } from './RailEditor.tsx';
+import { EditingDimmer, useEditing } from '../ui/editing.tsx';
 
 const PAGE = 50;
 const focusKey = (projectKey: string) => `mmw.focus.${projectKey}`;
@@ -50,6 +52,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, onEditProje
   const [archived, setArchived] = useState(false);
   const [person, setPerson] = useState<string | null>(null);
   const [compose, setCompose] = useState<{ request: ComposeRequest; key: number } | null>(null);
+  const editing = useEditing();
 
   const query: ConversationQuery = useMemo(
     () => ({
@@ -122,15 +125,19 @@ export function ProjectPage({ projectKey, conversationId, messageId, onEditProje
 
   return (
     <div className="pm-project">
-      {isProject && (
+      {isProject && editing.mode === 'rail' && <RailEditor projectId={projectKey} onDone={() => editing.setMode(null)} />}
+      {isProject && editing.mode !== 'rail' && (
         <Rail
           projectId={projectKey}
+          onManage={() => editing.setMode('rail')}
           filter={person}
           onFilter={setPerson}
           onCompose={(to) => pane.compose({ to, projectId: projectKey })}
           onOpenPerson={(key) => navigate(`${paths.contacts()}?focus=${encodeURIComponent(key)}`)}
         />
       )}
+      <div style={{ flex: '999 1 480px', minWidth: 0, display: 'flex', position: 'relative' }}>
+      {editing.mode === 'rail' && <EditingDimmer />}
       <section className="pm-convlist" aria-label="Conversazioni">
         <div className="pm-subtabs">
           <button type="button" className="pm-subtab" aria-current={!archived ? 'true' : undefined} onClick={() => setArchived(false)}>
@@ -181,6 +188,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, onEditProje
         </div>
       </section>
       {isProject && <TasksSidebar projectId={projectKey} />}
+      </div>
 
       {/* Provvisori fino al carosello (F4): lettura e scrittura in un pannello laterale. */}
       {messageId && conversationId && (

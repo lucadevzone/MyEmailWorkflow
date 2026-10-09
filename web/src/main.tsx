@@ -5,6 +5,7 @@ import { App } from './App.tsx';
 import { ToastProvider } from './ui/toast.tsx';
 import { ConfirmProvider } from './ui/confirm.tsx';
 import { ContextMenuProvider } from './ui/contextMenu.tsx';
+import { EditingProvider } from './ui/editing.tsx';
 import 'material-symbols/outlined.css';
 import '@fontsource/geist-sans/400.css';
 import '@fontsource/geist-sans/500.css';
@@ -19,6 +20,7 @@ import './styles/components/statusbar.css';
 import './styles/components/buttons.css';
 import './styles/components/people.css';
 import './styles/components/project.css';
+import './styles/components/manage.css';
 import { BrowserRouter } from 'react-router-dom';
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } });
@@ -30,7 +32,9 @@ createRoot(document.getElementById('root')!).render(
       <ToastProvider>
         <ConfirmProvider>
           <ContextMenuProvider>
-            <App />
+            <EditingProvider>
+              <App />
+            </EditingProvider>
           </ContextMenuProvider>
         </ConfirmProvider>
       </ToastProvider>
