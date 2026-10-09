@@ -94,7 +94,7 @@ export function ContextMenuProvider({ children }: { children: ReactNode }) {
     <MenuContext.Provider value={open}>
       {children}
       {menu && (
-        <div className="fixed inset-0 z-40" onPointerDown={(e) => e.target === e.currentTarget && close()} onContextMenu={(e) => e.preventDefault()}>
+        <div className="pm-ctx-layer" onPointerDown={(e) => e.target === e.currentTarget && close()} onContextMenu={(e) => e.preventDefault()}>
           {menu.mode === 'bar' ? (
             <Bar menu={menu} onRun={run} onClose={close} onPalette={(query) => setMenu({ ...menu, mode: 'palette', query })} />
           ) : (
@@ -114,12 +114,7 @@ function anchor(rect: DOMRect, width: number, height: number) {
   return { left, top };
 }
 
-const toneCls = (a: MenuAction) =>
-  a.tone === 'ai'
-    ? 'bg-violet-100 text-violet-800 hover:bg-violet-200 focus-visible:bg-violet-200 dark:bg-violet-900/50 dark:text-violet-200'
-    : a.tone === 'danger'
-      ? 'text-rose-700 hover:bg-rose-50 focus-visible:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/40'
-      : 'hover:bg-stone-100 focus-visible:bg-stone-100 dark:hover:bg-stone-800 dark:focus-visible:bg-stone-800';
+const toneCls = (a: MenuAction) => (a.tone ? ` pm-ctx--${a.tone}` : '');
 
 function Bar({ menu, onRun, onClose, onPalette }: { menu: OpenMenu; onRun: (a: MenuAction) => void; onClose: () => void; onPalette: (q: string) => void }) {
   const suggested = menu.actions.filter((a) => a.tone === 'ai').slice(0, MAX_SUGGESTED_IN_BAR);
@@ -157,7 +152,7 @@ function Bar({ menu, onRun, onClose, onPalette }: { menu: OpenMenu; onRun: (a: M
       role="menu"
       aria-label={menu.title ?? 'Azioni'}
       onKeyDown={onKey}
-      className="absolute flex max-w-[calc(100vw-16px)] items-center gap-0.5 rounded-full border border-stone-300 bg-white p-1 shadow-lg dark:border-stone-600 dark:bg-stone-900"
+      className="pm-ctx-bar"
       style={pos}
     >
       {[...suggested, ...main].map((a) => (
@@ -165,14 +160,14 @@ function Bar({ menu, onRun, onClose, onPalette }: { menu: OpenMenu; onRun: (a: M
           key={a.id}
           role="menuitem"
           onClick={() => onRun(a)}
-          className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm outline-none ${toneCls(a)}`}
+          className={`pm-ctx-bar__item${toneCls(a)}`}
         >
           <Icon name={a.icon} size={18} />
-          <span className="max-w-56 truncate">{a.label}</span>
+          <span className="pm-truncate" style={{ maxWidth: 224 }}>{a.label}</span>
         </button>
       ))}
       {hasMore && (
-        <button role="menuitem" onClick={() => onPalette('')} className="flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-sm text-stone-600 outline-none hover:bg-stone-100 focus-visible:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800">
+        <button role="menuitem" onClick={() => onPalette('')} className="pm-ctx-bar__item pm-ctx--more">
           <Icon name="more_horiz" size={18} /> Altro
         </button>
       )}
@@ -211,33 +206,31 @@ function Palette({ menu, onRun, onClose }: { menu: OpenMenu; onRun: (a: MenuActi
   // Posizione decisa all'apertura: filtrando la lista si accorcia, ma la palette non deve saltare.
   const [pos] = useState(() => anchor(menu.rect, 320, Math.min(56 + menu.actions.length * 36 + 40, 420)));
   return (
-    <div role="dialog" aria-label={menu.title ?? 'Azioni'} className="absolute w-80 rounded-xl border border-stone-300 bg-white p-1.5 shadow-xl dark:border-stone-600 dark:bg-stone-900" style={pos} onKeyDown={onKey}>
-      {menu.title && <div className="truncate px-2 pb-1 pt-0.5 text-xs text-stone-500">{menu.title}</div>}
+    <div role="dialog" aria-label={menu.title ?? 'Azioni'} className="pm-ctx-palette" style={pos} onKeyDown={onKey}>
+      {menu.title && <div className="pm-ctx-palette__title pm-truncate">{menu.title}</div>}
       <input
         ref={input}
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Cerca un'azione"
         aria-label="Cerca un'azione"
-        className="mb-1 h-8 w-full rounded-md border border-stone-200 bg-transparent px-2 text-sm outline-none focus:border-stone-400 dark:border-stone-700"
+        className="pm-ctx-palette__input"
       />
-      <ul role="listbox" className="max-h-80 overflow-y-auto">
-        {list.length === 0 && <li className="px-2 py-2 text-sm text-stone-500">Nessuna azione.</li>}
+      <ul role="listbox" className="pm-ctx-palette__list">
+        {list.length === 0 && <li className="pm-ctx-palette__empty">Nessuna azione.</li>}
         {list.map((a, i) => (
           <li key={a.id}>
-            {i === 0 && a.tone === 'ai' && <div className="px-2 pb-0.5 pt-1 text-[11px] uppercase tracking-wide text-stone-400">Suggerite</div>}
-            {i === firstOther && <div className="px-2 pb-0.5 pt-1 text-[11px] uppercase tracking-wide text-stone-400">Azioni</div>}
+            {i === 0 && a.tone === 'ai' && <div className="pm-ctx-palette__group">Suggerite</div>}
+            {i === firstOther && <div className="pm-ctx-palette__group">Azioni</div>}
             <button
               role="option"
               aria-selected={i === sel}
               onMouseEnter={() => setSel(i)}
               onClick={() => onRun(a)}
-              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${i === sel ? 'bg-stone-100 dark:bg-stone-800' : ''} ${
-                a.tone === 'ai' ? 'text-violet-800 dark:text-violet-200' : a.tone === 'danger' ? 'text-rose-700 dark:text-rose-300' : ''
-              }`}
+              className={`pm-ctx-palette__item${toneCls(a)}`}
             >
-              <Icon name={a.icon} size={18} className={a.tone ? '' : 'text-stone-500'} />
-              <span className="min-w-0 flex-1 truncate">{a.label}</span>
+              <Icon name={a.icon} size={18} className={a.tone ? '' : 'pm-muted'} />
+              <span className="pm-truncate" style={{ flex: 1, minWidth: 0 }}>{a.label}</span>
             </button>
           </li>
         ))}

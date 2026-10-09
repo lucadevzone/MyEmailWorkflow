@@ -6,37 +6,40 @@ import { api } from '../api.ts';
 
 export function SettingsPage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-10 p-8">
-      <h1 className="text-xl font-semibold">Impostazioni</h1>
+    <div className="pm-contacts">
+      <header className="pm-contacts__head pm-settings">
+        <h1>Impostazioni</h1>
+        <p>Account di posta, servizi locali e funzionamento della coda.</p>
+      </header>
+      <div className="pm-settings">
       <SystemStatus />
       <Accounts />
       <General />
+      </div>
     </div>
   );
 }
 
 function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-500">{title}</h2>
+    <section className="pm-panel">
+      <div className="pm-panel__head">
+        <h2>{title}</h2>
         {action}
       </div>
-      {children}
+      <div className="pm-settings__body">{children}</div>
     </section>
   );
 }
 
 function Dot({ ok }: { ok: boolean }) {
-  return <span className={`inline-block size-2 rounded-full ${ok ? 'bg-emerald-500' : 'bg-rose-500'}`} />;
+  return <span className={`pm-dot${ok ? '' : ' pm-dot--off'}`} />;
 }
 
-const card = 'rounded-lg border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900';
-const input =
-  'w-full rounded-md border border-stone-300 bg-transparent px-2 py-1.5 text-sm dark:border-stone-700 focus:outline-none focus:ring-2 focus:ring-stone-400';
-const button =
-  'rounded-md border border-stone-300 px-3 py-1.5 text-sm hover:bg-stone-100 disabled:opacity-50 dark:border-stone-700 dark:hover:bg-stone-800';
-const primary = 'rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white hover:bg-stone-700 disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900';
+const card = 'pm-settings__card';
+const input = 'pm-input';
+const button = 'pm-btn pm-btn--secondary pm-btn--sm';
+const primary = 'pm-btn pm-btn--primary pm-btn--sm';
 
 // ─── Stato del sistema ───────────────────────────────────────────────────────
 
@@ -44,34 +47,34 @@ function SystemStatus() {
   const { data, error, isLoading } = useQuery({ queryKey: ['health'], queryFn: api.health, refetchInterval: 15000 });
   return (
     <Section title="Stato del sistema">
-      <div className={`${card} space-y-2 text-sm`}>
-        {isLoading && <div className="text-stone-500">Controllo…</div>}
+      <div className={card}>
+        {isLoading && <div className="pm-muted">Controllo…</div>}
         {error && (
-          <div className="flex items-center gap-2">
+          <div className="pm-settings__line">
             <Dot ok={false} /> Backend non raggiungibile: {(error as Error).message}
           </div>
         )}
         {data && (
           <>
-            <div className="flex items-center gap-2">
-              <Dot ok={data.db.ok} /> Database SQLite {data.db.vec && <span className="text-stone-500">· sqlite-vec {data.db.vec}</span>}
+            <div className="pm-settings__line">
+              <Dot ok={data.db.ok} /> Database SQLite {data.db.vec && <span className="pm-muted">· sqlite-vec {data.db.vec}</span>}
             </div>
-            <div className="flex items-center gap-2">
-              <Dot ok={data.ollama.ok} /> Ollama <span className="text-stone-500">{data.ollama.url}</span>
-              {data.ollama.error && <span className="text-rose-600">{data.ollama.error}</span>}
+            <div className="pm-settings__line">
+              <Dot ok={data.ollama.ok} /> Ollama <span className="pm-muted">{data.ollama.url}</span>
+              {data.ollama.error && <span className="pm-error">{data.ollama.error}</span>}
             </div>
-            <div className="flex items-center gap-2 pl-4">
+            <div className="pm-settings__line pm-settings__line--sub">
               <Dot ok={data.config.llmAvailable} /> LLM <code>{data.config.llmModel}</code>
               {!data.config.llmAvailable && data.ollama.ok && (
-                <span className="text-stone-500">
+                <span className="pm-muted">
                   non installato — <code>ollama pull {data.config.llmModel}</code>
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2 pl-4">
+            <div className="pm-settings__line pm-settings__line--sub">
               <Dot ok={data.config.embedAvailable} /> Embedding <code>{data.config.embedModel}</code>
               {!data.config.embedAvailable && data.ollama.ok && (
-                <span className="text-stone-500">
+                <span className="pm-muted">
                   non installato — <code>ollama pull {data.config.embedModel}</code>
                 </span>
               )}
@@ -109,7 +112,7 @@ function Accounts() {
           }}
         />
       )}
-      {accounts.length === 0 && !adding && <div className={`${card} text-sm text-stone-500`}>Nessun account configurato.</div>}
+      {accounts.length === 0 && !adding && <div className={`${card} pm-muted`}>Nessun account configurato.</div>}
       {accounts.map((a) => (
         <AccountCard key={a.id} account={a} />
       ))}
@@ -127,16 +130,16 @@ function AccountCard({ account }: { account: AccountDto }) {
   });
 
   return (
-    <div className={`${card} space-y-3`}>
-      <div className="flex items-start justify-between gap-4">
+    <div className={card}>
+      <div className="pm-settings__acct">
         <div>
-          <div className="font-medium">{account.name}</div>
-          <div className="text-sm text-stone-500">
+          <div className="pm-row__name">{account.name}</div>
+          <div className="pm-row__sub">
             {account.email} · {account.provider === 'gmail' ? 'Gmail' : 'IMAP'} · {account.imapHost} · credenziale{' '}
             <code>{account.credentialRef}</code>
           </div>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="pm-settings__actions">
           <button className={button} disabled={test.isPending} onClick={() => test.mutate()}>
             {test.isPending ? 'Connessione…' : 'Testa connessione'}
           </button>
@@ -149,35 +152,35 @@ function AccountCard({ account }: { account: AccountDto }) {
           </button>
         </div>
       </div>
-      {test.error && <div className="text-sm text-rose-600">{(test.error as Error).message}</div>}
+      {test.error && <div className="pm-error">{(test.error as Error).message}</div>}
       {test.data && <TestResult result={test.data} />}
     </div>
   );
 }
 
 function TestResult({ result }: { result: ConnectionTestResult }) {
-  if (!result.ok) return <div className="text-sm text-rose-600">✗ {result.error}</div>;
+  if (!result.ok) return <div className="pm-error">✗ {result.error}</div>;
   return (
-    <div className="space-y-2 text-sm">
-      <div className="text-emerald-600">
+    <div className="pm-settings__test">
+      <div className="pm-ok">
         ✓ Connesso · cartella di sync: <code>{result.syncMailbox}</code>
       </div>
-      <table className="w-full text-left text-xs">
-        <thead className="text-stone-500">
+      <table className="pm-table">
+        <thead className="pm-muted">
           <tr>
-            <th className="py-1 font-normal">Cartella</th>
-            <th className="font-normal">Tipo</th>
-            <th className="text-right font-normal">Messaggi</th>
-            <th className="text-right font-normal">Non letti</th>
+            <th>Cartella</th>
+            <th>Tipo</th>
+            <th className="pm-num">Messaggi</th>
+            <th className="pm-num">Non letti</th>
           </tr>
         </thead>
         <tbody>
           {result.mailboxes?.map((m) => (
-            <tr key={m.path} className="border-t border-stone-100 dark:border-stone-800">
-              <td className="py-1">{m.path}</td>
-              <td className="text-stone-500">{m.specialUse ?? ''}</td>
-              <td className="text-right tabular-nums">{m.messages ?? '–'}</td>
-              <td className="text-right tabular-nums">{m.unseen ?? '–'}</td>
+            <tr key={m.path}>
+              <td>{m.path}</td>
+              <td className="pm-muted">{m.specialUse ?? ''}</td>
+              <td className="pm-num">{m.messages ?? '–'}</td>
+              <td className="pm-num">{m.unseen ?? '–'}</td>
             </tr>
           ))}
         </tbody>
@@ -207,46 +210,46 @@ function AccountForm({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <form onSubmit={submit} className={`${card} space-y-3`}>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="space-y-1 text-sm">
-          <span className="text-stone-500">Tipo</span>
+    <form onSubmit={submit} className={card}>
+      <div className="pm-settings__grid">
+        <label className="pm-field">
+          <span className="pm-muted">Tipo</span>
           <select className={input} value={provider} onChange={(e) => setProvider(e.target.value as MailProvider)}>
             <option value="gmail">Gmail</option>
             <option value="imap">IMAP/SMTP generico</option>
           </select>
         </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-stone-500">Nome (etichetta)</span>
+        <label className="pm-field">
+          <span className="pm-muted">Nome (etichetta)</span>
           <input className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Prova" required />
         </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-stone-500">Indirizzo email</span>
+        <label className="pm-field">
+          <span className="pm-muted">Indirizzo email</span>
           <input className={input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </label>
-        <label className="space-y-1 text-sm">
-          <span className="text-stone-500">Credenziale</span>
+        <label className="pm-field">
+          <span className="pm-muted">Credenziale</span>
           <input className={input} value={credentialRef} onChange={(e) => setCredentialRef(e.target.value)} required />
         </label>
         {provider === 'imap' && (
           <>
-            <label className="space-y-1 text-sm">
-              <span className="text-stone-500">Server IMAP</span>
+            <label className="pm-field">
+              <span className="pm-muted">Server IMAP</span>
               <input className={input} value={imapHost} onChange={(e) => setImapHost(e.target.value)} required />
             </label>
-            <label className="space-y-1 text-sm">
-              <span className="text-stone-500">Server SMTP</span>
+            <label className="pm-field">
+              <span className="pm-muted">Server SMTP</span>
               <input className={input} value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} required />
             </label>
           </>
         )}
       </div>
-      <p className="text-xs text-stone-500">
+      <p className="pm-row__sub">
         La password non si inserisce qui: si mette in <code>.env.local</code> e qui si indica il nome della variabile
         (es. <code>env:MMW_TEST_APP_PASSWORD</code>). Per Gmail serve una app password.
       </p>
-      {create.error && <div className="text-sm text-rose-600">{(create.error as Error).message}</div>}
-      <div className="flex justify-end gap-2">
+      {create.error && <div className="pm-error">{(create.error as Error).message}</div>}
+      <div className="pm-inlineform__actions">
         <button type="button" className={button} onClick={onDone}>
           Annulla
         </button>
@@ -282,24 +285,24 @@ function General() {
   return (
     <Section title="Generali">
       <form
-        className={`${card} space-y-3`}
+        className={card}
         onSubmit={(e) => {
           e.preventDefault();
           save.mutate({ activityBatchMinutes: Number(batch), initialSyncDays: Number(days) });
         }}
       >
-        <div className="grid grid-cols-2 gap-3">
-          <label className="space-y-1 text-sm">
-            <span className="text-stone-500">Esecuzione coda attività ogni (minuti)</span>
+        <div className="pm-settings__grid">
+          <label className="pm-field">
+            <span className="pm-muted">Esecuzione coda attività ogni (minuti)</span>
             <input className={input} type="number" min={1} value={batch} onChange={(e) => setBatch(e.target.value)} />
           </label>
-          <label className="space-y-1 text-sm">
-            <span className="text-stone-500">Posta recente da importare subito (giorni)</span>
+          <label className="pm-field">
+            <span className="pm-muted">Posta recente da importare subito (giorni)</span>
             <input className={input} type="number" min={1} value={days} onChange={(e) => setDays(e.target.value)} />
           </label>
         </div>
-        {save.error && <div className="text-sm text-rose-600">{(save.error as Error).message}</div>}
-        <div className="flex justify-end">
+        {save.error && <div className="pm-error">{(save.error as Error).message}</div>}
+        <div className="pm-inlineform__actions">
           <button type="submit" className={primary} disabled={!dirty || save.isPending}>
             Salva
           </button>

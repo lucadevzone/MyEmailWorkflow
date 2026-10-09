@@ -11,7 +11,6 @@ import '@fontsource/geist-sans/400.css';
 import '@fontsource/geist-sans/500.css';
 import '@fontsource/geist-sans/600.css';
 import '@fontsource/geist-sans/700.css';
-import './index.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/components/app.css';
@@ -24,6 +23,7 @@ import './styles/components/manage.css';
 import './styles/components/mail.css';
 import './styles/components/search.css';
 import './styles/components/contacts.css';
+import './styles/components/overlays.css';
 import { BrowserRouter } from 'react-router-dom';
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } });

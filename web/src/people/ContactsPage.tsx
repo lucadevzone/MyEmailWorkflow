@@ -9,7 +9,7 @@ import { GroupBadge, PersonAvatar, PersonChip, usePeopleIndex } from '../ui/Peop
 import { useConfirm } from '../ui/confirm.tsx';
 import { useOpenMenu } from '../ui/contextMenu.tsx';
 import { useToast } from '../ui/toast.tsx';
-import { prepareAvatar } from '../ui/Avatar.tsx';
+import { prepareAvatar } from '../lib/avatar.ts';
 
 const DRAG_TYPE = 'application/x-mmw-contact';
 const personRef = (p: PersonDto) => ({ name: p.name, email: p.emails[0] ?? p.key });

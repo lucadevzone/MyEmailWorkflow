@@ -44,3 +44,28 @@
 .pm-convmini .pm-label { margin-bottom: 4px; }
 .pm-convmini__item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 0; background: transparent; border-radius: var(--r-sm); text-align: left; color: inherit; }
 .pm-convmini__item:hover { background: var(--surface-chip); }
+
+/* O2 · Impostazioni */
+.pm-settings { max-width: 860px; margin-left: auto; margin-right: auto; display: flex; flex-direction: column; gap: 20px; }
+.pm-contacts__head.pm-settings { gap: 0; margin-bottom: 20px; }
+.pm-settings__body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.pm-settings__card { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: var(--r-xl); background: var(--surface-muted); }
+.pm-settings__line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pm-settings__line--sub { padding-left: 16px; }
+.pm-settings__acct { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.pm-settings__actions { display: flex; gap: 6px; flex: none; }
+.pm-settings__test { display: flex; flex-direction: column; gap: 8px; font-size: var(--fs-md); }
+.pm-settings__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 12px; }
+.pm-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-md); }
+.pm-field > span { color: var(--ink-muted); }
+.pm-field .pm-input { width: 100%; box-sizing: border-box; }
+.pm-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--online); flex: none; display: inline-block; }
+.pm-dot--off { background: var(--danger); }
+.pm-muted { color: var(--ink-muted); }
+.pm-error { color: var(--danger); font-size: var(--fs-md); }
+.pm-ok { color: var(--task-heading); }
+.pm-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); text-align: left; }
+.pm-table th { color: var(--ink-muted); font-weight: 400; padding: 4px 0; }
+.pm-table td { padding: 4px 0; border-top: 1px solid var(--border-subtle); }
+.pm-num { text-align: right; font-variant-numeric: tabular-nums; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; background: var(--surface-chip); padding: 0 4px; border-radius: 4px; }

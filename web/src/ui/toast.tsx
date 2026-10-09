@@ -24,16 +24,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2">
+      <div className="pm-toasts">
         {toasts.map((t) => (
           <div
             key={t.id}
-            className="pointer-events-auto flex items-center gap-4 rounded-lg bg-stone-900 px-4 py-2 text-sm text-white shadow-lg dark:bg-stone-100 dark:text-stone-900"
+            className="pm-toast"
           >
             <span>{t.text}</span>
             {t.action && (
               <button
-                className="font-semibold underline"
+                type="button"
+                className="pm-toast__action"
                 onClick={() => {
                   t.action!.run();
                   dismiss(t.id);

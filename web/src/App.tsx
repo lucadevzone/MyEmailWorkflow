@@ -32,7 +32,7 @@ export function App() {
           <Route path="/p/:projectId/c/:conversationId/draft/:draftId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
           <Route path="/p/:projectId/draft/:draftId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
           <Route path="/contacts" element={<ContactsRoute />} />
-          <Route path="/settings" element={<div className="h-full overflow-y-auto"><SettingsPage /></div>} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to={paths.project(SYSTEM_INBOX)} replace />} />
         </Routes>
       </main>

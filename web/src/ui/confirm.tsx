@@ -89,23 +89,22 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     layout = { x, y, up, cancel: at(140), ok: at(40), labelTop: y + dir * (R + BTN / 2 + 10) };
   }
 
-  const btn = 'absolute flex items-center justify-center rounded-full border shadow-sm transition duration-150 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-sky-500';
 
   return (
     <ConfirmContext.Provider value={ask}>
       {children}
       {pending && layout && (
-        <div className="fixed inset-0 z-50" onPointerDown={(e) => e.target === e.currentTarget && close(false)} role="alertdialog" aria-label={pending.message} aria-modal="true">
+        <div className="pm-confirm" onPointerDown={(e) => e.target === e.currentTarget && close(false)} role="alertdialog" aria-label={pending.message} aria-modal="true">
           <div
-            className={`absolute max-w-80 -translate-x-1/2 rounded-full bg-stone-900 px-3 py-1.5 text-center text-sm text-white shadow-md transition duration-150 dark:bg-stone-100 dark:text-stone-900 ${layout.up ? '-translate-y-full' : ''} ${shown ? 'opacity-100' : 'opacity-0'}`}
-            style={{ left: layout.x, top: layout.labelTop }}
+            className="pm-confirm__label"
+            style={{ left: layout.x, top: layout.labelTop, transform: `translate(-50%, ${layout.up ? '-100%' : '0'})`, opacity: shown ? 1 : 0 }}
           >
             {pending.message}
           </div>
-          <span className="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-stone-400" style={{ left: layout.x, top: layout.y }} />
+          <span className="pm-confirm__origin" style={{ left: layout.x, top: layout.y }} />
           <button
             ref={cancelRef}
-            className={`${btn} border-stone-300 bg-white text-stone-700 hover:bg-stone-100 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:hover:bg-stone-700`}
+            className="pm-confirm__btn pm-confirm__btn--cancel"
             style={{ width: BTN, height: BTN, left: layout.cancel.left, top: layout.cancel.top, transform: `translate(-50%,-50%) scale(${shown ? 1 : 0.4})`, opacity: shown ? 1 : 0 }}
             onClick={() => close(false)}
             title="Annulla (Esc)"
@@ -115,7 +114,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           </button>
           <button
             ref={okRef}
-            className={`${btn} ${pending.danger ? 'border-rose-700 bg-rose-600 text-white hover:bg-rose-700' : 'border-emerald-700 bg-emerald-600 text-white hover:bg-emerald-700'}`}
+            className={`pm-confirm__btn ${pending.danger ? 'pm-confirm__btn--danger' : 'pm-confirm__btn--ok'}`}
             style={{ width: BTN, height: BTN, left: layout.ok.left, top: layout.ok.top, transform: `translate(-50%,-50%) scale(${shown ? 1 : 0.4})`, opacity: shown ? 1 : 0, transitionDelay: '30ms' }}
             onClick={() => close(true)}
             title={`${pending.okLabel ?? 'OK'} (Invio)`}
