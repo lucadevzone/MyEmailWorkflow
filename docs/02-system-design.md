@@ -197,44 +197,17 @@ pending ──(batch tick | esegui ora | urgent)──► running ──► done
 
 ## 7. Interfaccia
 
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│ (3) Da smistare (1) · PNRR (2) · Corso · Rumore (38) · +                   │  barra superiore
-├────────────────────────────────────────────────────────────────────────────┤
-│ PNRR                                                    [⚙] [Nuova email]  │  titolo della voce
-├────┬─────────────────────────────┬─┬──────────────────────────────────────┤
-│ MR │ (2) Sintesi breve…    10:02 │║│ messaggio selezionato                │
-│ AB │     Mario Rossi, Anna B.    │║│   oppure compositore                 │
-│ LV │     📎2  🗒1  📦1            │║│   oppure editor della nota           │
-│ +  │     [Rispondi] [AI…] [Arch.]│║│                                      │
-│    │       ├ Mario   …     09:10 │║│                                      │
-│    │       │ └ Io    …     09:40 │║│                                      │
-├────┴─────────────────────────────┴─┴──────────────────────────────────────┤
-│ ⚙ 👤 📋                                           ● Luca   ● Ollama       │  barra di stato
-└────────────────────────────────────────────────────────────────────────────┘
-```
+La specifica grafica completa è in `ui-posta-per-progetti.md` (fornita a parte, con i provini). In sintesi, come è implementata:
 
-- **Barra superiore**:
-  - badge rosso con i messaggi da leggere, escluso il rumore;
-  - Da smistare, progetti e Rumore, ciascuno con un badge azzurro dei non letti;
-  - + per creare un nuovo progetto.
-- **Barra di stato**: Impostazioni, Contatti, Attività; a destra lo stato di account e Ollama (verde = online, arancione = offline).
-- **Pagina di una voce**:
-  - solo nei progetti, a sinistra, le bolle dei **contatti e gruppi inseriti nel progetto** (non chi compare nelle email): sono scorciatoie, il clic apre una nuova email dal progetto; + ne aggiunge, × li toglie. La prima bolla, fissa, è **Tutti**: una nuova email a tutti i contatti del progetto e ai membri dei suoi gruppi, senza doppioni;
-  - due colonne ridimensionabili: conversazioni | pannello di destra.
-- **Scheda conversazione**:
-  - badge rosso dei non letti;
-  - sintesi AI (clic = versione di 4-5 righe);
-  - persone (clic = nuova email);
-  - allegati, note e risorse espandibili;
-  - azioni: Rispondi (a tutti), azioni suggerite, Archivia, menu ⋯. Azioni suggerite:
-    - "Aggiungi i destinatari come gruppo" (o il singolo contatto) se non sono già nel progetto;
-    - da M4, quelle dell'analizzatore.
-- **Task del progetto**: nella barra del titolo, dopo il nome, i primi task aperti; in fondo un'icona apre nel pannello di destra la lista riordinabile (trascinamento) dei task del progetto.
-- **Menu contestuale** (tasto destro) su conversazione, messaggio, voce della barra superiore, bolla, file:
-  - *barra flottante* a pillola ancorata sopra l'elemento: prima le azioni suggerite (viola), poi le principali con testo, infine "Altro";
-  - *palette contestuale*: si apre con "Altro" o iniziando a scrivere (da tastiera con il tasto menu o Maiusc+F10); ha ricerca, gruppi "Suggerite" e "Azioni", scorciatoie, frecce e Invio.
-- **Albero dei messaggi** sotto la conversazione espansa: dalla radice alle foglie, con badge blu sui non letti. Il clic apre il messaggio a destra e lo segna come letto.
+- **Barra superiore**: lente della ricerca (o `/`), tab Da smistare · progetti · + · Gestisci · News, a destra Contatti e Impostazioni. Nella vista email la barra dei progetti è nascosta e resta la barra di contesto.
+- **Barra di stato**: pulsante Attività (apre il pannello della coda, O3) e lo stato di account e Ollama.
+- **S1 · Progetto**: barra contatti (Tutti, gruppi, persone; Gestisci per riordinare/togliere) | conversazioni, una sola in focus (toolbar, sintesi, task/note/allegati/risorse, albero dei messaggi; il titolo apre il primo messaggio da leggere) | barra dei task del progetto.
+- **S2/S3 · Email**: carosello verticale sull'intera conversazione. Lo scorrimento è continuo: ogni messaggio ha un tratto dello spazio di scorrimento lungo quanto la sua scheda e, in una scena sticky, si apre e si chiude in proporzione alla posizione. La bozza è l'ultimo elemento (si apre scorrendo oltre l'ultimo messaggio), con salvataggio automatico, allegati, testo citato, Urgente/Cancella/Invio. Accanto, la colonna **Assistente** (chat in streaming con Ollama, una per conversazione).
+- **S4 · Contatti e gruppi**: due pannelli; un contatto si aggiunge a un gruppo trascinandolo.
+- **S5 · Ricerca unica**: un solo campo nella barra superiore, ambito Tutti / Solo il progetto corrente; risultati per Conversazioni, Allegati e risorse, Task e note.
+- **S6 · Modalità gestione**: riordino e rimozione di progetti e di persone/gruppi della barra, con linea di destinazione come per i task.
+- **Menu contestuale**: barra flottante (suggerite in viola, principali, Altro) e palette con ricerca; conferme con il popup a semicerchio.
+- Stile: token CSS e classi `pm-` (niente Tailwind), icone Lucide (Material Symbols solo nel menu contestuale).
 
 ## 8. Sicurezza
 
@@ -263,11 +236,14 @@ pending ──(batch tick | esegui ora | urgent)──► running ──► done
 
 - **M2, rimandato**:
   - spostamento di una *singola* email (con distacco in una nuova conversazione). Il threading per References la ricollegherebbe alla conversazione d'origine, quindi serve un vincolo esplicito di "separazione".
-  - Allegati e HTML in composizione: per ora solo testo semplice.
+  - HTML in composizione: per ora solo testo semplice (gli allegati in uscita ci sono, da file o da risorse del progetto).
   - Modifica di un invio già in coda: per ora si annulla e si riscrive.
   - "Ripristina dall'archivio" è solo locale: su Gmail resta archiviata finché non arriva posta nuova.
 - **Letto su Gmail**: aprire una conversazione la segna letta subito nell'app; l'attività `set_flags` va al batch. Finché è in coda, il sync non sovrascrive lo stato locale con quello del server.
 - **Risposta da Da smistare**: si sceglie il progetto nel compositore e la conversazione viene spostata lì all'invio.
+- **Importante** (segnalibro) = flag `\\Flagged` di Gmail ("Speciali"), sincronizzato come il letto.
+- **Ricerca**: FTS5 con prefisso sulle parole e vicini del vettore bge-m3 della richiesta, fusi con Reciprocal Rank Fusion per conversazione; senza Ollama resta la sola ricerca per parole.
+- **Assistente**: tabella `assistant_messages` per conversazione (o `draft:<id>` per una nuova mail, che all'invio passa alla conversazione nata); in composizione il modello risponde solo con il testo da inserire.
 
 ## 10. Decisioni prese
 
