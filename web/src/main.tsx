@@ -18,6 +18,7 @@ import './styles/components/topbar.css';
 import './styles/components/statusbar.css';
 import './styles/components/buttons.css';
 import './styles/components/people.css';
+import './styles/components/project.css';
 import { BrowserRouter } from 'react-router-dom';
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: false } } });

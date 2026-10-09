@@ -1,13 +1,11 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { api } from './api.ts';
 import { Navigate, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { ProjectDto } from '@mmw/shared';
 import { useServerEvents } from './events.ts';
 import { TopBar } from './shell/TopBar.tsx';
 import { StatusBar } from './shell/StatusBar.tsx';
-import { paths, projectKeyOf, SYSTEM_INBOX, SYSTEM_NEWS } from './shell/paths.ts';
-import { WorkspacePage, type WorkspaceScope } from './workspace/WorkspacePage.tsx';
+import { paths, projectKeyOf, SYSTEM_INBOX } from './shell/paths.ts';
+import { ProjectPage } from './project/ProjectPage.tsx';
 import { PeoplePage } from './people/PeoplePage.tsx';
 import { ActivitiesPage } from './activities/ActivitiesPage.tsx';
 import { SettingsPage } from './settings/SettingsPage.tsx';
@@ -47,26 +45,10 @@ export function App() {
   );
 }
 
-/** S1 (e, per ora, S2): la vista di un progetto o di una vista di sistema. */
+/** S1 · Progetto (con conversazione in focus e, per ora, messaggio in un pannello). */
 function ProjectRoute({ onEditProject }: { onEditProject: (p: ProjectDto) => void }) {
-  const { projectId = SYSTEM_INBOX, conversationId } = useParams();
-  const navigate = useNavigate();
-  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
-  const scope: WorkspaceScope =
-    projectId === SYSTEM_INBOX ? { view: 'inbox' } : projectId === SYSTEM_NEWS ? { view: 'noise' } : { view: 'project', projectId };
-  return (
-    <WorkspacePage
-      key={projectId}
-      scope={scope}
-      focusConversationId={conversationId ?? null}
-      intent={null}
-      onEditProject={() => {
-        const p = projects.find((x) => x.id === projectId);
-        if (p) onEditProject(p);
-      }}
-      onOpenPerson={(key) => navigate(`${paths.contacts()}?focus=${encodeURIComponent(key)}`)}
-    />
-  );
+  const { projectId = SYSTEM_INBOX, conversationId, messageId } = useParams();
+  return <ProjectPage key={projectId} projectKey={projectId} conversationId={conversationId ?? null} messageId={messageId ?? null} onEditProject={onEditProject} />;
 }
 
 function ContactsRoute() {
