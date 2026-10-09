@@ -209,7 +209,9 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKey}
         />
-        <kbd>Esc</kbd>
+        <button type="button" className="pm-search__esc" onClick={onClose} aria-label="Chiudi la ricerca (Esc)" title="Chiudi la ricerca">
+          Esc
+        </button>
       </label>
       {q.length >= 2 && (
         <div className="pm-results" id="pm-results" role="listbox" aria-label="Risultati">

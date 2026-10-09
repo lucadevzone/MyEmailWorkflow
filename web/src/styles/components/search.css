@@ -5,7 +5,8 @@
   border: 1.5px solid var(--ink); border-radius: var(--r-lg); flex: 1 1 auto; min-width: 0; background: var(--surface);
 }
 .pm-search input { border: 0; outline: none; flex: 1; min-width: 0; font: inherit; background: transparent; }
-.pm-search kbd { font: inherit; font-size: var(--fs-sm); color: var(--ink-muted); border: 1px solid var(--border-control); border-radius: var(--r-xs); padding: 1px 6px; }
+.pm-search__esc { font: inherit; font-size: var(--fs-sm); color: var(--ink-muted); background: transparent; border: 1px solid var(--border-control); border-radius: var(--r-xs); padding: 1px 6px; cursor: pointer; flex: none; }
+.pm-search__esc:hover { background: var(--surface-chip); color: var(--ink); }
 .pm-topbar--searching .pm-topbar__tabs .pm-tab { color: var(--ink-muted); font-size: var(--fs-md); padding: 0 8px; }
 .pm-topbar--searching .pm-topbar__tabs .pm-tab__count { display: none; }
 
