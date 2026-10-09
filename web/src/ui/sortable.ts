@@ -1,25 +1,29 @@
 import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 
 /**
- * Riordino per trascinamento dalla maniglia (con segnaposto) e da tastiera: sulla maniglia a fuoco
- * Alt+←/→ (asse x) o Alt+↑/↓ (asse y) spostano l'elemento.
+ * Riordino per trascinamento dalla maniglia e da tastiera, come per i task: l'elemento trascinato si
+ * attenua e una linea sull'elemento sotto il puntatore indica dove verrà lasciato. Sulla maniglia a
+ * fuoco Alt+←/→ (asse x) o Alt+↑/↓ (asse y) spostano l'elemento.
  */
 export function useSortable(ids: string[], onReorder: (ids: string[]) => void, axis: 'x' | 'y') {
   const [dragging, setDragging] = useState<string | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [over, setOver] = useState<{ id: string; after: boolean } | null>(null);
   const grabbed = useRef<string | null>(null);
 
-  const rest = dragging ? ids.filter((x) => x !== dragging) : ids;
-
-  const finish = () => {
-    if (dragging && dropIndex !== null) {
-      const next = [...rest];
-      next.splice(dropIndex, 0, dragging);
-      if (next.join() !== ids.join()) onReorder(next);
-    }
+  const reset = () => {
     grabbed.current = null;
     setDragging(null);
-    setDropIndex(null);
+    setOver(null);
+  };
+
+  const drop = () => {
+    if (dragging && over && over.id !== dragging) {
+      const rest = ids.filter((x) => x !== dragging);
+      const i = rest.indexOf(over.id);
+      rest.splice(over.after ? i + 1 : i, 0, dragging);
+      if (rest.join() !== ids.join()) onReorder(rest);
+    }
+    reset();
   };
 
   const itemProps = (id: string) => ({
@@ -33,18 +37,23 @@ export function useSortable(ids: string[], onReorder: (ids: string[]) => void, a
     onDragOver: (e: DragEvent) => {
       if (!dragging) return;
       e.preventDefault();
-      if (id === dragging) return;
       const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const after = axis === 'x' ? e.clientX > r.left + r.width / 2 : e.clientY > r.top + r.height / 2;
-      const i = rest.indexOf(id);
-      setDropIndex(after ? i + 1 : i);
+      if (over?.id !== id || over.after !== after) setOver({ id, after });
     },
     onDrop: (e: DragEvent) => {
       e.preventDefault();
-      finish();
+      drop();
     },
-    onDragEnd: finish,
+    onDragEnd: reset,
   });
+
+  /** Classi dell'elemento: attenuato se trascinato, linea prima/dopo se è la destinazione. */
+  const itemClass = (id: string) => {
+    if (dragging === id) return ' pm-sort--dragging';
+    if (!dragging || over?.id !== id) return '';
+    return ` pm-sort--drop-${over.after ? 'after' : 'before'}-${axis}`;
+  };
 
   const gripProps = (id: string) => ({
     onPointerDown: () => (grabbed.current = id),
@@ -64,19 +73,5 @@ export function useSortable(ids: string[], onReorder: (ids: string[]) => void, a
     },
   });
 
-  /**
-   * Sequenza da disegnare: gli elementi nell'ordine attuale (quello trascinato resta al suo posto, sollevato)
-   * con il segnaposto dove verrebbe lasciato. Non si sposta l'elemento nel DOM: interromperebbe il trascinamento.
-   */
-  const layout = (): ({ kind: 'item'; id: string } | { kind: 'slot' })[] => {
-    const out: ({ kind: 'item'; id: string } | { kind: 'slot' })[] = [];
-    for (const id of ids) {
-      if (dragging && id !== dragging && dropIndex === rest.indexOf(id)) out.push({ kind: 'slot' });
-      out.push({ kind: 'item', id });
-    }
-    if (dragging && dropIndex === rest.length) out.push({ kind: 'slot' });
-    return out;
-  };
-
-  return { dragging, dropIndex, rest, itemProps, gripProps, layout };
+  return { dragging, itemProps, itemClass, gripProps };
 }

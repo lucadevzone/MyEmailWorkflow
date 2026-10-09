@@ -51,7 +51,7 @@ export function ProjectsEditor({ onDone }: { onDone: () => void }) {
   const chip = (id: string) => {
     const p = byId.get(id)!;
     return (
-      <li key={id} className={`pm-tabchip${sort.dragging === id ? ' pm-dragging' : ''}`} {...sort.itemProps(id)}>
+      <li key={id} className={`pm-tabchip${sort.itemClass(id)}`} {...sort.itemProps(id)}>
         <button type="button" className="pm-grip" aria-label={`Sposta ${p.name} (Alt+frecce)`} title="Trascina per riordinare" {...sort.gripProps(id)}>
           <Ic icon={GripVertical} size={15} />
         </button>
@@ -87,8 +87,6 @@ export function ProjectsEditor({ onDone }: { onDone: () => void }) {
     );
   };
 
-  const slot = <li key="__slot" aria-hidden="true" className="pm-dropslot" style={{ width: 150, height: 38 }} />;
-
   return (
     <header className="pm-topbar pm-topbar--editing">
       <span className="pm-manage__title">
@@ -100,7 +98,7 @@ export function ProjectsEditor({ onDone }: { onDone: () => void }) {
           <Ic icon={Lock} size={15} /> Da smistare
         </li>
         <li className="pm-topbar__tabsep" aria-hidden="true" />
-        {sort.layout().map((x) => (x.kind === 'slot' ? slot : chip(x.id)))}
+        {visible.map(chip)}
         <li className="pm-topbar__tabsep" aria-hidden="true" />
         <li className="pm-tabchip pm-tabchip--locked">
           <Ic icon={Lock} size={15} /> News

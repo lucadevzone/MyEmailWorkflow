@@ -57,7 +57,7 @@ export function RailEditor({ projectId, onDone }: { projectId: string; onDone: (
   const personByKey = new Map((members?.contacts ?? []).map((c) => [c.key, c]));
 
   const item = (key: string, sort: ReturnType<typeof useSortable>, bubble: ReactNode, label: string, isGroup: boolean) => (
-    <div key={key} className={`pm-rail__editem${sort.dragging === key ? ' pm-dragging' : ''}`} {...sort.itemProps(key)}>
+    <div key={key} className={`pm-rail__editem${sort.itemClass(key)}`} {...sort.itemProps(key)}>
       <span className={`pm-rail__bubble${isGroup ? ' pm-rail__bubble--group' : ''}`}>
         {bubble}
         <button type="button" className="pm-badge-remove" aria-label={`Rimuovi ${label} dal progetto`} onClick={() => remove(key)}>
@@ -70,7 +70,6 @@ export function RailEditor({ projectId, onDone }: { projectId: string; onDone: (
       </button>
     </div>
   );
-  const slot = (k: string) => <div key={k} aria-hidden="true" className="pm-dropslot pm-rail__dropslot" />;
 
   return (
     <aside className="pm-rail pm-rail--editing" aria-label="Gestisci persone e gruppi del progetto">
@@ -84,20 +83,18 @@ export function RailEditor({ projectId, onDone }: { projectId: string; onDone: (
         </span>
         <span className="pm-rail__name pm-rail__name--strong">Tutti</span>
       </div>
-      {sortGroups.layout().map((x) => {
-        if (x.kind === 'slot') return slot('g-slot');
-        const g = groupById.get(x.id);
+      {visibleGroups.map((id) => {
+        const g = groupById.get(id);
         if (!g) return null;
-        return item(x.id, sortGroups, <GroupBadge members={g.members.map((m) => ({ name: m.name, email: m.emails[0] ?? m.key }))} />, g.name, true);
+        return item(id, sortGroups, <GroupBadge members={g.members.map((m) => ({ name: m.name, email: m.emails[0] ?? m.key }))} />, g.name, true);
       })}
       <span className="pm-rail__sep" aria-hidden="true" />
       <span className="pm-label">Persone</span>
-      {sortPeople.layout().map((x) => {
-        if (x.kind === 'slot') return slot('p-slot');
-        const p = personByKey.get(x.id);
+      {visiblePeople.map((id) => {
+        const p = personByKey.get(id);
         if (!p) return null;
         const person = { name: p.name, email: p.emails[0] ?? p.key };
-        return item(x.id, sortPeople, <PersonAvatar person={person} avatarUrl={p.avatarUrl} size={44} />, shortName(person), false);
+        return item(id, sortPeople, <PersonAvatar person={person} avatarUrl={p.avatarUrl} size={44} />, shortName(person), false);
       })}
       <button type="button" className="pm-btn pm-btn--primary pm-btn--sm" style={{ marginTop: 6 }} onClick={() => void apply()} disabled={saving}>
         Fine

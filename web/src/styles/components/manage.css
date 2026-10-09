@@ -17,9 +17,12 @@
 .pm-tabchip__remove:hover, .pm-tabchip__remove[aria-expanded="true"] { background: #FBE9EC; color: var(--danger); }
 .pm-grip { border: 0; background: transparent; padding: 0; color: var(--ink-faint); cursor: grab; display: flex; border-radius: 4px; }
 .pm-grip:active { cursor: grabbing; }
-.pm-dragging { border: 1.5px solid var(--accent) !important; box-shadow: 0 10px 24px rgba(27, 26, 23, .16); transform: translateY(-6px) rotate(-2deg); }
-.pm-dragging .pm-grip { color: var(--accent); }
-.pm-dropslot { border: 1.5px dashed var(--accent); background: var(--accent-soft); border-radius: var(--r-lg); box-sizing: border-box; flex: none; }
+/* Riordino come per i task: l'elemento trascinato si attenua, una linea indica dove verrà lasciato */
+.pm-sort--dragging { opacity: .5; }
+.pm-sort--drop-before-x { box-shadow: -4px 0 0 -1px var(--accent); }
+.pm-sort--drop-after-x { box-shadow: 4px 0 0 -1px var(--accent); }
+.pm-sort--drop-before-y { box-shadow: 0 -4px 0 -1px var(--accent); }
+.pm-sort--drop-after-y { box-shadow: 0 4px 0 -1px var(--accent); }
 .pm-manage__confirm { position: absolute; top: 46px; left: 0; width: 300px; z-index: 46; }
 .pm-manage__confirm p { margin: 0; font-size: var(--fs-md); line-height: 1.5; color: var(--ink-2); }
 
@@ -42,8 +45,5 @@
   position: absolute; right: -6px; top: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--surface-chip);
   border: 2px solid var(--surface); color: var(--ink-muted); display: flex; align-items: center; justify-content: center;
 }
-.pm-rail__editem.pm-dragging { border: 0 !important; transform: translateX(10px) rotate(-4deg); box-shadow: none; }
-.pm-rail__editem.pm-dragging .pm-avatar, .pm-rail__editem.pm-dragging .pm-group {
-  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent), 0 10px 24px rgba(27, 26, 23, .18);
-}
-.pm-rail__dropslot { width: 52px; height: 52px; border-radius: 50%; }
+/* nella barra contatti la linea va tra una bolla e l'altra, larga quanto la colonna */
+.pm-rail__editem { border-radius: 4px; padding: 3px 6px; }
