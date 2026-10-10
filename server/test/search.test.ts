@@ -110,3 +110,23 @@ describe('fonte di note e task', () => {
     expect(d.notes[0]!.messageId).toBe(a.messageId);
   });
 });
+
+describe('recupero dei suggerimenti di task', () => {
+  it('all\'avvio rimette in coda l\'estrazione per le conversazioni senza risposta', async () => {
+    const { jobs, suggestions } = await import('../src/db/schema.ts');
+    const { enqueueMissingTaskExtraction, extractTasks } = await import('../src/ai/extract-tasks.ts');
+    const a = await mail('<h@x>', 8, 'Preventivo', 'Mi mandi il preventivo entro venerdì?');
+    s.db.delete(suggestions).run();
+    s.db.delete(jobs).run();
+    enqueueMissingTaskExtraction(s.db);
+    const queued = s.db.select().from(jobs).all().filter((j) => j.kind === 'extract_tasks');
+    expect(queued).toHaveLength(1);
+    await extractTasks(s.db, a.messageId!, (async () => ({ task: [] })) as never);
+    const titles = s.db.select().from(suggestions).all().map((x) => JSON.parse(x.payload).title as string);
+    expect(titles.some((t) => t.startsWith('Rispondere a'))).toBe(true);
+    // Una seconda passata non duplica.
+    s.db.delete(jobs).run();
+    enqueueMissingTaskExtraction(s.db);
+    expect(s.db.select().from(jobs).all()).toHaveLength(0);
+  });
+});

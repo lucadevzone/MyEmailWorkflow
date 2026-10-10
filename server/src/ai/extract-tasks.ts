@@ -1,6 +1,6 @@
 // Task suggeriti: richieste e scadenze rivolte all'utente in un messaggio in arrivo (solo posta recente).
 
-import { and, eq, gt, isNull, like, lt } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, like, lt } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import { conversations, messages, suggestions, tasks } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
@@ -203,4 +203,37 @@ export async function extractTasks(db: Db, messageId: string, llm: Llm) {
     added++;
   }
   if (added) bus.publish({ type: 'conversations', ids: [m.conversationId] });
+}
+
+/**
+ * All'avvio: per le conversazioni aperte (non News, non archiviate) il cui ultimo messaggio è arrivato e
+ * non ha ancora risposta, se manca qualsiasi suggerimento di task si rimette in coda l'estrazione
+ * (che crea anche il "Rispondere a…"). Recupera la posta già presente quando i suggerimenti sono andati persi.
+ */
+export function enqueueMissingTaskExtraction(db: Db) {
+  const convs = db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(isNull(conversations.deletedAt), isNull(conversations.archivedAt), eq(conversations.isNoise, false)))
+    .all();
+  for (const c of convs) {
+    const lastMsg = db
+      .select({ id: messages.id, direction: messages.direction })
+      .from(messages)
+      .where(and(eq(messages.conversationId, c.id), isNull(messages.deletedAt)))
+      .orderBy(desc(messages.date))
+      .get();
+    if (!lastMsg || lastMsg.direction !== 'in') continue;
+    const hasSuggestion = db
+      .select({ id: suggestions.id })
+      .from(suggestions)
+      .where(and(eq(suggestions.subjectId, c.id), eq(suggestions.kind, 'task')))
+      .get();
+    const hasReplyTask = db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.conversationId, c.id), isNull(tasks.deletedAt), like(tasks.title, 'Rispondere a %')))
+      .get();
+    if (!hasSuggestion && !hasReplyTask) enqueueJob(db, 'extract_tasks', { messageId: lastMsg.id }, PRIORITY.background);
+  }
 }

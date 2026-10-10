@@ -5,6 +5,7 @@ import { buildApp } from './app.ts';
 import { buildServices } from './services.ts';
 import { enqueueMissingSummaries } from './ai/summarize.ts';
 import { enqueueMissingEmbeddings } from './ai/embed.ts';
+import { enqueueMissingTaskExtraction } from './ai/extract-tasks.ts';
 import { enqueueMissingClassifications } from './ai/classify.ts';
 
 const { db, sqlite } = openDb();
@@ -30,5 +31,6 @@ services.runner.start();
 services.jobs.start();
 enqueueMissingEmbeddings(db);
 enqueueMissingSummaries(db);
+enqueueMissingTaskExtraction(db);
 enqueueMissingClassifications(db);
 for (const account of services.accounts.list()) services.sync.start(account);
