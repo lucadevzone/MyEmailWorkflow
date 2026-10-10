@@ -17,6 +17,8 @@ import type {
   DraftPatch,
   AssistantMessageDto,
   SearchResults,
+  QuoteSelector,
+  AnnotationMarkDto,
   SearchScope,
   ReplyIdea,
   TaskDto,
@@ -149,8 +151,9 @@ export const api = {
   updateGroup: (id: string, name: string, contactIds: string[]) => request<{ id: string }>('PUT', `/api/groups/${id}`, { name, contactIds }),
   deleteGroup: (id: string) => request<void>('DELETE', `/api/groups/${id}`),
 
-  createNote: (conversationId: string, body: string, messageId?: string | null) =>
-    request<NoteDto>('POST', '/api/notes', { conversationId, body, ...(messageId ? { messageId } : {}) }),
+  createNote: (conversationId: string, body: string, messageId?: string | null, quote?: QuoteSelector) =>
+    request<NoteDto>('POST', '/api/notes', { conversationId, body, ...(messageId ? { messageId } : {}), ...(quote && messageId ? { quote } : {}) }),
+  annotations: (messageId: string) => request<AnnotationMarkDto[]>('GET', `/api/messages/${messageId}/annotations`),
   updateNote: (id: string, body: string) => request<NoteDto>('PATCH', `/api/notes/${id}`, { body }),
   deleteNote: (id: string) => request<void>('DELETE', `/api/notes/${id}`),
   uploadResource: async (conversationId: string, file: File): Promise<ResourceDto> => {

@@ -3,6 +3,7 @@
 
 import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
+import { createAnnotation, quoteSchema } from '../annotations/service.ts';
 import type { TaskDto } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
 import { conversations, projects, tasks } from '../db/schema.ts';
@@ -19,6 +20,8 @@ export const taskInputSchema = z.object({
   messageId: z.string().nullable().optional(),
   dueDate: isoDate.nullable().optional(),
   top: z.boolean().optional(),
+  /** Brano del messaggio da cui nasce il task (annotazione). */
+  quote: quoteSchema.optional(),
 });
 
 export const taskPatchSchema = z
@@ -123,6 +126,7 @@ export class TaskService {
         rank,
         priority: input.top ? 1 : null,
         dueDate: input.dueDate ?? null,
+        annotationId: input.quote && input.messageId ? createAnnotation(this.db, input.messageId, input.quote) : null,
         createdAt: t,
         updatedAt: t,
       })

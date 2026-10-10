@@ -4,14 +4,14 @@ import { Mail, SquareCheck, StickyNote } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { personLabel, shortDate } from '../lib/format.ts';
 import { paths, projectKeyOf } from '../shell/paths.ts';
-import type { NoteDto, TaskDto } from '@mmw/shared';
+import type { NoteDto, QuoteSelector, TaskDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { useConfirm } from '../ui/confirm.tsx';
 
 export type TagEditorTarget =
-  | { kind: 'task'; task?: TaskDto; projectId: string; conversationId: string | null; messageId?: string | null; initialTitle?: string; initialBody?: string }
-  | { kind: 'note'; note?: NoteDto; conversationId: string; messageId?: string | null; initialBody?: string };
+  | { kind: 'task'; task?: TaskDto; projectId: string; conversationId: string | null; messageId?: string | null; initialTitle?: string; initialBody?: string; quote?: QuoteSelector }
+  | { kind: 'note'; note?: NoteDto; conversationId: string; messageId?: string | null; initialBody?: string; quote?: QuoteSelector };
 
 /**
  * Maschera di modifica di task e note (O1): popover di 360 px ancorato all'elemento.
@@ -53,15 +53,15 @@ export function TagEditor({ target, anchor, onClose }: { target: TagEditorTarget
   }, [onClose]);
 
   const refresh = () => {
-    for (const k of [['tasks'], ['conversations'], ['conversation', conversationId]]) qc.invalidateQueries({ queryKey: k });
+    for (const k of [['tasks'], ['conversations'], ['conversation', conversationId], ['annotations']]) qc.invalidateQueries({ queryKey: k });
   };
   const save = useMutation({
     mutationFn: async () => {
       if (target.kind === 'task') {
         if (task) return api.updateTask(task.id, { title, details: body || null, dueDate: due || null });
-        return api.createTask({ projectId: target.projectId, title, details: body || null, dueDate: due || null, conversationId, messageId: target.messageId ?? null });
+        return api.createTask({ projectId: target.projectId, title, details: body || null, dueDate: due || null, conversationId, messageId: target.messageId ?? null, quote: target.messageId ? target.quote : undefined });
       }
-      return note ? api.updateNote(note.id, body) : api.createNote(target.conversationId, body, target.messageId);
+      return note ? api.updateNote(note.id, body) : api.createNote(target.conversationId, body, target.messageId, target.quote);
     },
     onSuccess: () => {
       refresh();

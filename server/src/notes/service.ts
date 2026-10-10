@@ -2,6 +2,7 @@
 
 import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { z } from 'zod';
+import { createAnnotation, quoteSchema } from '../annotations/service.ts';
 import type { NoteDto, ResourceDto } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
 import { blobs, conversations, notes, resources } from '../db/schema.ts';
@@ -13,6 +14,8 @@ export const noteInputSchema = z
     conversationId: z.string().optional(),
     projectId: z.string().optional(),
     messageId: z.string().optional(),
+    /** Brano del messaggio da cui nasce la nota (annotazione). */
+    quote: quoteSchema.optional(),
     body: z.string().trim().min(1, 'La nota è vuota'),
   })
   .refine((n) => n.conversationId || n.projectId, { message: 'Serve una conversazione o un progetto' });
@@ -59,7 +62,7 @@ export class NotesService {
       id: newId(),
       conversationId: input.conversationId ?? null,
       projectId: this.projectOf(input.conversationId, input.projectId),
-      annotationId: null,
+      annotationId: input.quote && input.messageId ? createAnnotation(this.db, input.messageId, input.quote) : null,
       messageId: input.messageId ?? null,
       body: input.body,
       createdAt: t,

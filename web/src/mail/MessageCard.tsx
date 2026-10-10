@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useQueryClient } from '@tanstack/react-query';
-import { Bookmark, ChevronsDownUp, ChevronsUpDown, Forward, Image, Paperclip, ReplyAll } from 'lucide-react';
-import type { ConversationDetail, MessageDto } from '@mmw/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bookmark, ChevronsDownUp, ChevronsUpDown, Forward, Image, Paperclip, ReplyAll, SquareCheck, StickyNote } from 'lucide-react';
+import type { AnnotationMarkDto, ConversationDetail, MessageDto, QuoteSelector } from '@mmw/shared';
+import { findQuote, quoteOf } from '../lib/annotations.ts';
 import { api } from '../api.ts';
 import { fileSize, longDate, shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
@@ -109,6 +110,7 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
   const [quoted, setQuoted] = useState(false);
   const marked = useRef<string | null>(null);
   const openMenu = useOpenMenu();
+  const pre = useRef<HTMLPreElement>(null);
   const [editor, setEditor] = useState<{ target: TagEditorTarget; anchor: DOMRect } | null>(null);
   const from = m.from ?? UNKNOWN;
   const files = m.attachments.filter((a) => !a.isInline);
@@ -130,7 +132,7 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
   const compose = (r: Omit<ComposeRequest, 'projectId' | 'conversationId'>) => onCompose({ ...r, projectId: d.projectId, conversationId: d.id });
 
   // Testo selezionato nel messaggio: menu con rispondi citando, crea nota, crea task.
-  const onSelectText = (text: string, rect: DOMRect) => {
+  const onSelectText = (text: string, rect: DOMRect, quote?: QuoteSelector) => {
     openMenu(
       {
         title: `«${taskTitle(text).slice(0, 60)}${text.length > 60 ? '…' : ''}»`,
@@ -138,7 +140,7 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
           { id: 'quote', icon: 'format_quote', label: 'Rispondi citando', primary: true, run: () => compose({ replyTo: m, replyAll: true, draft: `${quoteText(text)}\n\n` }) },
           {
             id: 'note', icon: 'sticky_note_2', label: 'Crea una nota', primary: true,
-            run: () => setEditor({ target: { kind: 'note', conversationId: d.id, messageId: m.id, initialBody: `${quoteText(text)}\n\n` }, anchor: rect }),
+            run: () => setEditor({ target: { kind: 'note', conversationId: d.id, messageId: m.id, initialBody: `${quoteText(text)}\n\n`, quote }, anchor: rect }),
           },
           ...(d.projectId
             ? [
@@ -153,6 +155,7 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
                         messageId: m.id,
                         initialTitle: taskTitle(text),
                         initialBody: text.length > 100 || text.includes('\n') ? quoteText(text) : '',
+                        quote,
                       },
                       anchor: rect,
                     }),
@@ -171,7 +174,51 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
     const sel = window.getSelection();
     const text = sel?.toString().trim() ?? '';
     if (!sel || sel.rangeCount === 0 || text.length < 2 || !(e.currentTarget as HTMLElement).contains(sel.anchorNode)) return;
-    onSelectText(text, sel.getRangeAt(0).getBoundingClientRect());
+    const range = sel.getRangeAt(0);
+    onSelectText(text, range.getBoundingClientRect(), pre.current ? quoteOf(pre.current, range) : undefined);
+  };
+
+  // Brani annotati (note e task nati da una selezione): evidenziati, con l'icona che apre l'elemento.
+  const { data: marks = [] } = useQuery({ queryKey: ['annotations', m.id], queryFn: () => api.annotations(m.id), enabled: active });
+  const { data: convTasks = [] } = useQuery({ queryKey: ['tasks', 'conversation', d.id], queryFn: () => api.conversationTasks(d.id), enabled: active && marks.some((x) => x.kind === 'task') });
+  const openMark = (mk: AnnotationMarkDto, anchor: DOMRect) => {
+    if (mk.kind === 'note') {
+      const note = d.notes.find((n) => n.id === mk.itemId);
+      if (note) setEditor({ target: { kind: 'note', note, conversationId: d.id }, anchor });
+    } else {
+      const task = convTasks.find((t) => t.id === mk.itemId);
+      if (task && task.projectId) setEditor({ target: { kind: 'task', task, projectId: task.projectId, conversationId: d.id }, anchor });
+    }
+  };
+  /** Testo semplice con i brani annotati evidenziati e l'icona alla fine di ciascuno. */
+  const textWithMarks = (text: string) => {
+    const found = marks
+      .map((mk) => ({ mk, at: findQuote(text, mk) }))
+      .filter((x) => x.at >= 0)
+      .sort((a, b) => a.at - b.at);
+    const out: React.ReactNode[] = [];
+    let pos = 0;
+    for (const { mk, at } of found) {
+      if (at < pos) continue; // brani sovrapposti: si mostra il primo
+      const end = at + mk.exact.length;
+      out.push(text.slice(pos, at), <mark key={`${mk.annotationId}-${mk.itemId}-m`} className="pm-annot">{text.slice(at, end)}</mark>);
+      out.push(
+        <button
+          key={`${mk.annotationId}-${mk.itemId}-b`}
+          type="button"
+          className={`pm-annot__badge pm-annot__badge--${mk.kind}${mk.done ? ' pm-annot__badge--done' : ''}`}
+          title={`${mk.kind === 'task' ? 'Task' : 'Nota'}: ${mk.label}`}
+          aria-label={`${mk.kind === 'task' ? 'Apri il task' : 'Apri la nota'}: ${mk.label}`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => openMark(mk, e.currentTarget.getBoundingClientRect())}
+        >
+          <Ic icon={mk.kind === 'task' ? SquareCheck : StickyNote} size={12} />
+        </button>,
+      );
+      pos = end;
+    }
+    out.push(text.slice(pos));
+    return out;
   };
 
   return (
@@ -220,9 +267,11 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
             onSelectText={onSelectText}
             hideQuotes={!quoted}
             onQuotes={setHtmlQuotes}
+            marks={marks}
+            onMarkClick={openMark}
           />
         ) : (
-          <pre>{(quoted ? full : clean || full).trim() || '(messaggio vuoto)'}</pre>
+          <pre ref={pre}>{textWithMarks((quoted ? full : clean || full).trim() || '(messaggio vuoto)')}</pre>
         )}
       </div>
       {hasQuote && (

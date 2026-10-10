@@ -275,6 +275,8 @@ export interface TaskInput {
   dueDate?: string | null;
   /** true = in cima alla coda invece che in fondo. */
   top?: boolean;
+  /** Brano del messaggio da cui nasce il task (annotazione). */
+  quote?: QuoteSelector;
 }
 
 // ─── Persone e gruppi ────────────────────────────────────────────────────────
@@ -516,4 +518,25 @@ export interface SearchResults {
   items: SearchItemHit[];
   /** false se la ricerca per significato non era disponibile (Ollama spento): solo parole esatte. */
   semantic: boolean;
+}
+
+// ─── Annotazioni ─────────────────────────────────────────────────────────────
+
+/** Brano citato da una selezione: testo esatto più il contesto immediato per ritrovarlo. */
+export interface QuoteSelector {
+  exact: string;
+  prefix?: string | null;
+  suffix?: string | null;
+}
+
+/** Un brano annotato in un messaggio e la nota o il task che vi è nato. */
+export interface AnnotationMarkDto {
+  annotationId: string;
+  exact: string;
+  prefix: string | null;
+  suffix: string | null;
+  kind: 'note' | 'task';
+  itemId: string;
+  label: string;
+  done: boolean;
 }

@@ -20,6 +20,7 @@ import { ActionError, composeSchema, type MailActions } from '../actions/mail-ac
 import type { ActivityQueueDto, ConversationView } from '@mmw/shared';
 import { ZodError, type ZodType } from 'zod';
 import { Readable } from 'node:stream';
+import { annotationMarks } from '../annotations/service.ts';
 import type { SearchScope } from '@mmw/shared';
 import type { SearchService } from '../search/service.ts';
 import { chatInputSchema, threadOf, type AssistantService } from '../ai/assistant.ts';
@@ -460,6 +461,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   const touched = (conversationId: string | null) => {
     if (conversationId) bus.publish({ type: 'conversations', ids: [conversationId] });
   };
+
+  app.get<{ Params: { id: string } }>('/api/messages/:id/annotations', async (req) => annotationMarks(deps.db, req.params.id));
 
   app.post('/api/notes', async (req, reply) => {
     const note = deps.notes.createNote(parse(noteInputSchema, req.body));

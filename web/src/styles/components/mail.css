@@ -205,3 +205,13 @@
   font-size: var(--fs-base); line-height: var(--lh-body); color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere;
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical;
 }
+
+/* Annotazioni nel testo semplice: brano evidenziato e icona della nota o del task */
+.pm-annot { background: rgba(251, 231, 161, .85); color: inherit; border-radius: 3px; padding: 0 1px; }
+.pm-annot__badge {
+  display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin: 0 2px; padding: 0;
+  vertical-align: -4px; border-radius: 6px; cursor: pointer; box-shadow: 0 1px 2px rgba(0, 0, 0, .12);
+}
+.pm-annot__badge--note { background: var(--note-bg); color: var(--note-icon); border: 1px solid var(--note-border); }
+.pm-annot__badge--task { background: var(--task-bg); color: var(--task-heading); border: 1px solid var(--task-border); }
+.pm-annot__badge--done { opacity: .55; }

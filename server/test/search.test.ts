@@ -130,3 +130,21 @@ describe('recupero dei suggerimenti di task', () => {
     expect(s.db.select().from(jobs).all()).toHaveLength(0);
   });
 });
+
+describe('annotazioni', () => {
+  it('nota e task nati da una selezione ricordano il brano; eliminati, il segno sparisce', async () => {
+    const { annotationMarks } = await import('../src/annotations/service.ts');
+    const a = await mail('<an@x>', 9, 'Consegna', 'Ciao, la consegna del prototipo è fissata per il 20 ottobre. Fammi sapere.');
+    s.actions.move(a.conversationId!, projectId);
+    const quote = { exact: 'consegna del prototipo', prefix: 'Ciao, la ', suffix: ' è fissata' };
+    const n = s.notes.createNote({ conversationId: a.conversationId!, messageId: a.messageId!, quote, body: 'Ricordarsi' });
+    s.tasks.create({ projectId, conversationId: a.conversationId!, messageId: a.messageId!, quote, title: 'Preparare il prototipo' });
+    const marks = annotationMarks(s.db, a.messageId!);
+    expect(marks.map((m) => [m.kind, m.exact, m.prefix])).toEqual([
+      ['note', 'consegna del prototipo', 'Ciao, la '],
+      ['task', 'consegna del prototipo', 'Ciao, la '],
+    ]);
+    s.notes.deleteNote(n.id);
+    expect(annotationMarks(s.db, a.messageId!).map((m) => m.kind)).toEqual(['task']);
+  });
+});
