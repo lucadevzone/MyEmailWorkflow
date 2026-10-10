@@ -2,7 +2,7 @@ import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ProjectDto } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
-import { accounts, conversations, messages, projects } from '../db/schema.ts';
+import { accounts, conversations, drafts, messages, notes, projectContacts, projectGroups, projects, resources, suggestions, tasks } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
 import { rankBetween } from '../lib/rank.ts';
 
@@ -133,6 +133,53 @@ export class ProjectService {
         .run();
       tx.update(projects).set({ archived: true, rank: null, updatedAt: t }).where(eq(projects.id, id)).run();
       return { movedConversations: res.changes };
+    });
+  }
+
+  /**
+   * Fonde il progetto sourceId dentro targetId: conversazioni, task (in coda a quelli del destinatario),
+   * note, risorse, bozze, contatti e gruppi passano al destinatario; il sorgente viene eliminato.
+   */
+  merge(sourceId: string, targetId: string): { movedConversations: number } {
+    if (sourceId === targetId) throw new ProjectError('Scegli un progetto diverso');
+    const alive = (id: string) =>
+      this.db.select().from(projects).where(and(eq(projects.id, id), isNull(projects.deletedAt))).get();
+    const src = alive(sourceId);
+    const dst = alive(targetId);
+    if (!src || !dst) throw new ProjectError('Progetto non trovato');
+    const t = now();
+    return this.db.transaction((tx) => {
+      const moved = tx.update(conversations).set({ projectId: targetId, updatedAt: t }).where(eq(conversations.projectId, sourceId)).run();
+      // Task: in coda a quelli del destinatario, nell'ordine che avevano.
+      const last = tx
+        .select({ rank: tasks.rank })
+        .from(tasks)
+        .where(and(eq(tasks.projectId, targetId), isNull(tasks.deletedAt)))
+        .orderBy(sql`${tasks.rank} desc`)
+        .get();
+      let prev = last?.rank ?? null;
+      const srcTasks = tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.projectId, sourceId)).orderBy(asc(tasks.rank)).all();
+      for (const row of srcTasks) {
+        const rank = rankBetween(prev, null);
+        tx.update(tasks).set({ projectId: targetId, rank, updatedAt: t }).where(eq(tasks.id, row.id)).run();
+        prev = rank;
+      }
+      tx.update(notes).set({ projectId: targetId }).where(eq(notes.projectId, sourceId)).run();
+      tx.update(resources).set({ projectId: targetId }).where(eq(resources.projectId, sourceId)).run();
+      tx.update(drafts).set({ projectId: targetId }).where(eq(drafts.projectId, sourceId)).run();
+      // Contatti e gruppi: si aggiungono quelli che il destinatario non ha già.
+      tx.run(sql`insert or ignore into project_contacts (project_id, contact_id, rank, created_at)
+        select ${targetId}, contact_id, null, created_at from project_contacts where project_id = ${sourceId}`);
+      tx.run(sql`insert or ignore into project_groups (project_id, group_id, rank, created_at)
+        select ${targetId}, group_id, null, created_at from project_groups where project_id = ${sourceId}`);
+      tx.delete(projectContacts).where(eq(projectContacts.projectId, sourceId)).run();
+      tx.delete(projectGroups).where(eq(projectGroups.projectId, sourceId)).run();
+      // Suggerimenti "sposta nel progetto sorgente" ancora in attesa: non hanno più senso.
+      tx.run(sql`delete from ${suggestions} where status = 'pending' and kind = 'project'
+        and json_extract(payload, '$.projectId') = ${sourceId}`);
+      if (!dst.description && src.description) tx.update(projects).set({ description: src.description, updatedAt: t }).where(eq(projects.id, targetId)).run();
+      tx.update(projects).set({ deletedAt: t, rank: null, updatedAt: t }).where(eq(projects.id, sourceId)).run();
+      return { movedConversations: moved.changes };
     });
   }
 

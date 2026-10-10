@@ -106,6 +106,17 @@ export function clearReplySuggestion(db: Db, conversationId: string) {
 }
 
 function saveTask(db: Db, conversationId: string, payload: TaskSuggestionPayload) {
+  // L'estrazione può ripartire sullo stesso messaggio (recupero all'avvio): niente doppioni.
+  const dup = db
+    .select({ payload: suggestions.payload })
+    .from(suggestions)
+    .where(and(eq(suggestions.subjectId, conversationId), eq(suggestions.kind, 'task')))
+    .all()
+    .some((r) => {
+      const p = JSON.parse(r.payload) as TaskSuggestionPayload;
+      return p.messageId === payload.messageId && p.title.toLowerCase() === payload.title.toLowerCase();
+    });
+  if (dup) return false;
   db.insert(suggestions)
     .values({
       id: newId(),
@@ -119,6 +130,7 @@ function saveTask(db: Db, conversationId: string, payload: TaskSuggestionPayload
       createdAt: now(),
     })
     .run();
+  return true;
 }
 
 export function enqueueTaskExtraction(db: Db, messageId: string) {
@@ -179,8 +191,7 @@ export async function extractTasks(db: Db, messageId: string, llm: Llm) {
     // Segnaposto del modello per "nessun task" ("Niente da fare", "Nessuna richiesta").
     if (/^(niente|nessun[oa]?)\b/i.test(title)) continue;
     const due = t.scadenza && /^\d{4}-\d{2}-\d{2}$/.test(t.scadenza) ? t.scadenza : null;
-    saveTask(db, m.conversationId, { title: title.slice(0, 200), dueDate: due, details: t.dettagli?.trim() || null, messageId });
-    added++;
+    if (saveTask(db, m.conversationId, { title: title.slice(0, 200), dueDate: due, details: t.dettagli?.trim() || null, messageId })) added++;
   }
   if (added) bus.publish({ type: 'conversations', ids: [m.conversationId] });
 }

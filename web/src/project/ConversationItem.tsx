@@ -266,7 +266,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
                         title: t.title,
                         actions: [
                           { id: 'edit', icon: 'edit', label: 'Modifica', primary: true, run: () => onEditor({ target: { kind: 'task', task: t, projectId: c.projectId!, conversationId: c.id }, anchor }) },
-                          { id: 'done', icon: 'task_alt', label: 'Chiudi task', primary: true, run: () => void api.updateTask(t.id, { status: 'done' }).then(refreshItems) },
+                          { id: 'done', icon: 'task_alt', label: 'Task terminato', primary: true, run: async () => (await ask({ message: 'Segnare il task come terminato?', okLabel: 'Sì, terminato' })) && api.updateTask(t.id, { status: 'done' }).then(refreshItems) },
                           ...(t.messageId ? [{ id: 'mail', icon: 'mail', label: 'Vai alla mail', primary: true, run: () => cb.onOpenMessage(t.messageId!) }] : []),
                           { id: 'del', icon: 'delete', label: 'Elimina', tone: 'danger' as const, run: async () => (await ask({ message: 'Eliminare il task?', okLabel: 'Elimina', danger: true })) && api.deleteTask(t.id).then(refreshItems) },
                         ],

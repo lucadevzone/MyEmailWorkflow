@@ -15,7 +15,7 @@ export type TagEditorTarget =
 
 /**
  * Maschera di modifica di task e note (O1): popover di 360 px ancorato all'elemento.
- * Task: titolo, descrizione, scadenza, conversazione collegata; Elimina · Chiudi task · Salva.
+ * Task: titolo, descrizione, scadenza, conversazione collegata; Elimina · Task terminato · Salva.
  */
 export function TagEditor({ target, anchor, onClose }: { target: TagEditorTarget; anchor: DOMRect; onClose: () => void }) {
   const qc = useQueryClient();
@@ -154,8 +154,8 @@ export function TagEditor({ target, anchor, onClose }: { target: TagEditorTarget
           )}
           <span className="pm-spacer" />
           {task && (
-            <button type="button" className={`pm-btn pm-btn--sm ${task.status === 'open' ? 'pm-btn--success' : 'pm-btn--secondary'}`} onClick={() => close.mutate()}>
-              {task.status === 'open' ? 'Chiudi task' : 'Riapri'}
+            <button type="button" className={`pm-btn pm-btn--sm ${task.status === 'open' ? 'pm-btn--success' : 'pm-btn--secondary'}`} onClick={async () => (task.status !== 'open' || (await ask({ message: 'Segnare il task come terminato?', okLabel: 'Sì, terminato' }))) && close.mutate()}>
+              {task.status === 'open' ? 'Task terminato' : 'Riapri'}
             </button>
           )}
           <button type="submit" className="pm-btn pm-btn--primary pm-btn--sm" disabled={save.isPending}>

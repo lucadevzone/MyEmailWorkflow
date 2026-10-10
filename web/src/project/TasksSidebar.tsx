@@ -9,11 +9,13 @@ import { useContextMenu, type MenuAction } from '../ui/contextMenu.tsx';
 import { dueInfo, useTaskOps } from '../tasks/useTaskOps.ts';
 import { paths } from '../shell/paths.ts';
 import { TagEditor, type TagEditorTarget } from './TagEditor.tsx';
+import { useConfirm } from '../ui/confirm.tsx';
 
 /** Barra dei task del progetto (D9): task di tutte le conversazioni più quelli del progetto. */
 export function TasksSidebar({ projectId }: { projectId: string }) {
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks', 'project', projectId], queryFn: () => api.projectTasks(projectId) });
   const ops = useTaskOps();
+  const ask = useConfirm();
   const [tab, setTab] = useState<'open' | 'done'>('open');
   const [title, setTitle] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export function TasksSidebar({ projectId }: { projectId: string }) {
             Aperti · {open.length}
           </button>
           <button type="button" role="radio" className="pm-seg__opt" aria-checked={tab === 'done'} onClick={() => setTab('done')}>
-            Chiusi · {done.length}
+            Terminati · {done.length}
           </button>
         </span>
       </div>
@@ -64,7 +66,7 @@ export function TasksSidebar({ projectId }: { projectId: string }) {
             <input placeholder="Nuovo task del progetto" aria-label="Nuovo task del progetto" value={title} onChange={(e) => setTitle(e.target.value)} />
           </form>
         )}
-        {list.length === 0 && <div className="pm-empty">{tab === 'open' ? 'Nessun task aperto.' : 'Nessun task chiuso.'}</div>}
+        {list.length === 0 && <div className="pm-empty">{tab === 'open' ? 'Nessun task aperto.' : 'Nessun task terminato.'}</div>}
         {list.map((t) => (
           <TaskItem
             key={t.id}
@@ -72,7 +74,7 @@ export function TasksSidebar({ projectId }: { projectId: string }) {
             open={expanded === t.id}
             onToggle={() => setExpanded(expanded === t.id ? null : t.id)}
             onEdit={(anchor) => setEditor({ target: { kind: 'task', task: t, projectId, conversationId: t.conversationId }, anchor })}
-            onClose={() => ops.update.mutate({ id: t.id, patch: { status: t.status === 'open' ? 'done' : 'open' } })}
+            onClose={async () => (t.status !== 'open' || (await ask({ message: 'Segnare il task come terminato?', okLabel: 'Sì, terminato' }))) && ops.update.mutate({ id: t.id, patch: { status: t.status === 'open' ? 'done' : 'open' } })}
             onMove={tab === 'open' ? (d) => moveBy(t, d) : undefined}
             drag={
               tab === 'open'
@@ -137,7 +139,7 @@ function TaskItem({ t, open, onToggle, onEdit, onClose, onMove, drag }: {
           if (ref.current) onEdit(ref.current.getBoundingClientRect());
         },
       },
-      { id: 'close', icon: t.status === 'open' ? 'task_alt' : 'undo', label: t.status === 'open' ? 'Chiudi task' : 'Riapri', primary: true, run: onClose },
+      { id: 'close', icon: t.status === 'open' ? 'task_alt' : 'undo', label: t.status === 'open' ? 'Task terminato' : 'Riapri', primary: true, run: onClose },
       ...(onMove
         ? [
             { id: 'up', icon: 'arrow_upward', label: 'Sposta su', run: () => onMove(-1) },
@@ -217,7 +219,7 @@ function TaskItem({ t, open, onToggle, onEdit, onClose, onMove, drag }: {
               Modifica
             </button>
             <button type="button" className={`pm-btn pm-btn--sm ${t.status === 'open' ? 'pm-btn--success' : 'pm-btn--secondary'}`} onClick={onClose}>
-              {t.status === 'open' ? 'Chiudi task' : 'Riapri'}
+              {t.status === 'open' ? 'Task terminato' : 'Riapri'}
             </button>
           </div>
         </div>

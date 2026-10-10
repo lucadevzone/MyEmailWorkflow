@@ -280,6 +280,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return { ok: true };
   });
 
+  app.post<{ Params: { id: string }; Body: { intoId?: string } }>('/api/projects/:id/merge', async (req) => {
+    const res = projectsSvc.merge(req.params.id, String(req.body?.intoId ?? ''));
+    bus.publish({ type: 'projects' });
+    bus.publish({ type: 'conversations', ids: [] });
+    bus.publish({ type: 'tasks' });
+    return res;
+  });
+
   app.post<{ Params: { id: string } }>('/api/projects/:id/remove', async (req) => {
     const res = projectsSvc.remove(req.params.id);
     reclassifyInbox(deps.db);

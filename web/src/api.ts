@@ -159,6 +159,7 @@ export const api = {
   rejectSuggestion: (id: string) => request<{ conversationId: string }>('POST', `/api/suggestions/${id}/reject`),
   reorderProjects: (ids: string[]) => request<{ ok: true }>('PUT', '/api/projects/order', { ids }),
   removeProject: (id: string) => request<{ movedConversations: number }>('POST', `/api/projects/${id}/remove`),
+  mergeProject: (id: string, intoId: string) => request<{ movedConversations: number }>('POST', `/api/projects/${id}/merge`, { intoId }),
   reorderProjectMembers: (projectId: string, keys: string[]) => request<{ ok: true }>('PUT', `/api/projects/${projectId}/members/order`, { keys }),
   projectMembers: (projectId: string) => request<ProjectMembersDto>('GET', `/api/projects/${projectId}/members`),
   addProjectGroup: (projectId: string, groupId: string) => request<ProjectMembersDto>('POST', `/api/projects/${projectId}/groups`, { groupId }),

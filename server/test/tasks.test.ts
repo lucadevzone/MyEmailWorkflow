@@ -93,6 +93,28 @@ const mail = (id: string, subject: string, body: string, opts: { date?: string; 
     ),
   });
 
+describe('fusione di progetti', () => {
+  it('sposta conversazioni, task in coda, note e risorse; il sorgente sparisce', async () => {
+    const projects = new ProjectService(s.db);
+    const other = projects.create({ name: 'Vecchio', description: 'Gare e preventivi', outgoingAccountId: accountId }).id;
+    s.tasks.create({ projectId, title: 'A' });
+    s.tasks.create({ projectId: other, title: 'X' });
+    s.tasks.create({ projectId: other, title: 'Y' });
+    const r = await mail('m', 'Gara', 'ciao');
+    s.actions.move(r.conversationId, other);
+    s.notes.createNote({ projectId: other, body: 'nota del progetto' });
+    s.notes.addFile({ projectId: other }, 'linee.txt', Buffer.from('testo'), 'text/plain');
+
+    expect(() => projects.merge(other, other)).toThrow('diverso');
+    expect(projects.merge(other, projectId)).toEqual({ movedConversations: 1 });
+    expect(titles()).toEqual(['A', 'X', 'Y']);
+    expect(s.db.select().from(conversations).where(eq(conversations.id, r.conversationId)).get()!.projectId).toBe(projectId);
+    expect(s.notes.resourcesForProject(projectId).map((x) => x.title)).toEqual(['linee.txt']);
+    expect(projects.list().map((p) => p.name)).toEqual(['PNRR']);
+    expect(projects.get(projectId)!.description).toBe('Gare e preventivi');
+  });
+});
+
 describe('task suggeriti', () => {
   it('il calendario nel prompt risolve i giorni della settimana', async () => {
     const { calendarFrom } = await import('../src/ai/extract-tasks.ts');
