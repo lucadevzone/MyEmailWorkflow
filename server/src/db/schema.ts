@@ -106,6 +106,8 @@ export const conversations = sqliteTable(
      * una risposta va dove sta il messaggio a cui risponde direttamente.
      */
     splitFromId: text('split_from_id'),
+    /** Quando è stata staccata: fino a un messaggio più recente sta in cima alla lista. */
+    splitAt: integer('split_at'),
     ...meta(),
   },
   (t) => [

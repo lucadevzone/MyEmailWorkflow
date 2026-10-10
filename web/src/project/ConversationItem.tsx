@@ -302,16 +302,18 @@ function MessageTree({ d, selectedId, onOpen, onCompose }: { d: ConversationDeta
     }
   };
   walk(null, 0);
+  // Quante risposte stanno sotto ogni messaggio (per "Stacca con le risposte").
+  const below = (id: string): number => (children.get(id) ?? []).reduce((n, c) => n + 1 + below(c.id), 0);
   return (
     <div className="pm-tree__list">
       {ordered.map(({ m, depth }) => (
-        <TreeNode key={m.id} m={m} depth={Math.min(depth, MAX_DEPTH)} current={selectedId === m.id} onOpen={() => onOpen(m.id)} onCompose={onCompose} projectId={d.projectId} conversationId={d.id} />
+        <TreeNode key={m.id} m={m} depth={Math.min(depth, MAX_DEPTH)} current={selectedId === m.id} onOpen={() => onOpen(m.id)} onCompose={onCompose} projectId={d.projectId} conversationId={d.id} replies={below(m.id)} />
       ))}
     </div>
   );
 }
 
-function TreeNode({ m, depth, current, onOpen, onCompose, projectId, conversationId }: { m: MessageDto; depth: number; current: boolean; onOpen: () => void; onCompose: (r: ComposeRequest) => void; projectId: string | null; conversationId: string }) {
+function TreeNode({ m, depth, current, onOpen, onCompose, projectId, conversationId, replies }: { m: MessageDto; depth: number; current: boolean; onOpen: () => void; onCompose: (r: ComposeRequest) => void; projectId: string | null; conversationId: string; replies: number }) {
   const name = useDisplayName();
   const toast = useToast();
   const from = m.from ?? { name: null, email: 'sconosciuto' };
@@ -334,7 +336,7 @@ function TreeNode({ m, depth, current, onOpen, onCompose, projectId, conversatio
       ...(projectId && m.direction === 'in' ? [{ id: 'remind', icon: 'alarm', label: 'Ricordami di rispondere', primary: true, run: remind }] : []),
       { id: 'reply', icon: 'reply', label: 'Rispondi al mittente', run: () => onCompose({ replyTo: m, replyAll: false, projectId }) },
       // Il primo messaggio è già l'inizio della conversazione: non si stacca.
-      ...(m.parentId && !queued ? detacher.menuActions(m.id, projectId) : []),
+      ...(m.parentId && !queued ? detacher.menuActions(m.id, projectId, replies) : []),
       { id: 'copy', icon: 'content_copy', label: 'Copia testo', run: () => void navigator.clipboard.writeText(m.bodyText ?? '').then(() => toast({ text: 'Testo copiato' })) },
     ],
   }));

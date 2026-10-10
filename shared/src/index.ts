@@ -112,6 +112,8 @@ export interface ConversationListItem {
   subject: string | null;
   /** Staccata a mano da questa conversazione (RF-C5): si può riunire. */
   splitFromId: string | null;
+  /** Chiave d'ordine della lista: ultimo messaggio, o il momento del distacco se più recente. */
+  sortAt: number;
   /** Sintesi breve generata dall'LLM (null finché non è pronta). */
   summary: string | null;
   summaryDetailed: string | null;

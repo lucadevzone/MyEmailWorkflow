@@ -65,7 +65,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
     queryKey: ['conversations', query],
     queryFn: ({ pageParam }) => api.conversations({ ...query, before: pageParam }),
     initialPageParam: undefined as number | undefined,
-    getNextPageParam: (last) => (last.length < PAGE ? undefined : last[last.length - 1]!.lastMessageAt),
+    getNextPageParam: (last) => (last.length < PAGE ? undefined : last[last.length - 1]!.sortAt),
   });
   const items = list.data?.pages.flat() ?? [];
 

@@ -69,13 +69,15 @@ export class ConversationService {
     }
     // Nella vista persona si mostrano anche le archiviate: è uno storico dei rapporti.
     if (q.view !== 'person') where.push(q.archived ? isNotNull(conversations.archivedAt) : isNull(conversations.archivedAt));
-    if (q.before) where.push(lt(conversations.lastMessageAt, q.before));
+    // Ordine: ultimo messaggio, ma una conversazione appena staccata sta in cima finché non arriva altro.
+    const sortAt = sql<number>`max(${conversations.lastMessageAt}, coalesce(${conversations.splitAt}, 0))`;
+    if (q.before) where.push(sql`${sortAt} < ${q.before}`);
 
     const rows = this.db
       .select()
       .from(conversations)
       .where(and(...where))
-      .orderBy(desc(conversations.lastMessageAt))
+      .orderBy(desc(sortAt))
       .limit(limit)
       .all();
     return this.decorate(rows);
@@ -184,6 +186,7 @@ export class ConversationService {
         summaryDetailed: r.summaryDetailed,
         snippet: snippetById.get(r.id) ?? null,
         lastMessageAt: r.lastMessageAt,
+        sortAt: Math.max(r.lastMessageAt, r.splitAt ?? 0),
         messageCount: s?.count ?? 0,
         unreadCount: s?.unread ?? 0,
         hasAttachments: !!s?.attachments,

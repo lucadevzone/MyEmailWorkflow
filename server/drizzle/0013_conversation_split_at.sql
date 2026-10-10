@@ -1,0 +1,1 @@
+ALTER TABLE `conversations` ADD `split_at` integer;

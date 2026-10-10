@@ -176,7 +176,7 @@ export class MailActions {
    * Solo locale. La nuova conversazione ricorda da dove viene: le due non si riuniscono più da sole.
    * projectId: undefined = stesso progetto, null = Da smistare.
    */
-  detach(messageId: string, projectId?: string | null): { conversationId: string; fromConversationId: string; moved: number } {
+  detach(messageId: string, projectId?: string | null, withReplies = true): { conversationId: string; fromConversationId: string; moved: number } {
     const { db } = this.deps;
     const m = db.select().from(messages).where(and(eq(messages.id, messageId), isNull(messages.deletedAt))).get();
     if (!m) throw new ActionError('Messaggio non trovato');
@@ -196,7 +196,7 @@ export class MailActions {
     // Il messaggio e tutto il ramo delle sue risposte.
     const parents = buildTree(all);
     const moved = new Set([m.id]);
-    for (let grew = true; grew; ) {
+    for (let grew = withReplies; grew; ) {
       grew = false;
       for (const x of all) {
         const p = parents.get(x.id);
@@ -222,6 +222,7 @@ export class MailActions {
           isNoise: target ? false : src.isNoise,
           classifiedAt: target ? t : null,
           splitFromId: src.id,
+          splitAt: t,
           createdAt: t,
           updatedAt: t,
         })

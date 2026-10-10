@@ -358,7 +358,7 @@ describe('bozze, allegati, inoltro', () => {
 
 describe('staccare un messaggio (RF-C5)', () => {
   // Thread Gmail unico, catena di risposte con References completi e date crescenti.
-  const reply = (n: number, refs: string[], subject = 'Riunione') =>
+  const reply = (n: number, refs: string[], subject = 'Riunione', thread = 'T') =>
     ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
       uid: 100 + n,
       mailbox: '[Gmail]/Tutti i messaggi',
@@ -379,7 +379,7 @@ describe('staccare un messaggio (RF-C5)', () => {
       flags: [],
       labels: ['\\Inbox'],
       gmMsgid: `gm-${100 + n}`,
-      gmThreadId: 'T',
+      gmThreadId: thread,
     });
   const convOf = (rfc: string) => s.db.select().from(messages).where(eq(messages.rfcMessageId, rfc)).get()!.conversationId;
 
@@ -413,6 +413,30 @@ describe('staccare un messaggio (RF-C5)', () => {
     const back = s.actions.rejoin(res.conversationId);
     expect(back.conversationId).toBe(a.conversationId);
     expect(new Set(['<m1@x>', '<m3@x>', '<m5@x>'].map(convOf))).toEqual(new Set([a.conversationId]));
+  });
+
+  it('solo la mail (senza risposte); la staccata sta in cima finché non arriva altro', async () => {
+    const a = await reply(1, []);
+    await reply(2, ['<m1@x>']);
+    const c = await reply(3, ['<m1@x>', '<m2@x>']);
+    await reply(4, ['<m1@x>', '<m2@x>', '<m3@x>']);
+    const other = await reply(9, [], 'Altro argomento', 'U'); // conversazione più recente
+    s.actions.move(a.conversationId, projectId);
+    s.actions.move(other.conversationId, projectId);
+    const list = () => conv().list({ view: 'project', projectId });
+
+    const res = s.actions.detach(c.messageId!, undefined, false);
+    expect(res.moved).toBe(1);
+    expect(convOf('<m4@x>')).toBe(a.conversationId);
+    // In cima, anche se il suo messaggio è più vecchio di "Altro argomento".
+    expect(list().map((x) => x.id)).toEqual([res.conversationId, other.conversationId, a.conversationId]);
+    // Arriva un messaggio nuovo altrove: torna l'ordine per data.
+    const z = await ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
+      uid: 999, mailbox: '[Gmail]/Tutti i messaggi', flags: [], labels: ['\\Inbox'], gmMsgid: 'gm-999', gmThreadId: 'Z',
+      source: Buffer.from(`Message-ID: <z@x>\r\nFrom: anna@x.it\r\nTo: me@gmail.com\r\nSubject: Nuova\r\nDate: ${new Date(Date.now() + 60_000).toUTCString()}\r\n\r\nciao`),
+    });
+    s.actions.move(z.conversationId, projectId);
+    expect(list()[0]!.subject).toBe('Nuova');
   });
 
   it('stacca e sposta in Da smistare: la nuova conversazione si riclassifica', async () => {

@@ -337,8 +337,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   };
   app.post<{ Params: { id: string } }>('/api/activities/:id/block', async (req) => blockSend(req.params.id));
   // RF-C5: stacca un messaggio (e le sue risposte) in una nuova conversazione; annullabile.
-  app.post<{ Params: { id: string }; Body: { projectId?: string | null } }>('/api/messages/:id/detach', async (req) =>
-    deps.actions.detach(req.params.id, req.body && 'projectId' in req.body ? req.body.projectId : undefined),
+  app.post<{ Params: { id: string }; Body: { projectId?: string | null; withReplies?: boolean } }>('/api/messages/:id/detach', async (req) =>
+    deps.actions.detach(req.params.id, req.body && 'projectId' in req.body ? req.body.projectId : undefined, req.body?.withReplies !== false),
   );
   app.post<{ Params: { id: string } }>('/api/conversations/:id/rejoin', async (req) => deps.actions.rejoin(req.params.id));
 
