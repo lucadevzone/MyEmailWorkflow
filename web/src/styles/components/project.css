@@ -130,7 +130,13 @@ button.pm-conv:hover { border-color: var(--border-strong); }
 .pm-tree__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .pm-tree__line { display: flex; gap: 8px; align-items: center; }
 .pm-tree__name { font-weight: 600; flex: 1; min-width: 0; }
-.pm-tree__name--unread::after { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: middle; }
+.pm-tree__name--unread::after {
+  content: "nuova"; display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px;
+  background: var(--accent); color: #fff; font-size: 11px; font-weight: 600; line-height: 16px; vertical-align: 1px;
+}
+/* Messaggio nuovo nell'albero: fondo e filetto d'accento, anteprima più scura. */
+.pm-tree__node--unread { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.pm-tree__node--unread .pm-tree__snippet { color: var(--ink-2); }
 .pm-tree__time { font-size: var(--fs-sm); color: var(--ink-muted); white-space: nowrap; }
 .pm-tree__snippet { font-size: var(--fs-md); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -206,3 +212,11 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
 }
 .pm-subtabs__account strong { color: var(--ink-2); font-weight: 600; }
 .pm-rail__empty { font-size: var(--fs-sm); color: var(--ink-muted); text-align: center; padding: 0 8px; line-height: 1.35; }
+
+/* Badge "nuova / N nuove" dopo il titolo della conversazione */
+.pm-newbadge {
+  display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; vertical-align: 2px;
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; line-height: 18px; white-space: nowrap;
+}
+/* Sintesi in cima alla colonna dei messaggi */
+.pm-summary--side { margin: 14px 14px 6px; }

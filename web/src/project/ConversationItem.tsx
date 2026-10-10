@@ -87,11 +87,10 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
       <article ref={ref} className="pm-conv" data-conversation={c.id} {...ctx}>
         <button type="button" onClick={cb.onFocus} style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="pm-conv__head">
-            <span className="pm-conv__title">{title}</span>
+            <span className="pm-conv__title">{title}<NewBadge n={c.unreadCount} /></span>
             <span className="pm-conv__date">
               {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}
               {c.important && <Ic icon={Bookmark} size={14} className="pm-bookmark" label="Contiene messaggi importanti" />}
-              {c.unreadCount > 0 && <span className="pm-conv__unread" title={`${c.unreadCount} da leggere`} />}
               {shortDate(c.lastMessageAt)}
             </span>
           </div>
@@ -154,6 +153,12 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
   );
 }
 
+/** Badge dopo il titolo: messaggi arrivati e non ancora letti. */
+function NewBadge({ n }: { n: number }) {
+  if (n <= 0) return null;
+  return <span className="pm-newbadge" title={`${n} da leggere`}>{n === 1 ? 'nuova' : `${n} nuove`}</span>;
+}
+
 function SuggestionTag({ label, reason, onRun, onReject }: { label: string; reason?: string; onRun: () => void; onReject: () => void }) {
   return (
     <span className="pm-tag pm-tag--ai" title={reason || "Suggerito dall'assistente"}>
@@ -212,6 +217,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
             >
               {title}
             </button>
+            <NewBadge n={c.unreadCount} />
           </h2>
           <span className="pm-conv__date" style={{ paddingTop: 3 }}>
             {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}
@@ -232,10 +238,6 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
             ))}
           </div>
         )}
-        <section className="pm-summary" aria-label="Sintesi">
-          <div className="pm-label pm-summary__label">Sintesi</div>
-          <p>{c.summaryDetailed ?? c.summary ?? 'La sintesi viene generata in background.'}</p>
-        </section>
 
         <div className="pm-areas">
           {c.projectId && (
@@ -326,7 +328,11 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
         </div>
       </div>
 
-      <section className="pm-conv__tree" aria-label="Messaggi della conversazione">
+      <section className="pm-conv__tree" aria-label="Sintesi e messaggi della conversazione">
+        <section className="pm-summary pm-summary--side" aria-label="Sintesi">
+          <div className="pm-label pm-summary__label">Sintesi</div>
+          <p>{c.summaryDetailed ?? c.summary ?? 'La sintesi viene generata in background.'}</p>
+        </section>
         <div className="pm-tree__head">Messaggi · {d?.messages.length ?? c.messageCount}</div>
         {!d && <div className="pm-empty">Caricamento…</div>}
         {d && <MessageTree d={d} selectedId={selectedMessageId} onOpen={cb.onOpenMessage} onCompose={cb.onCompose} />}
@@ -525,7 +531,7 @@ function TreeNode({ m, depth, current, onOpen, onCompose, projectId, conversatio
     ],
   }));
   return (
-    <button type="button" className="pm-tree__node" style={{ ['--depth' as string]: depth }} aria-current={current ? 'true' : undefined} onClick={onOpen} {...ctx}>
+    <button type="button" className={`pm-tree__node${unread ? ' pm-tree__node--unread' : ''}`} style={{ ['--depth' as string]: depth }} aria-current={current ? 'true' : undefined} onClick={onOpen} {...ctx}>
       {depth > 0 && <span className="pm-tree__elbow" aria-hidden="true" />}
       <PersonAvatar person={from} size={26} />
       <span className="pm-tree__text">
