@@ -1,17 +1,17 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Bookmark, Mail, Download, Ellipsis, FileText, FolderInput, FolderPlus, History, Paperclip, Plus, Reply, SquareCheck, StickyNote, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Bookmark, Ellipsis, FolderInput, FolderPlus, Paperclip, Reply, SquareCheck, StickyNote, X } from 'lucide-react';
 import type { ConversationDetail, ConversationListItem, MessageDto, SuggestionDto } from '@mmw/shared';
 import { api } from '../api.ts';
-import { fileSize, personLabel, shortDate } from '../lib/format.ts';
+import { shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { PeopleLine, PersonAvatar, PersonChip, useDisplayName, useMe } from '../ui/People.tsx';
 import { useContextMenu, useMenuAt, useOpenMenu } from '../ui/contextMenu.tsx';
-import { useConfirm } from '../ui/confirm.tsx';
 import { useToast } from '../ui/toast.tsx';
 import { ProjectDialog } from '../projects/ProjectDialog.tsx';
 import type { ComposeRequest } from '../workspace/pane.ts';
 import { TagEditor, type TagEditorTarget } from './TagEditor.tsx';
+import { ResourcesArea, TaskArea } from './ConversationAreas.tsx';
 import { useConversationActions } from './useConversationActions.ts';
 
 export interface ItemCallbacks {
@@ -188,20 +188,14 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
   const me = useMe();
   const menuAt = useMenuAt();
   const qc = useQueryClient();
-  const ask = useConfirm();
   const refreshItems = () => {
     for (const k of [['tasks'], ['conversation', c.id], ['conversations']]) qc.invalidateQueries({ queryKey: k });
   };
-  const rectOf = (e: React.MouseEvent) => (e.currentTarget as HTMLElement).getBoundingClientRect();
-  const newTask = (anchor: DOMRect) => onEditor({ target: { kind: 'task', projectId: c.projectId!, conversationId: c.id }, anchor });
-  const newNote = (anchor: DOMRect) => onEditor({ target: { kind: 'note', conversationId: c.id }, anchor });
   const hasReplyTask = openTasks.some((t) => t.title.startsWith('Rispondere a '));
-  const lastIn = d?.messages.filter((m) => m.direction === 'in').at(-1);
   const remindReply = () => void api.remindReply(c.id).then(refreshItems);
   // Solo se l'ultimo messaggio è arrivato (non ho ancora risposto).
   const awaitingReply = d?.messages.at(-1)?.direction === 'in'; // i messaggi arrivano in ordine di data
   const canRemind = !!c.projectId && !hasReplyTask && awaitingReply;
-  const doneTasks = tasks.filter((t) => t.status === 'done');
   // Lo stesso suggerimento due volte (vecchie estrazioni ripetute) si mostra una volta sola.
   const uniqueSuggestions = suggestions.filter((s, i, all) => all.findIndex((x) => actions.suggestionLabel(x) === actions.suggestionLabel(s)) === i);
   const toast = useToast();
@@ -270,101 +264,11 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
           </div>
         )}
 
-        <div className="pm-areas">
+        <div className="pm-areas pm-areas--stack">
           {c.projectId && (
-            <section
-              className="pm-area pm-area--task"
-              aria-label="Task"
-              onContextMenu={(e) => {
-                const anchor = rectOf(e);
-                menuAt(() => ({
-                  title: 'Task',
-                  actions: [
-                    { id: 'new', icon: 'add_task', label: 'Nuovo task', primary: true, run: () => newTask(anchor) },
-                    ...(canRemind ? [{ id: 'remind', icon: 'reply', label: 'Ricordami di rispondere', primary: true, run: remindReply }] : []),
-                  ],
-                }))(e);
-              }}
-            >
-              <h3><Ic icon={SquareCheck} size={15} /> Task · {tasksLoading ? c.taskCount : openTasks.length}</h3>
-              <div className="pm-tags">
-                {openTasks.map((t) => (
-                  <button key={t.id} type="button" className="pm-tag pm-tag--task" title={t.details ?? t.title} aria-label={`Modifica task: ${t.title}`}
-                    onClick={(e) => onEditor({ target: { kind: 'task', task: t, projectId: c.projectId!, conversationId: c.id }, anchor: e.currentTarget.getBoundingClientRect() })}
-                    onContextMenu={(e) => {
-                      const anchor = rectOf(e);
-                      menuAt(() => ({
-                        title: t.title,
-                        actions: [
-                          { id: 'edit', icon: 'edit', label: 'Modifica', primary: true, run: () => onEditor({ target: { kind: 'task', task: t, projectId: c.projectId!, conversationId: c.id }, anchor }) },
-                          { id: 'done', icon: 'task_alt', label: 'Task terminato', primary: true, run: async () => (await ask({ message: 'Segnare il task come terminato?', okLabel: 'Sì, terminato' })) && api.updateTask(t.id, { status: 'done' }).then(refreshItems) },
-                          ...(t.messageId ? [{ id: 'mail', icon: 'mail', label: 'Vai alla mail', primary: true, run: () => cb.onOpenMessage(t.messageId!) }] : []),
-                          { id: 'del', icon: 'delete', label: 'Elimina', tone: 'danger' as const, run: async () => (await ask({ message: 'Eliminare il task?', okLabel: 'Elimina', danger: true })) && api.deleteTask(t.id).then(refreshItems) },
-                        ],
-                      }))(e);
-                    }}>
-                    <span className="pm-tag__text">{t.title}</span>
-                    {t.messageId && <Ic icon={Mail} size={12} className="pm-tag__source" label="nato da una mail" />}
-                  </button>
-                ))}
-                {doneTasks.map((t) => (
-                  <button key={t.id} type="button" className="pm-tag pm-tag--task pm-tag--done" title={`Terminato: ${t.title}`} aria-label={`Task terminato: ${t.title}`}
-                    onClick={(e) => onEditor({ target: { kind: 'task', task: t, projectId: c.projectId!, conversationId: c.id }, anchor: e.currentTarget.getBoundingClientRect() })}
-                    onContextMenu={menuAt(() => ({
-                      title: t.title,
-                      actions: [
-                        { id: 'reopen', icon: 'undo', label: 'Riapri', primary: true, run: () => void api.updateTask(t.id, { status: 'open' }).then(refreshItems) },
-                        ...(t.messageId ? [{ id: 'mail', icon: 'mail', label: 'Vai alla mail', primary: true, run: () => cb.onOpenMessage(t.messageId!) }] : []),
-                        { id: 'del', icon: 'delete', label: 'Elimina', tone: 'danger' as const, run: async () => (await ask({ message: 'Eliminare il task?', okLabel: 'Elimina', danger: true })) && api.deleteTask(t.id).then(refreshItems) },
-                      ],
-                    }))}>
-                    <span className="pm-tag__text">{t.title}</span>
-                  </button>
-                ))}
-                <button type="button" className="pm-tag pm-tag--task pm-tag--add"
-                  onClick={(e) => onEditor({ target: { kind: 'task', projectId: c.projectId!, conversationId: c.id }, anchor: e.currentTarget.getBoundingClientRect() })}>
-                  <Ic icon={Plus} size={15} /> task
-                </button>
-              </div>
-            </section>
+            <TaskArea c={c} tasks={tasks} loading={tasksLoading} canRemind={canRemind} onRemind={remindReply} onEditor={onEditor} onOpenMessage={cb.onOpenMessage} onChanged={refreshItems} />
           )}
-          <section
-            className="pm-area pm-area--note"
-            aria-label="Note"
-            onContextMenu={(e) => {
-              const anchor = rectOf(e);
-              menuAt(() => ({ title: 'Note', actions: [{ id: 'new', icon: 'note_add', label: 'Nuova nota', primary: true, run: () => newNote(anchor) }] }))(e);
-            }}
-          >
-            <h3><Ic icon={StickyNote} size={15} /> Note · {d?.notes.length ?? c.noteCount}</h3>
-            <div className="pm-tags">
-              {d?.notes.map((n) => (
-                <button key={n.id} type="button" className="pm-tag pm-tag--note" title={n.body} aria-label="Modifica nota"
-                  onClick={(e) => onEditor({ target: { kind: 'note', note: n, conversationId: c.id }, anchor: e.currentTarget.getBoundingClientRect() })}
-                  onContextMenu={(e) => {
-                    const anchor = rectOf(e);
-                    menuAt(() => ({
-                      title: 'Nota',
-                      actions: [
-                        { id: 'edit', icon: 'edit', label: 'Modifica', primary: true, run: () => onEditor({ target: { kind: 'note', note: n, conversationId: c.id }, anchor }) },
-                        ...(n.messageId ? [{ id: 'mail', icon: 'mail', label: 'Vai alla mail', primary: true, run: () => cb.onOpenMessage(n.messageId!) }] : []),
-                        { id: 'del', icon: 'delete', label: 'Elimina', tone: 'danger' as const, run: async () => (await ask({ message: 'Eliminare la nota?', okLabel: 'Elimina', danger: true })) && api.deleteNote(n.id).then(refreshItems) },
-                      ],
-                    }))(e);
-                  }}>
-                  <Ic icon={StickyNote} size={15} className="pm-note-icon" />
-                  <span className="pm-tag__text">{n.body.split('\n').find((l) => l.trim() && !l.startsWith('>')) ?? n.body.split('\n')[0]}</span>
-                  {n.messageId && <Ic icon={Mail} size={12} className="pm-tag__source" label="nata da una mail" />}
-                </button>
-              ))}
-              <button type="button" className="pm-tag pm-tag--note pm-tag--add"
-                onClick={(e) => onEditor({ target: { kind: 'note', conversationId: c.id }, anchor: e.currentTarget.getBoundingClientRect() })}>
-                <Ic icon={Plus} size={15} /> nota
-              </button>
-            </div>
-          </section>
-          <Attachments d={d} />
-          <Resources d={d} conversationId={c.id} projectId={c.projectId} onUpload={onUpload} />
+          <ResourcesArea c={c} d={d} onEditor={onEditor} onOpenMessage={cb.onOpenMessage} onUpload={onUpload} onChanged={refreshItems} />
         </div>
       </div>
 
@@ -381,150 +285,6 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
   );
 }
 
-/** Scarica un file come farebbe un clic sul link. */
-function download(href: string) {
-  const a = document.createElement('a');
-  a.href = href;
-  a.click();
-}
-
-function Attachments({ d }: { d?: ConversationDetail }) {
-  const qc = useQueryClient();
-  const menuAt = useMenuAt();
-  const toast = useToast();
-  const [history, setHistory] = useState<string | null>(null);
-  const files = d?.files ?? [];
-  const toResource = useMutation({
-    mutationFn: (attachmentId: string) => api.attachmentToResource(attachmentId),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['conversation', d?.id] });
-      toast({ text: 'Salvato tra le risorse' });
-    },
-  });
-  return (
-    <section
-      className="pm-area pm-area--neutral"
-      aria-label="Allegati di posta"
-      onContextMenu={menuAt(() =>
-        files.length
-          ? {
-              title: 'Allegati di posta',
-              actions: [{ id: 'all', icon: 'create_new_folder', label: 'Salva tutti tra le risorse', primary: true, run: () => files.forEach((f) => toResource.mutate(f.latest.attachmentId)) }],
-            }
-          : null,
-      )}
-    >
-      <h3><Ic icon={Paperclip} size={15} /> Allegati di posta · {d ? files.length : '…'}</h3>
-      {d && files.length === 0 && <span className="pm-muted" style={{ fontSize: 'var(--fs-md)' }}>Nessun allegato.</span>}
-      {files.map((f) => (
-        <div key={f.key}>
-          <div
-            className="pm-file"
-            onContextMenu={menuAt(() => ({
-              title: f.name,
-              actions: [
-                { id: 'dl', icon: 'download', label: 'Scarica', primary: true, run: () => download(`/api/attachments/${f.latest.attachmentId}`) },
-                { id: 'res', icon: 'create_new_folder', label: 'Salva tra le risorse', primary: true, run: () => toResource.mutate(f.latest.attachmentId) },
-                ...(f.versions.length > 1 ? [{ id: 'hist', icon: 'history', label: 'Storia delle versioni', primary: true, run: () => setHistory(f.key) }] : []),
-              ],
-            }))}
-          >
-            <Ic icon={FileText} className="pm-muted" />
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <a href={`/api/attachments/${f.latest.attachmentId}`} className="pm-file__name pm-truncate" style={{ display: 'block' }} title="Scarica l'ultima versione">{f.name}</a>
-              <div className="pm-file__meta">
-                {f.latest.from ? personLabel(f.latest.from) : ''} · {shortDate(f.latest.date)} · {fileSize(f.latest.size)}
-                {f.versions.length > 1 && <> · v{f.latest.no}</>}
-              </div>
-            </div>
-            {f.versions.length > 1 && (
-              <button type="button" className="pm-file__action" title="Storia delle versioni" onClick={() => setHistory(history === f.key ? null : f.key)}>
-                <Ic icon={History} size={15} />
-              </button>
-            )}
-            <button type="button" className="pm-file__action" title="Salva tra le risorse" onClick={() => toResource.mutate(f.latest.attachmentId)}>
-              <Ic icon={FolderPlus} size={15} />
-            </button>
-          </div>
-          {history === f.key && (
-            <ol className="pm-versions">
-              {f.versions.map((v) => (
-                <li key={v.attachmentId} style={{ listStyle: 'none' }}>
-                  <a href={`/api/attachments/${v.attachmentId}`} title={`Scarica v${v.no}`}>
-                    <strong>v{v.no}</strong> · {shortDate(v.date)} · {v.from ? personLabel(v.from) : '—'} · {fileSize(v.size)} <Ic icon={Download} size={15} />
-                  </a>
-                  {v.resent.map((r) => (
-                    <div key={r.attachmentId} className="pm-muted">rinviato da {r.from ? personLabel(r.from) : '—'} · {shortDate(r.date)}</div>
-                  ))}
-                </li>
-              ))}
-            </ol>
-          )}
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function Resources({ d, conversationId, projectId, onUpload }: { d?: ConversationDetail; conversationId: string; projectId: string | null; onUpload: () => void }) {
-  const qc = useQueryClient();
-  const menuAt = useMenuAt();
-  const ask = useConfirm();
-  const remove = useMutation({
-    mutationFn: api.deleteResource,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
-      qc.invalidateQueries({ queryKey: ['conversations'] });
-    },
-  });
-  const list = d?.resources ?? [];
-  const loading = !d;
-  // Comuni a tutto il progetto: si gestiscono da "Modifica progetto".
-  const { data: projectRes = [] } = useQuery({ queryKey: ['project-resources', projectId], queryFn: () => api.projectResources(projectId!), enabled: !!projectId });
-  const common = projectRes.filter((r) => !r.conversationId);
-  return (
-    <section
-      className="pm-area pm-area--neutral"
-      aria-label="Risorse"
-      onContextMenu={menuAt(() => ({ title: 'Risorse', actions: [{ id: 'up', icon: 'upload_file', label: 'Carica file', primary: true, run: onUpload }] }))}
-    >
-      <h3><Ic icon={FolderPlus} size={15} /> Risorse · {loading ? '…' : list.length + common.length}</h3>
-      {common.map((r) => (
-        <div
-          key={r.id}
-          className="pm-file"
-          title="Risorsa comune del progetto (si gestisce da Modifica progetto)"
-          onContextMenu={menuAt(() => ({ title: r.title, actions: [{ id: 'dl', icon: 'download', label: 'Scarica', primary: true, run: () => download(`/api/resources/${r.id}`) }] }))}
-        >
-          <Ic icon={FileText} className="pm-muted" />
-          <a href={`/api/resources/${r.id}`} className="pm-file__name pm-truncate" style={{ flex: 1 }}>{r.title}</a>
-          <span className="pm-file__meta">progetto</span>
-        </div>
-      ))}
-      {list.map((r) => (
-        <div
-          key={r.id}
-          className="pm-file"
-          onContextMenu={menuAt(() => ({
-            title: r.title,
-            actions: [
-              { id: 'dl', icon: 'download', label: 'Scarica', primary: true, run: () => download(`/api/resources/${r.id}`) },
-              { id: 'del', icon: 'delete', label: 'Elimina', tone: 'danger' as const, run: async () => (await ask({ message: `Eliminare ${r.title}?`, okLabel: 'Elimina', danger: true })) && remove.mutate(r.id) },
-            ],
-          }))}
-        >
-          <Ic icon={FileText} className="pm-muted" />
-          <a href={`/api/resources/${r.id}`} className="pm-file__name pm-truncate" style={{ flex: 1 }}>{r.title}</a>
-          {r.size != null && <span className="pm-file__meta">{fileSize(r.size)}</span>}
-          <button type="button" className="pm-file__action" title="Elimina" onClick={async () => (await ask({ message: `Eliminare ${r.title}?`, okLabel: 'Elimina', danger: true })) && remove.mutate(r.id)}>
-            <Ic icon={Trash2} size={15} />
-          </button>
-        </div>
-      ))}
-      <button type="button" className="pm-linkbtn" onClick={onUpload}>+ carica file</button>
-    </section>
-  );
-}
 
 const MAX_DEPTH = 5;
 
