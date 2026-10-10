@@ -179,6 +179,7 @@ export class ConversationService {
       return {
         id: r.id,
         subject: r.subject,
+        splitFromId: r.splitFromId,
         summary: r.summary,
         summaryDetailed: r.summaryDetailed,
         snippet: snippetById.get(r.id) ?? null,

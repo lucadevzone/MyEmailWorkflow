@@ -101,6 +101,11 @@ export const conversations = sqliteTable(
     archivedAt: integer('archived_at'),
     /** Nel cestino (anche su Gmail, tramite coda attività). */
     trashedAt: integer('trashed_at'),
+    /**
+     * Conversazione da cui è stata staccata a mano (RF-C5). Le due non si riuniscono più da sole:
+     * una risposta va dove sta il messaggio a cui risponde direttamente.
+     */
+    splitFromId: text('split_from_id'),
     ...meta(),
   },
   (t) => [

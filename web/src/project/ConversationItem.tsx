@@ -13,6 +13,7 @@ import type { ComposeRequest } from '../workspace/pane.ts';
 import { TagEditor, type TagEditorTarget } from './TagEditor.tsx';
 import { ResourcesArea, TaskArea } from './ConversationAreas.tsx';
 import { useBlockSend } from '../activities/blockSend.ts';
+import { useDetach } from './useDetach.ts';
 import { useConversationActions } from './useConversationActions.ts';
 
 export interface ItemCallbacks {
@@ -317,6 +318,7 @@ function TreeNode({ m, depth, current, onOpen, onCompose, projectId, conversatio
   const unread = !m.seen && m.direction === 'in';
   const qc = useQueryClient();
   const block = useBlockSend();
+  const detacher = useDetach();
   const queued = m.outgoingStatus === 'queued' || m.outgoingStatus === 'failed';
   const remind = () =>
     void api.remindReply(conversationId, m.id).then(() => {
@@ -331,6 +333,8 @@ function TreeNode({ m, depth, current, onOpen, onCompose, projectId, conversatio
       { id: 'reply-all', icon: 'reply_all', label: 'Rispondi a tutti', primary: true, run: () => onCompose({ replyTo: m, replyAll: true, projectId }) },
       ...(projectId && m.direction === 'in' ? [{ id: 'remind', icon: 'alarm', label: 'Ricordami di rispondere', primary: true, run: remind }] : []),
       { id: 'reply', icon: 'reply', label: 'Rispondi al mittente', run: () => onCompose({ replyTo: m, replyAll: false, projectId }) },
+      // Il primo messaggio è già l'inizio della conversazione: non si stacca.
+      ...(m.parentId && !queued ? detacher.menuActions(m.id, projectId) : []),
       { id: 'copy', icon: 'content_copy', label: 'Copia testo', run: () => void navigator.clipboard.writeText(m.bodyText ?? '').then(() => toast({ text: 'Testo copiato' })) },
     ],
   }));

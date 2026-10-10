@@ -125,6 +125,9 @@ export const api = {
   cancelActivity: (id: string) => request<unknown>('POST', `/api/activities/${id}/cancel`),
   blockActivity: (id: string) => request<DraftDto>('POST', `/api/activities/${id}/block`),
   blockSend: (messageId: string) => request<DraftDto>('POST', `/api/messages/${messageId}/block-send`),
+  detachMessage: (messageId: string, projectId?: string | null) =>
+    request<{ conversationId: string; fromConversationId: string; moved: number }>('POST', `/api/messages/${messageId}/detach`, projectId === undefined ? {} : { projectId }),
+  rejoinConversation: (conversationId: string) => request<{ conversationId: string }>('POST', `/api/conversations/${conversationId}/rejoin`),
   runActivity: (id: string) => request<unknown>('POST', `/api/activities/${id}/run`),
   retryActivity: (id: string) => request<unknown>('POST', `/api/activities/${id}/retry`),
   runAllActivities: () => request<unknown>('POST', '/api/activities/run'),

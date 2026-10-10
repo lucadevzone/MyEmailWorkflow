@@ -5,6 +5,8 @@ import { personLabel } from '../lib/format.ts';
 import { useToast } from '../ui/toast.tsx';
 import type { MenuAction } from '../ui/contextMenu.tsx';
 import type { ComposeRequest } from '../workspace/pane.ts';
+import { projectKeyOf } from '../shell/paths.ts';
+import { useDetach } from './useDetach.ts';
 
 export interface ConversationHandlers {
   compose: (r: ComposeRequest) => void;
@@ -18,6 +20,7 @@ export interface ConversationHandlers {
 
 /** Operazioni su una conversazione condivise da scheda compressa, scheda in focus e menu contestuale. */
 export function useConversationActions(c: ConversationListItem, h: ConversationHandlers) {
+  const detacher = useDetach();
   const qc = useQueryClient();
   const toast = useToast();
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
@@ -126,6 +129,7 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
       { id: 'note', icon: 'sticky_note_2', label: 'Nuova nota', run: h.newNote },
       { id: 'upload', icon: 'create_new_folder', label: 'Aggiungi risorsa', keywords: 'carica file', run: h.uploadResource },
       { id: 'unread', icon: 'mark_email_unread', label: 'Segna come non letta', run: () => unread.mutate() },
+      ...(c.splitFromId ? [{ id: 'rejoin', icon: 'call_merge', label: "Riunisci alla conversazione d'origine", keywords: 'annulla stacca unisci', run: () => detacher.rejoin(c.id, projectKeyOf(c)) }] : []),
       ...(!c.projectId ? [{ id: 'noise', icon: 'newspaper', label: c.isNoise ? 'Non è una news' : 'Sposta in News', run: () => noise.mutate() }] : []),
       ...(c.projectId && c.participants.length
         ? [{ id: 'members', icon: 'group_add', label: c.participants.length > 1 ? 'Aggiungi i destinatari al progetto come gruppo' : `Aggiungi ${personLabel(c.participants[0]!)} al progetto`, run: () => toProject.mutate() }]

@@ -355,3 +355,70 @@ describe('bozze, allegati, inoltro', () => {
     expect(() => s.drafts.send(d.id, false)).toThrow(/progetto/);
   });
 });
+
+describe('staccare un messaggio (RF-C5)', () => {
+  // Thread Gmail unico, catena di risposte con References completi e date crescenti.
+  const reply = (n: number, refs: string[], subject = 'Riunione') =>
+    ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
+      uid: 100 + n,
+      mailbox: '[Gmail]/Tutti i messaggi',
+      source: Buffer.from(
+        [
+          `Message-ID: <m${n}@x>`,
+          'From: mario@x.it',
+          'To: me@gmail.com',
+          `Subject: ${subject}`,
+          `Date: Wed, 07 Oct 2026 1${n}:00:00 +0200`,
+          refs.length && `In-Reply-To: ${refs.at(-1)}`,
+          refs.length && `References: ${refs.join(' ')}`,
+          'Content-Type: text/plain; charset=utf-8',
+        ]
+          .filter(Boolean)
+          .join('\r\n') + '\r\n\r\ntesto',
+      ),
+      flags: [],
+      labels: ['\\Inbox'],
+      gmMsgid: `gm-${100 + n}`,
+      gmThreadId: 'T',
+    });
+  const convOf = (rfc: string) => s.db.select().from(messages).where(eq(messages.rfcMessageId, rfc)).get()!.conversationId;
+
+  it('stacca il ramo, le risposte successive vanno dove sta il genitore diretto, si può riunire', async () => {
+    const a = await reply(1, []);
+    await reply(2, ['<m1@x>']);
+    // Qualcuno risponde alla vecchia conversazione per parlare d'altro.
+    const c = await reply(3, ['<m1@x>', '<m2@x>'], 'Re: Riunione — preventivo');
+    await reply(4, ['<m1@x>', '<m2@x>', '<m3@x>']);
+    s.actions.move(a.conversationId, projectId);
+
+    expect(() => s.actions.detach(a.messageId!)).toThrow(/primo messaggio/);
+    const res = s.actions.detach(c.messageId!);
+    expect(res).toMatchObject({ fromConversationId: a.conversationId, moved: 2 });
+    expect(convOf('<m4@x>')).toBe(res.conversationId);
+    expect(convOf('<m2@x>')).toBe(a.conversationId);
+    const created = s.db.select().from(conversations).where(eq(conversations.id, res.conversationId)).get()!;
+    expect(created).toMatchObject({ projectId, splitFromId: a.conversationId, subject: 'Riunione — preventivo' });
+
+    // Risposta nel ramo staccato (References contiene tutta la catena, stesso thread Gmail): non riunisce.
+    await reply(5, ['<m1@x>', '<m2@x>', '<m3@x>', '<m4@x>']);
+    expect(convOf('<m5@x>')).toBe(res.conversationId);
+    // Risposta nel ramo vecchio: resta nell'originale.
+    await reply(6, ['<m1@x>', '<m2@x>']);
+    expect(convOf('<m6@x>')).toBe(a.conversationId);
+    // Solo thread Gmail, nessun riferimento: va nell'originale.
+    await reply(7, []);
+    expect(convOf('<m7@x>')).toBe(a.conversationId);
+
+    // Annulla: tornano una conversazione sola.
+    const back = s.actions.rejoin(res.conversationId);
+    expect(back.conversationId).toBe(a.conversationId);
+    expect(new Set(['<m1@x>', '<m3@x>', '<m5@x>'].map(convOf))).toEqual(new Set([a.conversationId]));
+  });
+
+  it('stacca e sposta in Da smistare: la nuova conversazione si riclassifica', async () => {
+    await reply(1, []);
+    const b = await reply(2, ['<m1@x>']);
+    const res = s.actions.detach(b.messageId!, null);
+    expect(s.db.select().from(conversations).where(eq(conversations.id, res.conversationId)).get()!.projectId).toBeNull();
+  });
+});

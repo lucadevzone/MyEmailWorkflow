@@ -6,12 +6,12 @@ import { ulid } from 'ulid';
 import type { AccountDto } from '@mmw/shared';
 import type Database from 'better-sqlite3';
 import type { Db } from '../db/client.ts';
-import { attachments, blobs, conversations, messageAddresses, messages, projects } from '../db/schema.ts';
+import { attachments, blobs, conversations, drafts, messageAddresses, messages, notes, projects, tasks } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
 import { bus } from '../events/bus.ts';
-import { ConversationService } from '../conversations/service.ts';
+import { buildTree, ConversationService } from '../conversations/service.ts';
 import { cleanBody, makeSnippet, normalizeSubject } from '../ingest/clean-text.ts';
-import { upsertAddress } from '../ingest/ingest.ts';
+import { mergeConversations, upsertAddress } from '../ingest/ingest.ts';
 import type { ActivityService, SendPayload } from '../activities/service.ts';
 import type { ActivityRunner } from '../activities/runner.ts';
 import { enqueueSummary } from '../ai/summarize.ts';
@@ -169,6 +169,98 @@ export class MailActions {
     bus.publish({ type: 'conversations', ids: [conversationId] });
     bus.publish({ type: 'projects' });
     return res;
+  }
+
+  /**
+   * RF-C5: stacca un messaggio, con le risposte che gli stanno sotto, in una nuova conversazione.
+   * Solo locale. La nuova conversazione ricorda da dove viene: le due non si riuniscono più da sole.
+   * projectId: undefined = stesso progetto, null = Da smistare.
+   */
+  detach(messageId: string, projectId?: string | null): { conversationId: string; fromConversationId: string; moved: number } {
+    const { db } = this.deps;
+    const m = db.select().from(messages).where(and(eq(messages.id, messageId), isNull(messages.deletedAt))).get();
+    if (!m) throw new ActionError('Messaggio non trovato');
+    const src = db.select().from(conversations).where(eq(conversations.id, m.conversationId)).get()!;
+    const all = db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.conversationId, src.id), isNull(messages.deletedAt)))
+      .orderBy(messages.date)
+      .all();
+    if (all[0]?.id === m.id) throw new ActionError('È il primo messaggio: la conversazione comincia già da qui');
+    if (projectId) {
+      const p = db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), isNull(projects.deletedAt))).get();
+      if (!p) throw new ActionError('Progetto non trovato');
+    }
+
+    // Il messaggio e tutto il ramo delle sue risposte.
+    const parents = buildTree(all);
+    const moved = new Set([m.id]);
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const x of all) {
+        const p = parents.get(x.id);
+        if (!moved.has(x.id) && p && moved.has(p)) {
+          moved.add(x.id);
+          grew = true;
+        }
+      }
+    }
+    const ids = [...moved];
+    const rest = all.filter((x) => !moved.has(x.id));
+    const t = now();
+    const id = newId();
+    const target = projectId === undefined ? src.projectId : projectId;
+    db.transaction((tx) => {
+      tx.insert(conversations)
+        .values({
+          id,
+          projectId: target,
+          subject: normalizeSubject(m.subject) || src.subject,
+          lastMessageAt: Math.max(...all.filter((x) => moved.has(x.id)).map((x) => x.date)),
+          gmThreadId: src.gmThreadId,
+          isNoise: target ? false : src.isNoise,
+          classifiedAt: target ? t : null,
+          splitFromId: src.id,
+          createdAt: t,
+          updatedAt: t,
+        })
+        .run();
+      tx.update(messages).set({ conversationId: id, updatedAt: t }).where(inArray(messages.id, ids)).run();
+      // Task e note nati da quei messaggi li seguono; così le bozze di risposta.
+      tx.update(tasks).set({ conversationId: id, projectId: target ?? undefined, updatedAt: t }).where(inArray(tasks.messageId, ids)).run();
+      tx.update(notes).set({ conversationId: id, updatedAt: t }).where(inArray(notes.messageId, ids)).run();
+      tx.update(drafts).set({ conversationId: id, updatedAt: t }).where(inArray(drafts.replyToMessageId, ids)).run();
+      tx.update(conversations)
+        .set({ lastMessageAt: Math.max(...rest.map((x) => x.date)), updatedAt: t })
+        .where(eq(conversations.id, src.id))
+        .run();
+    });
+    enqueueSummary(db, src.id);
+    enqueueSummary(db, id);
+    if (!target) enqueueClassification(db, id, PRIORITY.normal);
+    bus.publish({ type: 'conversations', ids: [src.id, id] });
+    bus.publish({ type: 'projects' });
+    bus.publish({ type: 'tasks' });
+    return { conversationId: id, fromConversationId: src.id, moved: ids.length };
+  }
+
+  /** Annulla un distacco: la conversazione staccata torna in quella d'origine. */
+  rejoin(conversationId: string): { conversationId: string } {
+    const { db } = this.deps;
+    const c = db.select().from(conversations).where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))).get();
+    if (!c?.splitFromId) throw new ActionError('Questa conversazione non è stata staccata da un\'altra');
+    const origin = db.select().from(conversations).where(and(eq(conversations.id, c.splitFromId), isNull(conversations.deletedAt))).get();
+    if (!origin) throw new ActionError('La conversazione d\'origine non esiste più');
+    const target = mergeConversations(db, [origin.id, c.id]);
+    const gone = target === origin.id ? c.id : origin.id;
+    // Chi era stato staccato da quella che sparisce ora punta alla conversazione unita.
+    db.update(conversations).set({ splitFromId: origin.splitFromId }).where(eq(conversations.id, target)).run();
+    db.update(conversations).set({ splitFromId: target }).where(and(eq(conversations.splitFromId, gone), isNull(conversations.deletedAt))).run();
+    enqueueSummary(db, target);
+    bus.publish({ type: 'conversations', ids: [origin.id, c.id] });
+    bus.publish({ type: 'projects' });
+    return { conversationId: target };
   }
 
   /** Nuova email o risposta, sempre da un progetto: il mittente è l'account del progetto. */

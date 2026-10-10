@@ -336,6 +336,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return draft;
   };
   app.post<{ Params: { id: string } }>('/api/activities/:id/block', async (req) => blockSend(req.params.id));
+  // RF-C5: stacca un messaggio (e le sue risposte) in una nuova conversazione; annullabile.
+  app.post<{ Params: { id: string }; Body: { projectId?: string | null } }>('/api/messages/:id/detach', async (req) =>
+    deps.actions.detach(req.params.id, req.body && 'projectId' in req.body ? req.body.projectId : undefined),
+  );
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/rejoin', async (req) => deps.actions.rejoin(req.params.id));
+
   app.post<{ Params: { id: string } }>('/api/messages/:id/block-send', async (req) => {
     const row = deps.activities.sendFor(req.params.id);
     if (!row) throw new ActivityError('Questo messaggio non è più in coda: troppo tardi per bloccarlo');

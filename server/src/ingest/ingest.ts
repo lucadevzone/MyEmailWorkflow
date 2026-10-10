@@ -117,7 +117,8 @@ export async function ingestMessage(
     const conversationId = resolveConversation(tx as unknown as Db, {
       gmThreadId: raw.gmThreadId ?? null,
       rfcMessageId,
-      parentIds: [...new Set([inReplyTo, ...references].filter((x): x is string => !!x))],
+      // Dal genitore diretto al più lontano: serve a scegliere tra conversazioni staccate a mano.
+      parentIds: [...new Set([inReplyTo, ...[...references].reverse()].filter((x): x is string => !!x))],
       subject: parsed.subject ?? null,
       date,
       noise: () => detectNoise({ headers: parsed.headers, fromAddress: from?.email ?? null }).isNoise,
@@ -264,15 +265,19 @@ function resolveConversation(db: Db, k: ThreadKeys): string {
       candidates.add(c.id);
   }
 
+  const parentConv = new Map<string, string>();
   if (k.parentIds.length) {
     for (const m of db
-      .select({ c: messages.conversationId })
+      .select({ c: messages.conversationId, rfc: messages.rfcMessageId })
       .from(messages)
       .where(and(inArray(messages.rfcMessageId, k.parentIds), isNull(messages.deletedAt)))
-      .all())
+      .all()) {
       candidates.add(m.c);
+      if (m.rfc) parentConv.set(m.rfc, m.c);
+    }
   }
 
+  const childConvs = new Set<string>();
   if (k.rfcMessageId) {
     for (const m of db
       .select({ c: messages.conversationId })
@@ -286,8 +291,20 @@ function resolveConversation(db: Db, k: ThreadKeys): string {
           isNull(messages.deletedAt),
         ),
       )
-      .all())
+      .all()) {
       candidates.add(m.c);
+      childConvs.add(m.c);
+    }
+  }
+
+  // Conversazioni staccate a mano (RF-C5): tra quelle della stessa famiglia ne resta una sola,
+  // quella del genitore più vicino (poi dei figli, poi l'originale); le altre non si uniscono.
+  const nearest = k.parentIds.map((id) => parentConv.get(id)).find((c): c is string => !!c);
+  for (const group of splitFamilies(db, [...candidates])) {
+    if (group.length < 2) continue;
+    const keep =
+      group.find((c) => c === nearest) ?? group.find((c) => childConvs.has(c)) ?? group.find((c) => !splitParent(db, c)) ?? group[0]!;
+    for (const c of group) if (c !== keep) candidates.delete(c);
   }
 
   const t = now();
@@ -316,6 +333,29 @@ function resolveConversation(db: Db, k: ThreadKeys): string {
       .run();
   }
   return target;
+}
+
+function splitParent(db: Db, id: string): string | null {
+  return db.select({ p: conversations.splitFromId }).from(conversations).where(eq(conversations.id, id)).get()?.p ?? null;
+}
+
+/** Raggruppa le conversazioni per famiglia di distacchi (stessa conversazione d'origine). */
+function splitFamilies(db: Db, ids: string[]): string[][] {
+  const rootOf = (id: string) => {
+    let cur = id;
+    for (let i = 0; i < 20; i++) {
+      const p = splitParent(db, cur);
+      if (!p) break;
+      cur = p;
+    }
+    return cur;
+  };
+  const groups = new Map<string, string[]>();
+  for (const id of ids) {
+    const r = rootOf(id);
+    groups.set(r, [...(groups.get(r) ?? []), id]);
+  }
+  return [...groups.values()];
 }
 
 /** Unisce più conversazioni in una: tiene quella con un progetto, altrimenti la più vecchia. */

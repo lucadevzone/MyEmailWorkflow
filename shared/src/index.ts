@@ -110,6 +110,8 @@ export interface PersonRef {
 export interface ConversationListItem {
   id: string;
   subject: string | null;
+  /** Staccata a mano da questa conversazione (RF-C5): si può riunire. */
+  splitFromId: string | null;
   /** Sintesi breve generata dall'LLM (null finché non è pronta). */
   summary: string | null;
   summaryDetailed: string | null;
