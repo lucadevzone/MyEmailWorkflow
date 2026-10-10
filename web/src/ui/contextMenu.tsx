@@ -33,13 +33,31 @@ interface OpenMenu extends MenuSpec {
 }
 
 /** Il menu si ancora a un elemento oppure a un rettangolo qualsiasi (es. il testo selezionato). */
-type Open = (spec: MenuSpec, target: HTMLElement | DOMRect, mode?: 'bar' | 'palette', query?: string) => void;
+type Open = (spec: MenuSpec, target: HTMLElement | DOMRect, mode?: 'bar' | 'palette', query?: string, at?: DOMRect) => void;
 const MenuContext = createContext<Open>(() => {});
 
 /** Apertura programmatica (es. "Sposta in…" riapre la palette già filtrata). */
 export const useOpenMenu = () => useContext(MenuContext);
 
 const MAX_SUGGESTED_IN_BAR = 2;
+
+/** Punto del clic con il mouse (il menu compare lì); da tastiera nessun punto: si ancora all'elemento. */
+const pointOf = (e: ReactMouseEvent) => (e.clientX || e.clientY ? new DOMRect(e.clientX, e.clientY, 0, 0) : undefined);
+
+/**
+ * Menu contestuale da un gestore qualsiasi (anche dentro un elenco, dove non si può usare un hook per voce):
+ * `menuAt(spec)` restituisce il gestore di onContextMenu, che apre il menu nel punto del clic.
+ */
+export function useMenuAt() {
+  const open = useContext(MenuContext);
+  return (getSpec: () => MenuSpec | null) => (e: ReactMouseEvent<HTMLElement>) => {
+    const spec = getSpec();
+    if (!spec) return;
+    e.preventDefault();
+    e.stopPropagation();
+    open(spec, e.currentTarget, 'bar', '', pointOf(e));
+  };
+}
 
 /**
  * Props da applicare a un elemento per dargli il menu contestuale (tasto destro, tasto menu, Maiusc+F10).
@@ -53,7 +71,7 @@ export function useContextMenu(getSpec: () => MenuSpec | null) {
       if (!spec) return;
       e.preventDefault();
       e.stopPropagation();
-      open(spec, e.currentTarget, 'bar');
+      open(spec, e.currentTarget, 'bar', '', pointOf(e));
     },
     onKeyDown: (e: ReactKeyboardEvent<HTMLElement>) => {
       if (e.target !== e.currentTarget) return;
@@ -71,9 +89,9 @@ export function ContextMenuProvider({ children }: { children: ReactNode }) {
   const [menu, setMenu] = useState<OpenMenu | null>(null);
   const ask = useConfirm();
 
-  const open: Open = useCallback((spec, target, mode = 'bar', query = '') => {
+  const open: Open = useCallback((spec, target, mode = 'bar', query = '', at) => {
     const el = target instanceof HTMLElement ? target : null;
-    setMenu({ ...spec, rect: el ? el.getBoundingClientRect() : (target as DOMRect), mode, query, restore: el });
+    setMenu({ ...spec, rect: at ?? (el ? el.getBoundingClientRect() : (target as DOMRect)), mode, query, restore: el });
   }, []);
 
   const close = useCallback(() => {
