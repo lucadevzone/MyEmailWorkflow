@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Ellipsis, X } from 'lucide-react';
+import { MailCheck, Send, Settings2, X } from 'lucide-react';
 import type { ConversationQuery, ProjectDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
-import { useOpenMenu } from '../ui/contextMenu.tsx';
 import { useToast } from '../ui/toast.tsx';
 import type { PaneAction } from '../workspace/pane.ts';
 import { MailView } from '../mail/MailView.tsx';
@@ -44,10 +43,10 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
-  const openMenu = useOpenMenu();
   const isProject = projectKey !== SYSTEM_INBOX && projectKey !== SYSTEM_NEWS;
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const { data: counts } = useQuery({ queryKey: ['counts'], queryFn: api.conversationCounts });
+  const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
   const project = isProject ? projects.find((p) => p.id === projectKey) : undefined;
   const [archived, setArchived] = useState(false);
   const [person, setPerson] = useState<string | null>(null);
@@ -114,30 +113,18 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
     [navigate, projectKey],
   );
 
-  const projectMenu = (el: HTMLElement) => {
+  const markAllRead = async () => {
     const refresh = () => {
       for (const k of [['conversations'], ['counts'], ['projects'], ['activities']]) qc.invalidateQueries({ queryKey: k });
     };
-    const markRead = async () => {
-      const res = isProject ? await api.markViewRead('project', projectKey) : await api.markViewRead(projectKey === SYSTEM_INBOX ? 'inbox' : 'noise');
-      refresh();
-      toast({
-        text: res.count ? `${res.count} messaggi segnati come letti` : 'Niente da segnare come letto',
-        action: res.count ? { label: 'Annulla', run: () => void Promise.all(res.activityIds.map(api.cancelActivity)).then(refresh) } : undefined,
-      });
-    };
-    openMenu(
-      {
-        title: project?.name ?? (projectKey === SYSTEM_INBOX ? 'Da smistare' : 'News'),
-        actions: [
-          { id: 'read', icon: 'mark_email_read', label: 'Segna tutto come letto', primary: true, run: markRead },
-          ...(project ? [{ id: 'edit', icon: 'tune', label: 'Modifica progetto', primary: true, run: () => onEditProject(project) }] : []),
-        ],
-      },
-      el,
-      'bar',
-    );
+    const res = isProject ? await api.markViewRead('project', projectKey) : await api.markViewRead(projectKey === SYSTEM_INBOX ? 'inbox' : 'noise');
+    refresh();
+    toast({
+      text: res.count ? `${res.count} messaggi segnati come letti` : 'Niente da segnare come letto',
+      action: res.count ? { label: 'Annulla', run: () => void Promise.all(res.activityIds.map(api.cancelActivity)).then(refresh) } : undefined,
+    });
   };
+  const outgoing = project ? accounts.find((a) => a.id === project.outgoingAccountId) : undefined;
 
   // S2/S3: il carosello prende il posto della lista; la conversazione resta in focus al ritorno.
   if (messageId || draftId) {
@@ -176,10 +163,29 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
               </button>
             </span>
           )}
-          <span style={{ flex: 1 }} />
-          <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Opzioni del progetto" onClick={(e) => projectMenu(e.currentTarget)}>
-            <Ic icon={Ellipsis} />
+          {/* Account di uscita del progetto: tutte le mail nuove e le risposte partono da qui. */}
+          <span className="pm-subtabs__account" title="Account di uscita del progetto">
+            {project && (
+              <>
+                <Ic icon={Send} size={15} />
+                {outgoing ? (
+                  <>
+                    Esce da <strong>{outgoing.name}</strong> <span className="pm-truncate">{outgoing.email}</span>
+                  </>
+                ) : (
+                  'Account di uscita non trovato'
+                )}
+              </>
+            )}
+          </span>
+          <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Segna tutto come letto" title="Segna tutto come letto" onClick={() => void markAllRead()}>
+            <Ic icon={MailCheck} />
           </button>
+          {project && (
+            <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Impostazioni del progetto" title="Impostazioni del progetto" onClick={() => onEditProject(project)}>
+              <Ic icon={Settings2} />
+            </button>
+          )}
         </div>
         <div className="pm-convstack">
           {list.isLoading && <div className="pm-empty">Caricamento…</div>}

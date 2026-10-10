@@ -43,6 +43,8 @@ export function Rail({ projectId, filter, onFilter, onCompose, onOpenPerson, onM
     if (emails.length) onCompose(emails);
   };
   const isSel = (key: string) => selected.some((s) => s.key === key) || filter === key;
+  // "Tutti" ha senso solo se nel progetto c'è almeno una persona o un gruppo.
+  const hasMembers = !!members && members.contacts.length + members.groups.length > 0;
 
   return (
     <aside className="pm-rail" aria-label="Persone del progetto">
@@ -64,17 +66,21 @@ export function Rail({ projectId, filter, onFilter, onCompose, onOpenPerson, onM
         )}
       </div>
 
-      <span className="pm-label">Gruppi</span>
-      <button
-        type="button"
-        className="pm-rail__item"
-        aria-pressed={isSel('all')}
-        title={everyone.length ? `Scrivi a tutti (${everyone.length})` : 'Nessuna persona nel progetto: aggiungine con +'}
-        onClick={(e) => everyone.length && activate(e, { key: 'all', emails: everyone })}
-      >
-        <GroupBadge all />
-        <span className="pm-rail__name pm-rail__name--strong">Tutti</span>
-      </button>
+      {hasMembers && (
+        <>
+          <span className="pm-label">Gruppi</span>
+          <button
+            type="button"
+            className="pm-rail__item"
+            aria-pressed={isSel('all')}
+            title={`Scrivi a tutti (${everyone.length})`}
+            onClick={(e) => everyone.length && activate(e, { key: 'all', emails: everyone })}
+          >
+            <GroupBadge all />
+            <span className="pm-rail__name pm-rail__name--strong">Tutti</span>
+          </button>
+        </>
+      )}
       {members?.groups.map((g) => (
         <GroupItem
           key={g.id}
@@ -87,8 +93,14 @@ export function Rail({ projectId, filter, onFilter, onCompose, onOpenPerson, onM
         />
       ))}
 
-      <span className="pm-rail__sep" aria-hidden="true" />
-      <span className="pm-label">Persone</span>
+      {hasMembers ? (
+        <>
+          <span className="pm-rail__sep" aria-hidden="true" />
+          <span className="pm-label">Persone</span>
+        </>
+      ) : (
+        members && <span className="pm-rail__empty">Nessuna persona nel progetto: aggiungine con +</span>
+      )}
       {members?.contacts.map((p) => (
         <PersonItem
           key={p.key}

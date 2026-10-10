@@ -200,3 +200,9 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
 }
 .pm-source:hover { background: var(--surface-muted); border-color: var(--ink-muted); }
 .pm-tag__source { flex: none; opacity: .7; }
+.pm-subtabs__account {
+  flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: var(--fs-md); color: var(--ink-muted); white-space: nowrap; overflow: hidden;
+}
+.pm-subtabs__account strong { color: var(--ink-2); font-weight: 600; }
+.pm-rail__empty { font-size: var(--fs-sm); color: var(--ink-muted); text-align: center; padding: 0 8px; line-height: 1.35; }
