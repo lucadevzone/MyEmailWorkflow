@@ -65,7 +65,11 @@ export class SearchService {
     }
   }
 
-  async search(q: string, scope: SearchScope = 'all'): Promise<SearchResults> {
+  /**
+   * `loose` (per l'assistente): basta una delle parole e la soglia di significato è più ampia,
+   * così anche una domanda scritta per intero trova le conversazioni pertinenti.
+   */
+  async search(q: string, scope: SearchScope = 'all', opts: { loose?: boolean } = {}): Promise<SearchResults> {
     const terms = searchTerms(q);
     const empty: SearchResults = { query: q, terms, conversations: [], files: [], items: [], semantic: false };
     if (!terms.length) return empty;
@@ -73,7 +77,7 @@ export class SearchService {
     const where = scopeSql(scope);
 
     // 1. Parole: FTS5 con prefisso su ogni termine (tutte le parole devono esserci).
-    const match = terms.map((t) => `"${t}"*`).join(' ');
+    const match = terms.map((t) => `"${t}"*`).join(opts.loose ? ' OR ' : ' ');
     const fts = sqlite
       .prepare(
         `select f.message_id as messageId, m.conversation_id as conversationId,
@@ -96,7 +100,7 @@ export class SearchService {
               where m.deleted_at is null and c.deleted_at is null and knn.distance <= ? and ${where.sql}
               order by knn.distance`,
           )
-          .all(vec, MAX_VEC_DISTANCE, ...where.params) as { messageId: string; conversationId: string; text: string; d: number }[])
+          .all(vec, opts.loose ? MAX_VEC_DISTANCE * 1.2 : MAX_VEC_DISTANCE, ...where.params) as { messageId: string; conversationId: string; text: string; d: number }[])
       : [];
 
     // 3. Fusione per conversazione: il miglior messaggio di ciascuna lista conta una volta.

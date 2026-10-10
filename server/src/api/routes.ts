@@ -601,9 +601,17 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
       .map((x) => ({ conversationId: x.conversationId!, messageId: typeof x.messageId === 'string' ? x.messageId : null }))
       .slice(0, 6);
     if (!question) throw new ActionError('Scrivi una domanda');
+    // Senza fonti dalla ricerca (es. una domanda lunga che non trova tutte le parole) si cerca in modo più largo.
+    let sources = ids;
+    let found: { conversationId: string; projectId: string | null; isNoise: boolean; title: string }[] = [];
+    if (!sources.length) {
+      const res = await deps.search.search(question, 'all', { loose: true });
+      found = res.conversations.slice(0, 6).map((c) => ({ conversationId: c.conversationId, projectId: c.projectId, isNoise: c.isNoise, title: c.title }));
+      sources = res.conversations.slice(0, 6).map((c) => ({ conversationId: c.conversationId, messageId: c.messageId }));
+    }
     const abort = new AbortController();
     reply.raw.on('close', () => abort.abort());
-    const gen = deps.assistant.ask(question, ids, abort.signal);
+    const gen = deps.assistant.ask(question, sources, abort.signal);
     let first: IteratorResult<string>;
     try {
       first = await gen.next();
@@ -618,7 +626,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
         if (!abort.signal.aborted) yield `\n[errore] ${(err as Error).message}`;
       }
     }
-    return reply.header('content-type', 'text/plain; charset=utf-8').header('cache-control', 'no-cache').send(Readable.from(body()));
+    return reply
+      .header('content-type', 'text/plain; charset=utf-8')
+      .header('cache-control', 'no-cache')
+      .header('x-mmw-sources', encodeURIComponent(JSON.stringify(found)))
+      .send(Readable.from(body()));
   });
 
   app.put<{ Params: { id: string }; Body: { summary?: string } }>('/api/conversations/:id/summary', async (req) => {

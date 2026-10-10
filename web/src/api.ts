@@ -45,6 +45,14 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }
 
+/** Fonte usata dall'assistente sulla posta (quando l'ha cercata da sé). */
+export interface AskSource {
+  conversationId: string;
+  projectId: string | null;
+  isNoise: boolean;
+  title: string;
+}
+
 export interface AssistantScope {
   conversationId?: string | null;
   draftId?: string | null;
@@ -205,7 +213,13 @@ export const api = {
     return out;
   },
   /** Domanda all'assistente su più conversazioni (dalla ricerca), in streaming. */
-  assistantAsk: async (question: string, sources: { conversationId: string; messageId?: string }[], onPiece: (piece: string) => void, signal?: AbortSignal): Promise<string> => {
+  assistantAsk: async (
+    question: string,
+    sources: { conversationId: string; messageId?: string }[],
+    onPiece: (piece: string) => void,
+    signal?: AbortSignal,
+    onSources?: (found: AskSource[]) => void,
+  ): Promise<string> => {
     const res = await fetch('/api/assistant/ask', {
       method: 'POST',
       headers: { 'x-mmw': '1', 'content-type': 'application/json' },
@@ -213,6 +227,10 @@ export const api = {
       signal,
     });
     if (!res.ok || !res.body) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
+    try {
+      const found = JSON.parse(decodeURIComponent(res.headers.get('x-mmw-sources') ?? '%5B%5D')) as AskSource[];
+      if (found.length) onSources?.(found);
+    } catch {}
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     let out = '';
     for (;;) {

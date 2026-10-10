@@ -3,7 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { FolderPlus, Paperclip, Search as SearchIcon, Sparkles, SquareCheck, StickyNote } from 'lucide-react';
 import type { SearchScope } from '@mmw/shared';
-import { api } from '../api.ts';
+import { api, type AskSource } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { PersonAvatar } from '../ui/People.tsx';
 import { paths, projectKeyOf, SYSTEM_INBOX, SYSTEM_NEWS } from './paths.ts';
@@ -65,7 +65,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
   const data = q.length >= 2 ? res.data : undefined;
 
   // Assistente sulla posta: risponde dalle conversazioni trovate, citandole come [1], [2]…
-  const [answer, setAnswer] = useState<{ q: string; text: string; busy: boolean; error?: string } | null>(null);
+  const [answer, setAnswer] = useState<{ q: string; text: string; busy: boolean; error?: string; sources: AskSource[] } | null>(null);
   const askCtrl = useRef<AbortController | null>(null);
   useEffect(() => {
     askCtrl.current?.abort();
@@ -73,13 +73,19 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
   }, [q, scope]);
   useEffect(() => () => askCtrl.current?.abort(), []);
   const ask = async () => {
-    if (!data) return;
     askCtrl.current?.abort();
     const ctrl = new AbortController();
     askCtrl.current = ctrl;
-    setAnswer({ q, text: '', busy: true });
+    const hits = (data?.conversations ?? []).slice(0, 6);
+    setAnswer({ q, text: '', busy: true, sources: hits.map((c) => ({ conversationId: c.conversationId, projectId: c.projectId, isNoise: c.isNoise, title: c.title })) });
     try {
-      await api.assistantAsk(q, data.conversations.slice(0, 6).map((c) => ({ conversationId: c.conversationId, messageId: c.messageId })), (piece) => setAnswer((a) => (a ? { ...a, text: a.text + piece } : a)), ctrl.signal);
+      await api.assistantAsk(
+        q,
+        hits.map((c) => ({ conversationId: c.conversationId, messageId: c.messageId })),
+        (piece) => setAnswer((a) => (a ? { ...a, text: a.text + piece } : a)),
+        ctrl.signal,
+        (found) => setAnswer((a) => (a ? { ...a, sources: found } : a)),
+      );
       setAnswer((a) => (a ? { ...a, busy: false } : a));
     } catch (e) {
       if (!ctrl.signal.aborted) setAnswer((a) => (a ? { ...a, busy: false, error: (e as Error).message } : a));
@@ -89,7 +95,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
   const renderAnswer = (text: string) =>
     text.split(/(\[\d+\])/g).map((part, i) => {
       const m = part.match(/^\[(\d+)\]$/);
-      const hit = m ? data?.conversations[Number(m[1]) - 1] : undefined;
+      const hit = m ? answer?.sources[Number(m[1]) - 1] : undefined;
       return hit ? (
         <button key={i} type="button" className="pm-cite" title={hit.title} onClick={() => go(where(hit))}>
           {m![1]}
@@ -259,7 +265,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
                 Solo {currentName}
               </button>
             )}
-            {data && data.conversations.length > 0 && (
+            {q.length >= 2 && (
               <button type="button" className="pm-scope pm-scope--ai" onClick={() => void ask()} disabled={answer?.busy} title="Risponde leggendo le conversazioni trovate">
                 <Ic icon={Sparkles} size={15} /> Chiedi all'assistente
               </button>
@@ -272,7 +278,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
             {answer && (
               <div className="pm-answer" aria-live="polite">
                 <div className="pm-results__group">
-                  <Ic icon={Sparkles} size={13} /> Assistente · dalle {Math.min(6, data?.conversations.length ?? 0)} conversazioni più pertinenti
+                  <Ic icon={Sparkles} size={13} /> Assistente{answer.sources.length ? ` · dalle ${answer.sources.length} conversazioni più pertinenti` : ''}
                 </div>
                 {answer.error ? (
                   <div className="pm-answer__text pm-error">{answer.error}</div>
@@ -282,10 +288,10 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
                     {answer.busy && <span className="pm-bubble__cursor" aria-hidden="true" />}
                   </div>
                 )}
-                {!answer.error && !answer.busy && (
+                {!answer.error && !answer.busy && answer.sources.length > 0 && (
                   <div className="pm-answer__sources">
                     <span className="pm-row__sub">Fonti consultate:</span>
-                    {data?.conversations.slice(0, 6).map((c, i) => (
+                    {answer.sources.map((c, i) => (
                       <button key={c.conversationId} type="button" className="pm-answer__source" onClick={() => go(where(c))}>
                         <span className="pm-cite" aria-hidden="true">{i + 1}</span>
                         <span className="pm-truncate">{c.title}</span>

@@ -168,13 +168,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
             {project && (
               <>
                 <Ic icon={Send} size={15} />
-                {outgoing ? (
-                  <>
-                    Esce da <strong>{outgoing.name}</strong> <span className="pm-truncate">{outgoing.email}</span>
-                  </>
-                ) : (
-                  'Account di uscita non trovato'
-                )}
+                {outgoing ? <span className="pm-truncate">{outgoing.email}</span> : 'Account di uscita non trovato'}
               </>
             )}
           </span>

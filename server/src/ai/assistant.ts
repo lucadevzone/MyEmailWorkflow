@@ -301,21 +301,23 @@ export class AssistantService {
     const sources = sourcesIn.slice(0, 6).map(({ conversationId: id, messageId: hitId }, n) => {
       const conv = db.select().from(conversations).where(eq(conversations.id, id)).get();
       if (!conv) return '';
-      // Il messaggio più pertinente (dalla ricerca) e gli ultimi due della conversazione.
+      // Il messaggio più pertinente (dalla ricerca) e gli ultimi otto della conversazione, accorciati.
       const latest = db
         .select()
         .from(messages)
         .where(and(eq(messages.conversationId, id), isNull(messages.deletedAt)))
         .orderBy(desc(messages.date))
-        .limit(2)
+        .limit(8)
         .all();
       const hit = hitId && !latest.some((m) => m.id === hitId) ? db.select().from(messages).where(eq(messages.id, hitId)).get() : undefined;
       const recent = [...(hit ? [hit] : []), ...latest]
         .sort((a, b) => a.date - b.date)
         .map((m) => {
           const who = m.direction === 'out' ? "Tu (l'utente)" : m.fromName || m.fromAddress || 'Sconosciuto';
-          const when = new Date(m.date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' });
-          return `[${when}] ${who}: ${(m.bodyTextClean || m.bodyText || '').replace(/\s+/g, ' ').slice(0, 700)}`;
+          const when = new Date(m.date).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+          const files = m.hasAttachments ? ' (con allegato)' : '';
+          const limit = m.id === hitId ? 900 : 400;
+          return `- il ${when} ${who} ha scritto${files}: ${(m.bodyTextClean || m.bodyText || '').replace(/\s+/g, ' ').slice(0, limit)}`;
         });
       return [`[${n + 1}] Oggetto: ${conv.subject ?? '(nessuno)'}`, conv.summaryDetailed || conv.summary ? `Sintesi: ${conv.summaryDetailed || conv.summary}` : '', ...recent]
         .filter(Boolean)
