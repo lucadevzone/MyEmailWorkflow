@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bookmark, ChevronsDownUp, ChevronsUpDown, Forward, Image, Paperclip, ReplyAll, SquareCheck, StickyNote } from 'lucide-react';
+import { AlarmClock, Bookmark, ChevronsDownUp, ChevronsUpDown, Forward, Image, Paperclip, ReplyAll, SquareCheck, StickyNote } from 'lucide-react';
 import type { AnnotationMarkDto, ConversationDetail, MessageDto, QuoteSelector } from '@mmw/shared';
 import { findQuote, quoteOf } from '../lib/annotations.ts';
 import { api } from '../api.ts';
@@ -130,6 +130,13 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
   }, [m, d.id, qc, active]);
 
   const compose = (r: Omit<ComposeRequest, 'projectId' | 'conversationId'>) => onCompose({ ...r, projectId: d.projectId, conversationId: d.id });
+  const toast = useToast();
+  // Task di default "Rispondere a…": si chiude da solo quando rispondo.
+  const remindReply = () =>
+    void api.remindReply(d.id, m.id).then(() => {
+      for (const k of [['tasks'], ['conversations'], ['conversation', d.id]]) qc.invalidateQueries({ queryKey: k });
+      toast({ text: 'Task «Rispondere a…» creato' });
+    });
 
   // Testo selezionato nel messaggio: menu con rispondi citando, crea nota, crea task.
   const onSelectText = (text: string, rect: DOMRect, quote?: QuoteSelector) => {
@@ -256,6 +263,11 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
             <button type="button" className="pm-btn pm-btn--primary pm-btn--sm" onClick={() => compose({ replyTo: m, replyAll: true })}>
               <Ic icon={ReplyAll} size={15} /> Rispondi a tutti
             </button>
+            {d.projectId && m.direction === 'in' && (
+              <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" onClick={remindReply} title="Crea il task «Rispondere a…»: si chiude da solo quando rispondi">
+                <Ic icon={AlarmClock} size={15} /> Ricordami di rispondere
+              </button>
+            )}
           </div>
         </div>
       </div>
