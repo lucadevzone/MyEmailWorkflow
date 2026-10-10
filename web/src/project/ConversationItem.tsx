@@ -198,7 +198,27 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
   const hasReplyTask = openTasks.some((t) => t.title.startsWith('Rispondere a '));
   const lastIn = d?.messages.filter((m) => m.direction === 'in').at(-1);
   const remindReply = () => void api.remindReply(c.id).then(refreshItems);
-  const people = me ? [...c.participants, me] : c.participants;
+  const toast = useToast();
+  // Io non compaio tra i partecipanti: ci sono sempre.
+  const people = c.participants.filter((p) => p.email.toLowerCase() !== me?.email.toLowerCase());
+  const { data: members } = useQuery({ queryKey: ['project-members', c.projectId], queryFn: () => api.projectMembers(c.projectId!), enabled: !!c.projectId });
+  const memberEmails = new Set((members?.contacts ?? []).flatMap((p) => p.emails.map((e) => e.toLowerCase())));
+  const personMenu = (p: { name: string | null; email: string }) =>
+    menuAt(() => ({
+      title: p.name || p.email,
+      actions: [
+        { id: 'write', icon: 'edit', label: `Scrivi solo a ${p.name || p.email}`, primary: true, run: () => cb.onCompose({ to: [p.email], projectId: c.projectId }) },
+        ...(c.projectId && !memberEmails.has(p.email.toLowerCase())
+          ? [{
+              id: 'add', icon: 'person_add', label: 'Aggiungi ai contatti del progetto', primary: true,
+              run: () => void api.addProjectContact(c.projectId!, { name: p.name ?? undefined, email: p.email }).then(() => {
+                qc.invalidateQueries({ queryKey: ['project-members', c.projectId] });
+                toast({ text: `${p.name || p.email} aggiunto ai contatti del progetto` });
+              }),
+            }]
+          : []),
+      ],
+    }));
 
   return (
     <div className="pm-conv__body">
@@ -227,7 +247,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
         </div>
         <div className="pm-conv__chips">
           {people.map((p) => (
-            <PersonChip key={p.email} person={p} onClick={() => cb.onCompose({ to: [p.email], projectId: c.projectId })} />
+            <PersonChip key={p.email} person={p} onClick={() => cb.onCompose({ to: [p.email], projectId: c.projectId })} onContextMenu={personMenu(p)} />
           ))}
           <span className="pm-muted" style={{ fontSize: 'var(--fs-md)' }}>· {c.messageCount} {c.messageCount === 1 ? 'messaggio' : 'messaggi'}</span>
         </div>

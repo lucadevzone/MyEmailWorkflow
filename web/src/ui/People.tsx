@@ -66,11 +66,12 @@ export function useMe(): PersonRef | null {
   return accounts[0] ? { name: accounts[0].name, email: accounts[0].email } : null;
 }
 
-/** Avatar sovrapposti + nomi separati da virgola (conversazioni compresse). L'utente chiude l'elenco come "Io". */
-export function PeopleLine({ people: others, max = 4 }: { people: PersonRef[]; max?: number }) {
+/** Avatar sovrapposti + nomi separati da virgola (conversazioni compresse). L'utente non compare: c'è sempre. */
+export function PeopleLine({ people: all, max = 4 }: { people: PersonRef[]; max?: number }) {
   const name = useDisplayName();
-  const me = useMe();
-  const people = me ? [...others, me] : others;
+  const idx = usePeopleIndex();
+  const others = all.filter((p) => !idx.isMe(p.email));
+  const people = others.length ? others : all;
   return (
     <span className="pm-conv__people">
       <span className="pm-stack">
@@ -84,7 +85,7 @@ export function PeopleLine({ people: others, max = 4 }: { people: PersonRef[]; m
 }
 
 /** Bolla + nome in una pillola; con onRemove diventa rimovibile. */
-export function PersonChip({ person, onRemove, onClick }: { person: PersonRef; onRemove?: () => void; onClick?: () => void }) {
+export function PersonChip({ person, onRemove, onClick, onContextMenu }: { person: PersonRef; onRemove?: () => void; onClick?: () => void; onContextMenu?: (e: React.MouseEvent<HTMLElement>) => void }) {
   const name = useDisplayName();
   const body = (
     <>
@@ -93,7 +94,7 @@ export function PersonChip({ person, onRemove, onClick }: { person: PersonRef; o
     </>
   );
   return (
-    <span className={`pm-personchip${onRemove ? ' pm-personchip--removable' : ''}`} title={person.email}>
+    <span className={`pm-personchip${onRemove ? ' pm-personchip--removable' : ''}`} title={person.email} onContextMenu={onContextMenu}>
       {onClick ? (
         <button type="button" onClick={onClick} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 0, background: 'transparent', padding: 0, minWidth: 0 }}>
           {body}
