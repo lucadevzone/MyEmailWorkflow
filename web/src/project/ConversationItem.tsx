@@ -190,6 +190,9 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
   const rectOf = (e: React.MouseEvent) => (e.currentTarget as HTMLElement).getBoundingClientRect();
   const newTask = (anchor: DOMRect) => onEditor({ target: { kind: 'task', projectId: c.projectId!, conversationId: c.id }, anchor });
   const newNote = (anchor: DOMRect) => onEditor({ target: { kind: 'note', conversationId: c.id }, anchor });
+  const hasReplyTask = openTasks.some((t) => t.title.startsWith('Rispondere a '));
+  const lastIn = d?.messages.filter((m) => m.direction === 'in').at(-1);
+  const remindReply = () => void api.remindReply(c.id).then(refreshItems);
   const people = me ? [...c.participants, me] : c.participants;
 
   return (
@@ -241,7 +244,13 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
               aria-label="Task"
               onContextMenu={(e) => {
                 const anchor = rectOf(e);
-                menuAt(() => ({ title: 'Task', actions: [{ id: 'new', icon: 'add_task', label: 'Nuovo task', primary: true, run: () => newTask(anchor) }] }))(e);
+                menuAt(() => ({
+                  title: 'Task',
+                  actions: [
+                    { id: 'new', icon: 'add_task', label: 'Nuovo task', primary: true, run: () => newTask(anchor) },
+                    ...(!hasReplyTask && lastIn ? [{ id: 'remind', icon: 'reply', label: 'Ricordami di rispondere', primary: true, run: remindReply }] : []),
+                  ],
+                }))(e);
               }}
             >
               <h3><Ic icon={SquareCheck} size={15} /> Task · {tasksLoading ? c.taskCount : openTasks.length}</h3>
@@ -269,6 +278,11 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
                   onClick={(e) => onEditor({ target: { kind: 'task', projectId: c.projectId!, conversationId: c.id }, anchor: e.currentTarget.getBoundingClientRect() })}>
                   <Ic icon={Plus} size={15} /> task
                 </button>
+                {!hasReplyTask && lastIn && (
+                  <button type="button" className="pm-tag pm-tag--task pm-tag--add" title="Crea il task «Rispondere a…»: si chiude da solo quando rispondi" onClick={remindReply}>
+                    <Ic icon={Reply} size={15} /> ricordami di rispondere
+                  </button>
+                )}
               </div>
             </section>
           )}
@@ -468,23 +482,30 @@ function MessageTree({ d, selectedId, onOpen, onCompose }: { d: ConversationDeta
   return (
     <div className="pm-tree__list">
       {ordered.map(({ m, depth }) => (
-        <TreeNode key={m.id} m={m} depth={Math.min(depth, MAX_DEPTH)} current={selectedId === m.id} onOpen={() => onOpen(m.id)} onCompose={onCompose} projectId={d.projectId} />
+        <TreeNode key={m.id} m={m} depth={Math.min(depth, MAX_DEPTH)} current={selectedId === m.id} onOpen={() => onOpen(m.id)} onCompose={onCompose} projectId={d.projectId} conversationId={d.id} />
       ))}
     </div>
   );
 }
 
-function TreeNode({ m, depth, current, onOpen, onCompose, projectId }: { m: MessageDto; depth: number; current: boolean; onOpen: () => void; onCompose: (r: ComposeRequest) => void; projectId: string | null }) {
+function TreeNode({ m, depth, current, onOpen, onCompose, projectId, conversationId }: { m: MessageDto; depth: number; current: boolean; onOpen: () => void; onCompose: (r: ComposeRequest) => void; projectId: string | null; conversationId: string }) {
   const name = useDisplayName();
   const toast = useToast();
   const from = m.from ?? { name: null, email: 'sconosciuto' };
   const unread = !m.seen && m.direction === 'in';
+  const qc = useQueryClient();
+  const remind = () =>
+    void api.remindReply(conversationId, m.id).then(() => {
+      for (const k of [['tasks'], ['conversations']]) qc.invalidateQueries({ queryKey: k });
+      toast({ text: 'Task «Rispondere a…» creato' });
+    });
   const ctx = useContextMenu(() => ({
     title: `${name(from)} · ${shortDate(m.date)}`,
     actions: [
       { id: 'open', icon: 'mail', label: 'Apri', primary: true, run: onOpen },
       { id: 'reply-all', icon: 'reply_all', label: 'Rispondi a tutti', primary: true, run: () => onCompose({ replyTo: m, replyAll: true, projectId }) },
       { id: 'reply', icon: 'reply', label: 'Rispondi al mittente', run: () => onCompose({ replyTo: m, replyAll: false, projectId }) },
+      ...(projectId && m.direction === 'in' ? [{ id: 'remind', icon: 'alarm', label: 'Ricordami di rispondere', run: remind }] : []),
       { id: 'copy', icon: 'content_copy', label: 'Copia testo', run: () => void navigator.clipboard.writeText(m.bodyText ?? '').then(() => toast({ text: 'Testo copiato' })) },
     ],
   }));

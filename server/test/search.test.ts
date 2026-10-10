@@ -121,9 +121,9 @@ describe('recupero dei suggerimenti di task', () => {
     enqueueMissingTaskExtraction(s.db);
     const queued = s.db.select().from(jobs).all().filter((j) => j.kind === 'extract_tasks');
     expect(queued).toHaveLength(1);
-    await extractTasks(s.db, a.messageId!, (async () => ({ task: [] })) as never);
+    await extractTasks(s.db, a.messageId!, (async () => ({ task: [{ titolo: 'Inviare il preventivo', scadenza: null }] })) as never);
     const titles = s.db.select().from(suggestions).all().map((x) => JSON.parse(x.payload).title as string);
-    expect(titles.some((t) => t.startsWith('Rispondere a'))).toBe(true);
+    expect(titles).toEqual(['Inviare il preventivo']);
     // Una seconda passata non duplica.
     s.db.delete(jobs).run();
     enqueueMissingTaskExtraction(s.db);

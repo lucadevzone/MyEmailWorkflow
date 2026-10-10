@@ -143,26 +143,20 @@ describe('task suggeriti', () => {
     expect(titles()).toEqual(['Preparare il preventivo']);
   });
 
-  it('propone sempre "rispondere", uno per conversazione, e lo toglie quando si risponde', async () => {
-    llm = () => ({ task: [{ titolo: 'Rispondere a Mario entro sera', scadenza: null }] }); // doppione dell'LLM: scartato
+  it('l\'assistente non propone il generico "rispondere"; "Ricordami di rispondere" crea il task di default', async () => {
+    llm = () => ({ task: [{ titolo: 'Rispondere a Mario entro sera', scadenza: null }] }); // generico: scartato
     const r = await mail('a', 'Timesheet', 'Ciao, come va?');
     s.actions.move(r.conversationId, projectId);
     await s.jobs.drain();
-    const replyTasks = () =>
-      new ConversationService(s.db).list({ view: 'project', projectId })[0]!.suggestions.filter((x) => x.kind === 'task');
-    expect(replyTasks().map((x) => [x.payload.title, x.payload.reply])).toEqual([['Rispondere a Mario — Timesheet', true]]);
+    expect(new ConversationService(s.db).list({ view: 'project', projectId })[0]!.suggestions.filter((x) => x.kind === 'task')).toEqual([]);
 
-    // Un secondo messaggio aggiorna il suggerimento invece di duplicarlo.
-    await ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
-      uid: uid++, mailbox: 'All', flags: [], labels: [],
-      source: Buffer.from(`Message-ID: <b@x>\r\nIn-Reply-To: <a@x>\r\nFrom: Mario <mario@x.it>\r\nTo: me@gmail.com\r\nSubject: Re: Timesheet\r\nDate: ${new Date().toUTCString()}\r\n\r\nAllora?`),
-    });
-    await s.jobs.drain();
-    expect(replyTasks()).toHaveLength(1);
+    const t = s.tasks.remindReply(r.conversationId);
+    expect(t).toMatchObject({ title: 'Rispondere a Mario — Timesheet', messageId: r.messageId, status: 'open' });
+    expect(s.tasks.remindReply(r.conversationId).id).toBe(t.id); // uno solo aperto
 
-    // Rispondo dall'app: il suggerimento sparisce.
-    s.actions.compose({ projectId, replyToMessageId: s.db.select().from(messagesTable).all().at(-1)!.id, to: ['mario@x.it'], cc: [], bcc: [], subject: '', body: 'Eccomi', urgent: false });
-    expect(replyTasks()).toHaveLength(0);
+    // Rispondo dall'app: il task si chiude da solo.
+    s.actions.compose({ projectId, replyToMessageId: r.messageId!, to: ['mario@x.it'], cc: [], bcc: [], subject: '', body: 'Eccomi', urgent: false });
+    expect(s.tasks.get(t.id)!.status).toBe('done');
   });
 
   it('niente estrazione da storico, rumore o posta inviata', async () => {
@@ -201,9 +195,8 @@ describe('azioni rapide', () => {
     expect(() => s.suggestions.accept(actions()[0]!.id)).toThrow('compositore');
 
     // Il task "Rispondere a…" accettato si completa da solo quando rispondo.
-    const replySug = new ConversationService(s.db).list({ view: 'inbox' })[0]!.suggestions.find((x) => x.payload.reply)!;
-    s.suggestions.accept(replySug.id, { projectId });
-    const task = s.tasks.forProject(projectId).find((t) => t.title.startsWith('Rispondere a'))!;
+    s.actions.move(r.conversationId, projectId);
+    const task = s.tasks.remindReply(r.conversationId);
     expect(task.status).toBe('open');
     const msgId = s.db.select().from(messagesTable).where(eq(messagesTable.conversationId, r.conversationId)).get()!.id;
     s.actions.compose({ projectId, replyToMessageId: msgId, to: ['mario@x.it'], cc: [], bcc: [], subject: '', body: 'Confermo', urgent: false });

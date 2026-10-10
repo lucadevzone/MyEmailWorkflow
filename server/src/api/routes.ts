@@ -672,6 +672,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return reply.code(201).send(task);
   });
 
+  app.post<{ Params: { id: string }; Body: { messageId?: string | null } }>('/api/conversations/:id/remind-reply', async (req, reply) => {
+    const task = deps.tasks.remindReply(req.params.id, req.body?.messageId ?? null);
+    tasksChanged(task.conversationId);
+    return reply.code(201).send(task);
+  });
+
   app.patch<{ Params: { id: string } }>('/api/tasks/:id', async (req) => {
     const task = deps.tasks.update(req.params.id, parse(taskPatchSchema, req.body));
     tasksChanged(task.conversationId);

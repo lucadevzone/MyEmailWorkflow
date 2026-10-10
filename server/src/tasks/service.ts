@@ -1,12 +1,12 @@
 // Task: stanno nei progetti, in una coda ordinata a mano (indici frazionari).
 // Un task nuovo va in fondo; "in cima" lo mette in testa (la priorità del requisito RF-F1).
 
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, like } from 'drizzle-orm';
 import { z } from 'zod';
 import { createAnnotation, quoteSchema } from '../annotations/service.ts';
 import type { TaskDto } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
-import { conversations, projects, tasks } from '../db/schema.ts';
+import { conversations, messages, projects, tasks } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
 import { rankBetween } from '../lib/rank.ts';
 
@@ -167,6 +167,37 @@ export class TaskService {
     const rank = rankBetween(open[i]?.rank ?? null, open[i + 1]?.rank ?? null);
     this.db.update(tasks).set({ rank, priority: null, updatedAt: now() }).where(eq(tasks.id, id)).run();
     return this.get(id)!;
+  }
+
+  /**
+   * Il task di default "Rispondere a <mittente> — <oggetto>", legato al messaggio ricevuto indicato (o
+   * all'ultimo ricevuto). Uno solo aperto per conversazione; si chiude da solo quando si risponde.
+   */
+  remindReply(conversationId: string, messageId?: string | null): TaskDto {
+    const conv = this.db.select().from(conversations).where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))).get();
+    if (!conv) throw new TaskError('Conversazione non trovata');
+    if (!conv.projectId) throw new TaskError('Sposta prima la conversazione in un progetto');
+    const open = this.db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.conversationId, conversationId), eq(tasks.status, 'open'), isNull(tasks.deletedAt), like(tasks.title, 'Rispondere a %')))
+      .get();
+    if (open) return this.get(open.id)!;
+    const m = this.db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          isNull(messages.deletedAt),
+          messageId ? eq(messages.id, messageId) : eq(messages.direction, 'in'),
+        ),
+      )
+      .orderBy(desc(messages.date))
+      .get();
+    const who = m?.fromName || m?.fromAddress || 'mittente';
+    const title = `Rispondere a ${who}${conv.subject ? ` — ${conv.subject}` : ''}`.slice(0, 300);
+    return this.create({ projectId: conv.projectId, conversationId, messageId: m?.id ?? null, title });
   }
 
   remove(id: string) {

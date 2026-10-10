@@ -12,7 +12,8 @@ import type { Llm } from './classify.ts';
 const SYSTEM =
   'Individui le richieste esplicite che il mittente di un messaggio email rivolge al destinatario ' +
   '(es. "mandami", "puoi…", "entro venerdì mi serve"). Non inventare passi intermedi e non proporre azioni ' +
-  'che nessuno ha chiesto. Spesso non ci sono richieste, o ce n\'è una sola. Scrivi in italiano. Rispondi solo con un oggetto JSON.';
+  'che nessuno ha chiesto. Non proporre il generico "rispondere": servono azioni concrete legate al contenuto. ' +
+  'Spesso non ci sono richieste, o ce n\'è una sola. Scrivi in italiano. Rispondi solo con un oggetto JSON.';
 
 const MAX_TASKS = 2;
 
@@ -64,7 +65,7 @@ export interface TaskSuggestionPayload {
   dueDate: string | null;
   details: string | null;
   messageId: string;
-  /** Il task "rispondere a questa email": sempre proposto, uno per conversazione. */
+  /** Vecchio suggerimento "rispondere a questa email": ora è un task di default creato dall'utente. */
   reply?: boolean;
 }
 
@@ -129,27 +130,6 @@ export async function extractTasks(db: Db, messageId: string, llm: Llm) {
   if (!m || m.deletedAt || m.direction !== 'in') return;
   const conv = db.select().from(conversations).where(eq(conversations.id, m.conversationId)).get();
   if (!conv || conv.isNoise || conv.deletedAt) return;
-  // Sempre, senza LLM: "rispondere a questa email", aggiornato sull'ultimo messaggio ricevuto.
-  const replied = db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(and(eq(messages.conversationId, m.conversationId), eq(messages.direction, 'out'), isNull(messages.deletedAt), gt(messages.date, m.date)))
-    .get();
-  if (!replied) {
-    clearReplySuggestion(db, m.conversationId);
-    const who = m.fromName || m.fromAddress || 'mittente';
-    const title = `Rispondere a ${who}${conv.subject ? ` — ${conv.subject}` : ''}`.slice(0, 200);
-    const already = db
-      .select({ id: tasks.id })
-      .from(tasks)
-      .where(and(eq(tasks.conversationId, m.conversationId), eq(tasks.status, 'open'), isNull(tasks.deletedAt), like(tasks.title, 'Rispondere a %')))
-      .get();
-    if (!already) {
-      saveTask(db, m.conversationId, { title, dueDate: null, details: null, messageId, reply: true });
-      bus.publish({ type: 'conversations', ids: [m.conversationId] });
-    }
-  }
-
   const text = (m.bodyTextClean || m.bodyText || '').slice(0, 3000);
   if (!text.trim()) return;
   // Se l'analizzatore ha già stabilito che il messaggio non chiede nulla (archivia/rumore), niente task.
@@ -194,7 +174,7 @@ export async function extractTasks(db: Db, messageId: string, llm: Llm) {
   let added = 0;
   for (const t of (out.task ?? []).slice(0, MAX_TASKS)) {
     const title = t.titolo?.trim() ? toInfinitive(toFirstPerson(t.titolo.trim())) : '';
-    // "Rispondere…" è già coperto dal task deterministico; l'esempio del prompt non è un task.
+    // "Rispondere…" generico è il task di default (lo crea l'utente); l'esempio del prompt non è un task.
     if (!title || existing.has(title.toLowerCase()) || /^rispond/i.test(title) || title === EXAMPLE_TITLE) continue;
     // Segnaposto del modello per "nessun task" ("Niente da fare", "Nessuna richiesta").
     if (/^(niente|nessun[oa]?)\b/i.test(title)) continue;
@@ -208,9 +188,12 @@ export async function extractTasks(db: Db, messageId: string, llm: Llm) {
 /**
  * All'avvio: per le conversazioni aperte (non News, non archiviate) il cui ultimo messaggio è arrivato e
  * non ha ancora risposta, se manca qualsiasi suggerimento di task si rimette in coda l'estrazione
- * (che crea anche il "Rispondere a…"). Recupera la posta già presente quando i suggerimenti sono andati persi.
+ * Recupera la posta già presente quando i suggerimenti sono andati persi. Toglie i vecchi suggerimenti
+ * "Rispondere a…" automatici: quel task ora si crea a mano.
  */
 export function enqueueMissingTaskExtraction(db: Db) {
+  const stale = db.select({ subjectId: suggestions.subjectId }).from(suggestions).where(and(eq(suggestions.kind, 'task'), eq(suggestions.status, 'pending'))).all();
+  for (const id of new Set(stale.map((r) => r.subjectId))) clearReplySuggestion(db, id);
   const convs = db
     .select({ id: conversations.id })
     .from(conversations)
@@ -229,11 +212,6 @@ export function enqueueMissingTaskExtraction(db: Db) {
       .from(suggestions)
       .where(and(eq(suggestions.subjectId, c.id), eq(suggestions.kind, 'task')))
       .get();
-    const hasReplyTask = db
-      .select({ id: tasks.id })
-      .from(tasks)
-      .where(and(eq(tasks.conversationId, c.id), isNull(tasks.deletedAt), like(tasks.title, 'Rispondere a %')))
-      .get();
-    if (!hasSuggestion && !hasReplyTask) enqueueJob(db, 'extract_tasks', { messageId: lastMsg.id }, PRIORITY.background);
+    if (!hasSuggestion) enqueueJob(db, 'extract_tasks', { messageId: lastMsg.id }, PRIORITY.background);
   }
 }

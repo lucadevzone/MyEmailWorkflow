@@ -140,6 +140,7 @@ export const api = {
   projectTasks: (projectId: string) => request<TaskDto[]>('GET', `/api/projects/${projectId}/tasks`),
   conversationTasks: (conversationId: string) => request<TaskDto[]>('GET', `/api/conversations/${conversationId}/tasks`),
   createTask: (input: TaskInput) => request<TaskDto>('POST', '/api/tasks', input),
+  remindReply: (conversationId: string, messageId?: string) => request<TaskDto>('POST', `/api/conversations/${conversationId}/remind-reply`, { messageId }),
   updateTask: (id: string, patch: Partial<Pick<TaskDto, 'title' | 'details' | 'dueDate' | 'status'>>) => request<TaskDto>('PATCH', `/api/tasks/${id}`, patch),
   moveTask: (id: string, afterId: string | null) => request<TaskDto>('POST', `/api/tasks/${id}/move`, { afterId }),
   deleteTask: (id: string) => request<void>('DELETE', `/api/tasks/${id}`),
