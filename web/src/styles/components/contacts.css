@@ -69,3 +69,7 @@
 .pm-table td { padding: 4px 0; border-top: 1px solid var(--border-subtle); }
 .pm-num { text-align: right; font-variant-numeric: tabular-nums; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; background: var(--surface-chip); padding: 0 4px; border-radius: 4px; }
+
+/* Cambio password dell'account */
+.pm-settings__password { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+.pm-settings__password .pm-input { flex: 1 1 220px; }

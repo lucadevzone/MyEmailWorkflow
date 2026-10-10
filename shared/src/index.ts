@@ -16,7 +16,7 @@ export interface AccountDto {
   smtpSecure: boolean;
   username: string;
   authType: AuthType;
-  /** Riferimento alla credenziale, mai la credenziale stessa (es. "env:MMW_TEST_APP_PASSWORD"). */
+  /** Riferimento alla credenziale, mai la credenziale stessa ("keychain:<id>"; "env:NOME" solo in sviluppo). */
   credentialRef: string;
   color: string | null;
 }
@@ -32,7 +32,10 @@ export interface CreateAccountInput {
   smtpPort?: number;
   smtpSecure?: boolean;
   username?: string;
-  credentialRef: string;
+  /** Va nel Portachiavi di macOS, mai nel database. */
+  password?: string;
+  /** Solo sviluppo: riferimento già pronto (env:NOME_VARIABILE). */
+  credentialRef?: string;
   color?: string | null;
 }
 

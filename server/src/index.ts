@@ -33,4 +33,11 @@ enqueueMissingEmbeddings(db);
 enqueueMissingSummaries(db);
 enqueueMissingTaskExtraction(db);
 enqueueMissingClassifications(db);
+// Password ancora in variabili d'ambiente (env:...): si spostano nel Portachiavi.
+try {
+  const moved = services.accounts.migrateEnvCredentials();
+  if (moved.length) app.log.info(`Password spostate nel Portachiavi per: ${moved.join(', ')}`);
+} catch (err) {
+  app.log.error(`Spostamento delle password nel Portachiavi non riuscito: ${(err as Error).message}`);
+}
 for (const account of services.accounts.list()) services.sync.start(account);

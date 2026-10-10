@@ -125,6 +125,16 @@ function AccountCard({ account }: { account: AccountDto }) {
   const ask = useConfirm();
   const qc = useQueryClient();
   const test = useMutation({ mutationFn: () => api.testAccount(account.id) });
+  const [newPassword, setNewPassword] = useState<string | null>(null);
+  const setPassword = useMutation({
+    mutationFn: (pw: string) => api.setAccountPassword(account.id, pw),
+    onSuccess: () => {
+      setNewPassword(null);
+      qc.invalidateQueries({ queryKey: ['accounts'] });
+      test.mutate();
+    },
+  });
+  const inKeychain = account.credentialRef.startsWith('keychain:');
   const remove = useMutation({
     mutationFn: () => api.deleteAccount(account.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
@@ -136,13 +146,16 @@ function AccountCard({ account }: { account: AccountDto }) {
         <div>
           <div className="pm-row__name">{account.name}</div>
           <div className="pm-row__sub">
-            {account.email} · {account.provider === 'gmail' ? 'Gmail' : 'IMAP'} · {account.imapHost} · credenziale{' '}
-            <code>{account.credentialRef}</code>
+            {account.email} · {account.provider === 'gmail' ? 'Gmail' : 'IMAP'} · {account.imapHost} ·{' '}
+            {inKeychain ? 'password nel Portachiavi di macOS' : <>password in <code>{account.credentialRef}</code> (variabile d'ambiente)</>}
           </div>
         </div>
         <div className="pm-settings__actions">
           <button className={button} disabled={test.isPending} onClick={() => test.mutate()}>
             {test.isPending ? 'Connessione…' : 'Testa connessione'}
+          </button>
+          <button className={button} onClick={() => setNewPassword(newPassword === null ? '' : null)}>
+            Cambia password
           </button>
           <button
             className={button}
@@ -153,6 +166,21 @@ function AccountCard({ account }: { account: AccountDto }) {
           </button>
         </div>
       </div>
+      {newPassword !== null && (
+        <form
+          className="pm-settings__password"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (newPassword) setPassword.mutate(newPassword);
+          }}
+        >
+          <input className={input} type="password" autoComplete="new-password" autoFocus value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)} placeholder={account.provider === 'gmail' ? 'Nuova app password di Google' : 'Nuova password'} aria-label="Nuova password" />
+          <button type="submit" className={primary} disabled={!newPassword || setPassword.isPending}>Salva nel Portachiavi</button>
+          <button type="button" className={button} onClick={() => setNewPassword(null)}>Annulla</button>
+        </form>
+      )}
+      {setPassword.error && <div className="pm-error">{(setPassword.error as Error).message}</div>}
       {test.error && <div className="pm-error">{(test.error as Error).message}</div>}
       {test.data && <TestResult result={test.data} />}
     </div>
@@ -194,7 +222,7 @@ function AccountForm({ onDone }: { onDone: () => void }) {
   const [provider, setProvider] = useState<MailProvider>('gmail');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [credentialRef, setCredentialRef] = useState('env:MMW_TEST_APP_PASSWORD');
+  const [password, setPassword] = useState('');
   const [imapHost, setImapHost] = useState('');
   const [smtpHost, setSmtpHost] = useState('');
   const create = useMutation({ mutationFn: api.createAccount, onSuccess: onDone });
@@ -205,7 +233,7 @@ function AccountForm({ onDone }: { onDone: () => void }) {
       name,
       email,
       provider,
-      credentialRef,
+      password,
       ...(provider === 'imap' ? { imapHost, smtpHost } : {}),
     });
   };
@@ -229,8 +257,8 @@ function AccountForm({ onDone }: { onDone: () => void }) {
           <input className={input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </label>
         <label className="pm-field">
-          <span className="pm-muted">Credenziale</span>
-          <input className={input} value={credentialRef} onChange={(e) => setCredentialRef(e.target.value)} required />
+          <span className="pm-muted">{provider === 'gmail' ? 'App password di Google' : 'Password'}</span>
+          <input className={input} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </label>
         {provider === 'imap' && (
           <>
@@ -246,8 +274,8 @@ function AccountForm({ onDone }: { onDone: () => void }) {
         )}
       </div>
       <p className="pm-row__sub">
-        La password non si inserisce qui: si mette in <code>.env.local</code> e qui si indica il nome della variabile
-        (es. <code>env:MMW_TEST_APP_PASSWORD</code>). Per Gmail serve una app password.
+        La password viene salvata nel Portachiavi di macOS, mai nel database dell'app. Per Gmail serve una app
+        password (Account Google → Sicurezza → Password per le app).
       </p>
       {create.error && <div className="pm-error">{(create.error as Error).message}</div>}
       <div className="pm-inlineform__actions">

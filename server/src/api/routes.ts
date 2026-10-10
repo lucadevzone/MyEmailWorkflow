@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { CredentialError } from '../mail/credentials.ts';
 import type { HealthDto } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
 import type Database from 'better-sqlite3';
@@ -71,7 +72,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
       err instanceof PeopleError ||
       err instanceof NotesError ||
       err instanceof SuggestionError ||
-      err instanceof TaskError
+      err instanceof TaskError ||
+      err instanceof CredentialError
     ) {
       return reply.code(400).send({ error: err.message });
     }
@@ -119,6 +121,16 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   });
 
   app.post<{ Params: { id: string } }>('/api/accounts/:id/test', async (req) => accountsSvc.testConnection(req.params.id));
+
+  // Nuova password: nel Portachiavi; la sincronizzazione riparte con la credenziale aggiornata.
+  app.put<{ Params: { id: string }; Body: { password?: string } }>('/api/accounts/:id/password', async (req, reply) => {
+    const password = String(req.body?.password ?? '');
+    if (!password) return reply.code(400).send({ error: 'Serve la password' });
+    const account = accountsSvc.setPassword(req.params.id, password);
+    await deps.sync.stop(account.id);
+    deps.sync.start(account);
+    return account;
+  });
 
   app.get('/api/settings', async () => settingsSvc.get());
 
