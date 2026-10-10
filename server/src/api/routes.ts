@@ -490,6 +490,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   });
 
   app.get<{ Params: { id: string } }>('/api/projects/:id/resources', async (req) => deps.notes.resourcesForProject(req.params.id));
+  // Risorse comuni a tutte le conversazioni del progetto.
+  app.post<{ Params: { id: string }; Querystring: { filename?: string } }>('/api/projects/:id/resources', async (req, reply) => {
+    const filename = (req.query.filename ?? 'file').slice(0, 255);
+    const mime = (req.headers['x-file-type'] as string | undefined) || null;
+    const resource = deps.notes.addFile({ projectId: req.params.id }, filename, req.body as Buffer, mime);
+    bus.publish({ type: 'conversations', ids: [] });
+    return reply.code(201).send(resource);
+  });
 
   app.get<{ Params: { id: string } }>('/api/resources/:id', async (req, reply) => {
     const r = deps.notes.getResource(req.params.id);

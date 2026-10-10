@@ -322,7 +322,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
             </div>
           </section>
           <Attachments d={d} />
-          <Resources d={d} conversationId={c.id} onUpload={onUpload} />
+          <Resources d={d} conversationId={c.id} projectId={c.projectId} onUpload={onUpload} />
         </div>
       </div>
 
@@ -420,7 +420,7 @@ function Attachments({ d }: { d?: ConversationDetail }) {
   );
 }
 
-function Resources({ d, conversationId, onUpload }: { d?: ConversationDetail; conversationId: string; onUpload: () => void }) {
+function Resources({ d, conversationId, projectId, onUpload }: { d?: ConversationDetail; conversationId: string; projectId: string | null; onUpload: () => void }) {
   const qc = useQueryClient();
   const menuAt = useMenuAt();
   const ask = useConfirm();
@@ -433,13 +433,28 @@ function Resources({ d, conversationId, onUpload }: { d?: ConversationDetail; co
   });
   const list = d?.resources ?? [];
   const loading = !d;
+  // Comuni a tutto il progetto: si gestiscono da "Modifica progetto".
+  const { data: projectRes = [] } = useQuery({ queryKey: ['project-resources', projectId], queryFn: () => api.projectResources(projectId!), enabled: !!projectId });
+  const common = projectRes.filter((r) => !r.conversationId);
   return (
     <section
       className="pm-area pm-area--neutral"
       aria-label="Risorse"
       onContextMenu={menuAt(() => ({ title: 'Risorse', actions: [{ id: 'up', icon: 'upload_file', label: 'Carica file', primary: true, run: onUpload }] }))}
     >
-      <h3><Ic icon={FolderPlus} size={15} /> Risorse · {loading ? '…' : list.length}</h3>
+      <h3><Ic icon={FolderPlus} size={15} /> Risorse · {loading ? '…' : list.length + common.length}</h3>
+      {common.map((r) => (
+        <div
+          key={r.id}
+          className="pm-file"
+          title="Risorsa comune del progetto (si gestisce da Modifica progetto)"
+          onContextMenu={menuAt(() => ({ title: r.title, actions: [{ id: 'dl', icon: 'download', label: 'Scarica', primary: true, run: () => download(`/api/resources/${r.id}`) }] }))}
+        >
+          <Ic icon={FileText} className="pm-muted" />
+          <a href={`/api/resources/${r.id}`} className="pm-file__name pm-truncate" style={{ flex: 1 }}>{r.title}</a>
+          <span className="pm-file__meta">progetto</span>
+        </div>
+      ))}
       {list.map((r) => (
         <div
           key={r.id}

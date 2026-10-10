@@ -32,6 +32,17 @@ import type {
   SettingsDto,
 } from '@mmw/shared';
 
+/** Carica un file come corpo grezzo (nome e tipo a parte). */
+async function upload(url: string, file: File): Promise<ResourceDto> {
+  const res = await fetch(`${url}?filename=${encodeURIComponent(file.name)}`, {
+    method: 'POST',
+    headers: { 'x-mmw': '1', 'content-type': 'application/octet-stream', 'x-file-type': file.type || '' },
+    body: file,
+  });
+  if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
+  return (await res.json()) as ResourceDto;
+}
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   if (method !== 'GET') headers['x-mmw'] = '1';
@@ -165,15 +176,9 @@ export const api = {
   annotations: (messageId: string) => request<AnnotationMarkDto[]>('GET', `/api/messages/${messageId}/annotations`),
   updateNote: (id: string, body: string) => request<NoteDto>('PATCH', `/api/notes/${id}`, { body }),
   deleteNote: (id: string) => request<void>('DELETE', `/api/notes/${id}`),
-  uploadResource: async (conversationId: string, file: File): Promise<ResourceDto> => {
-    const res = await fetch(`/api/conversations/${conversationId}/resources?filename=${encodeURIComponent(file.name)}`, {
-      method: 'POST',
-      headers: { 'x-mmw': '1', 'content-type': 'application/octet-stream', 'x-file-type': file.type || '' },
-      body: file,
-    });
-    if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
-    return (await res.json()) as ResourceDto;
-  },
+  uploadResource: (conversationId: string, file: File) => upload(`/api/conversations/${conversationId}/resources`, file),
+  /** Risorsa comune a tutte le conversazioni del progetto. */
+  uploadProjectResource: (projectId: string, file: File) => upload(`/api/projects/${projectId}/resources`, file),
   deleteResource: (id: string) => request<void>('DELETE', `/api/resources/${id}`),
   projectResources: (projectId: string) => request<ResourceDto[]>('GET', `/api/projects/${projectId}/resources`),
 

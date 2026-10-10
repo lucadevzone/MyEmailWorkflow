@@ -1,7 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ProjectDto } from '@mmw/shared';
+import { FileText, Trash2 } from 'lucide-react';
 import { api } from '../api.ts';
+import { Ic } from '../ui/Ic.tsx';
+import { fileSize } from '../lib/format.ts';
 const input = 'pm-input';
 const button = 'pm-btn pm-btn--secondary pm-btn--sm';
 const primary = 'pm-btn pm-btn--primary pm-btn--sm';
@@ -78,6 +81,7 @@ export function ProjectDialog({ project, initialName, initialDescription, onClos
           </select>
           <span className="pm-row__sub">Tutte le email del progetto partono da questo account.</span>
         </label>
+        {project && <ProjectResources projectId={project.id} />}
         {(save.error || archive.error) && (
           <div className="pm-error">{((save.error || archive.error) as Error).message}</div>
         )}
@@ -97,6 +101,51 @@ export function ProjectDialog({ project, initialName, initialDescription, onClos
         </div>
         {accounts.length === 0 && <p className="pm-error">Configura prima un account nelle Impostazioni.</p>}
       </form>
+    </div>
+  );
+}
+
+/** Risorse comuni a tutte le conversazioni del progetto: entrano anche nel contesto dell'assistente. */
+function ProjectResources({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const { data = [], isLoading } = useQuery({ queryKey: ['project-resources', projectId], queryFn: () => api.projectResources(projectId) });
+  const common = data.filter((r) => !r.conversationId);
+  const refresh = () => {
+    for (const k of [['project-resources', projectId], ['project-resources'], ['conversation']]) qc.invalidateQueries({ queryKey: k });
+  };
+  const add = useMutation({
+    mutationFn: async (files: File[]) => {
+      for (const f of files) await api.uploadProjectResource(projectId, f);
+    },
+    onSettled: refresh,
+  });
+  const remove = useMutation({ mutationFn: api.deleteResource, onSuccess: refresh });
+  return (
+    <div className="pm-field">
+      <span>Risorse del progetto</span>
+      <span className="pm-row__sub">File comuni a tutte le conversazioni; i testi aiutano l'assistente.</span>
+      {isLoading && <span className="pm-muted">…</span>}
+      {common.map((r) => (
+        <div key={r.id} className="pm-file">
+          <Ic icon={FileText} className="pm-muted" />
+          <a href={`/api/resources/${r.id}`} className="pm-file__name pm-truncate" style={{ flex: 1 }}>{r.title}</a>
+          {r.size != null && <span className="pm-file__meta">{fileSize(r.size)}</span>}
+          <button type="button" className="pm-file__action" title="Elimina" aria-label={`Elimina ${r.title}`} onClick={() => remove.mutate(r.id)}>
+            <Ic icon={Trash2} size={15} />
+          </button>
+        </div>
+      ))}
+      {!isLoading && common.length === 0 && <span className="pm-muted">Nessuna risorsa comune.</span>}
+      <input ref={fileInput} type="file" multiple hidden onChange={(e) => {
+        const files = [...(e.target.files ?? [])];
+        e.target.value = '';
+        if (files.length) add.mutate(files);
+      }} />
+      <button type="button" className="pm-linkbtn" style={{ alignSelf: 'flex-start' }} onClick={() => fileInput.current?.click()} disabled={add.isPending}>
+        {add.isPending ? 'Caricamento…' : '+ carica file'}
+      </button>
+      {(add.error || remove.error) && <div className="pm-error">{((add.error || remove.error) as Error).message}</div>}
     </div>
   );
 }
