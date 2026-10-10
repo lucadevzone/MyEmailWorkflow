@@ -8,7 +8,8 @@ import { Ic } from '../ui/Ic.tsx';
 import { PeopleLine, PersonAvatar, PersonChip, useDisplayName, useMe } from '../ui/People.tsx';
 import { useContextMenu, useMenuAt, useOpenMenu } from '../ui/contextMenu.tsx';
 import { useToast } from '../ui/toast.tsx';
-import { ProjectDialog } from '../projects/ProjectDialog.tsx';
+import { useNavigate } from 'react-router-dom';
+import { paths } from '../shell/paths.ts';
 import type { ComposeRequest } from '../workspace/pane.ts';
 import { TagEditor, type TagEditorTarget } from './TagEditor.tsx';
 import { ResourcesArea, TaskArea } from './ConversationAreas.tsx';
@@ -31,7 +32,7 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
   const moveBtn = useRef<HTMLButtonElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [editor, setEditor] = useState<{ target: TagEditorTarget; anchor: DOMRect } | null>(null);
-  const [creatingFrom, setCreatingFrom] = useState<SuggestionDto | null>(null);
+  const navigate = useNavigate();
   const anchorOf = (el: Element | null) => el?.getBoundingClientRect() ?? new DOMRect(window.innerWidth / 2, 200, 0, 0);
 
   const upload = useMutation({
@@ -52,7 +53,9 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
       const el = moveBtn.current ?? ref.current;
       if (el) openMenu({ title: 'Sposta in', actions: actions.moveTargets() }, el as HTMLElement, 'palette');
     },
-    createProjectFrom: setCreatingFrom,
+    // Suggerimento "Nuovo progetto": la pagina del progetto nuovo, precompilata; salvando ci si sposta la conversazione.
+    createProjectFrom: (sug: SuggestionDto) =>
+      navigate(paths.newProject({ name: sug.payload.projectName as string, description: sug.payload.reason as string | undefined, suggestion: sug.id, conversation: c.id })),
   });
   const ctx = useContextMenu(() => actions.menuSpec(focused));
 
@@ -73,14 +76,6 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
         }}
       />
       {editor && <TagEditor target={editor.target} anchor={editor.anchor} onClose={() => setEditor(null)} />}
-      {creatingFrom && (
-        <ProjectDialog
-          initialName={creatingFrom.payload.projectName}
-          initialDescription={creatingFrom.payload.reason}
-          onClose={() => setCreatingFrom(null)}
-          onSaved={(p) => actions.runSuggestion(creatingFrom, p.id)}
-        />
-      )}
     </>
   );
 

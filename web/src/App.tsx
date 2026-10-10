@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { ProjectDto } from '@mmw/shared';
 import { useServerEvents } from './events.ts';
@@ -8,44 +7,37 @@ import { paths, projectKeyOf, SYSTEM_INBOX } from './shell/paths.ts';
 import { ProjectPage } from './project/ProjectPage.tsx';
 import { ContactsPage } from './people/ContactsPage.tsx';
 import { SettingsPage } from './settings/SettingsPage.tsx';
-import { ProjectDialog } from './projects/ProjectDialog.tsx';
+import { ProjectSettingsPage } from './projects/ProjectSettingsPage.tsx';
 import { EditingDimmer, useEditing } from './ui/editing.tsx';
 
 export function App() {
   useServerEvents();
   const navigate = useNavigate();
-  const [dialog, setDialog] = useState<null | { project?: ProjectDto }>(null);
+  const editProject = (p: ProjectDto) => navigate(paths.projectSettings(p.id));
 
   const editing = useEditing();
   // Nella vista email (lettura e scrittura) la barra dei progetti lascia il posto alla barra di contesto.
   const mailMode = /^\/p\/[^/]+\/(c\/[^/]+\/)?(m|draft)\//.test(useLocation().pathname);
   return (
     <div className="pm-app">
-      {!mailMode && <TopBar onNewProject={() => setDialog({})} onEditProject={(p) => setDialog({ project: p })} />}
+      {!mailMode && <TopBar onNewProject={() => navigate(paths.newProject())} onEditProject={editProject} />}
       <main className="pm-content" style={{ position: 'relative' }}>
         {editing.mode === 'projects' && <EditingDimmer />}
         <Routes>
           <Route path="/" element={<Navigate to={paths.project(SYSTEM_INBOX)} replace />} />
-          <Route path="/p/:projectId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
-          <Route path="/p/:projectId/c/:conversationId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
-          <Route path="/p/:projectId/c/:conversationId/m/:messageId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
-          <Route path="/p/:projectId/c/:conversationId/draft/:draftId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
-          <Route path="/p/:projectId/draft/:draftId" element={<ProjectRoute onEditProject={(p) => setDialog({ project: p })} />} />
+          <Route path="/p/:projectId" element={<ProjectRoute onEditProject={editProject} />} />
+          <Route path="/p/:projectId/c/:conversationId" element={<ProjectRoute onEditProject={editProject} />} />
+          <Route path="/p/:projectId/c/:conversationId/m/:messageId" element={<ProjectRoute onEditProject={editProject} />} />
+          <Route path="/p/:projectId/c/:conversationId/draft/:draftId" element={<ProjectRoute onEditProject={editProject} />} />
+          <Route path="/p/:projectId/draft/:draftId" element={<ProjectRoute onEditProject={editProject} />} />
+          <Route path="/p/:projectId/settings" element={<ProjectSettingsRoute />} />
+          <Route path="/projects/new" element={<ProjectSettingsPage projectId={null} />} />
           <Route path="/contacts" element={<ContactsRoute />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to={paths.project(SYSTEM_INBOX)} replace />} />
         </Routes>
       </main>
       <StatusBar />
-      {dialog && (
-        <ProjectDialog
-          project={dialog.project}
-          onClose={() => setDialog(null)}
-          onSaved={(p) => {
-            if (!dialog.project) navigate(paths.project(p.id));
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -63,6 +55,11 @@ function ProjectRoute({ onEditProject }: { onEditProject: (p: ProjectDto) => voi
       onEditProject={onEditProject}
     />
   );
+}
+
+function ProjectSettingsRoute() {
+  const { projectId } = useParams();
+  return <ProjectSettingsPage key={projectId} projectId={projectId ?? null} />;
 }
 
 function ContactsRoute() {

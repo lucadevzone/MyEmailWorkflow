@@ -4,8 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type AccountDto, type ComposeFont, type ComposeFontSize, type ConnectionTestResult, type MailProvider, type SettingsDto, type SignatureDto } from '@mmw/shared';
 import { RichEditor } from '../ui/RichEditor.tsx';
 import { api } from '../api.ts';
+import { useNavigate } from 'react-router-dom';
+import { useEscBack } from '../ui/useEscBack.ts';
 
 export function SettingsPage() {
+  const navigate = useNavigate();
+  useEscBack(() => navigate(-1));
   return (
     <div className="pm-contacts">
       <header className="pm-contacts__head pm-settings">

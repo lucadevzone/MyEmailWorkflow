@@ -9,6 +9,13 @@ export const paths = {
   draft: (projectId: string, conversationId: string, draftId: string) => `/p/${projectId}/c/${conversationId}/draft/${draftId}`,
   /** Nuova mail (bozza senza conversazione). */
   newMail: (projectId: string, draftId: string) => `/p/${projectId}/draft/${draftId}`,
+  /** Impostazioni del progetto (pagina). */
+  projectSettings: (projectId: string) => `/p/${projectId}/settings`,
+  /** Nuovo progetto; i parametri precompilano il modulo (es. dal suggerimento dell'analizzatore). */
+  newProject: (q: { name?: string; description?: string; suggestion?: string; conversation?: string } = {}) => {
+    const p = new URLSearchParams(Object.entries(q).filter((e): e is [string, string] => !!e[1]));
+    return `/projects/new${p.size ? `?${p}` : ''}`;
+  },
   contacts: () => '/contacts',
   settings: () => '/settings',
 };
