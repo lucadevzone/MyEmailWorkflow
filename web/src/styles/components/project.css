@@ -270,3 +270,9 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
 .pm-version > span { flex: 1; min-width: 0; color: var(--ink-2); }
 .pm-version__resent { all: unset; cursor: pointer; display: block; margin-left: 28px; color: var(--ink-muted); font-size: var(--fs-sm); }
 .pm-version__resent:hover { text-decoration: underline; }
+
+/* Barra del progetto: account di uscita | firma */
+.pm-subtabs__item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.pm-subtabs__sep { width: 1px; height: 16px; background: var(--border-strong); margin: 0 10px; flex: none; }
+.pm-subtabs__sig { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+.pm-subtabs__sig:hover { background: var(--surface-chip); color: var(--ink-2); }

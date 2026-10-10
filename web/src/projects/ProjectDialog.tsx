@@ -27,11 +27,13 @@ export function ProjectDialog({ project, initialName, initialDescription, onClos
   const [name, setName] = useState(project?.name ?? initialName ?? '');
   const [description, setDescription] = useState(project?.description ?? initialDescription ?? '');
   const [accountId, setAccountId] = useState(project?.outgoingAccountId ?? '');
+  const [signatureId, setSignatureId] = useState(project?.signatureId ?? '');
+  const { data: signatures = [] } = useQuery({ queryKey: ['signatures'], queryFn: api.signatures });
   const effectiveAccount = accountId || accounts[0]?.id || '';
 
   const save = useMutation({
     mutationFn: () => {
-      const body = { name, description: description || null, outgoingAccountId: effectiveAccount };
+      const body = { name, description: description || null, outgoingAccountId: effectiveAccount, signatureId: signatureId || null };
       return project ? api.updateProject(project.id, body) : api.createProject(body);
     },
     onSuccess: (p) => {
@@ -84,6 +86,18 @@ export function ProjectDialog({ project, initialName, initialDescription, onClos
             ))}
           </select>
           <span className="pm-row__sub">Tutte le email del progetto partono da questo account.</span>
+        </label>
+        <label className="pm-field">
+          <span>Firma</span>
+          <select className={input} value={signatureId} onChange={(e) => setSignatureId(e.target.value)}>
+            <option value="">Nessuna firma</option>
+            {signatures.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+          <span className="pm-row__sub">
+            {signatures.length ? 'Compare in fondo alle mail nuove del progetto. ' : ''}Le firme si creano in Impostazioni → Firme.
+          </span>
         </label>
         {project && <ProjectResources projectId={project.id} />}
         {project && <MergeProject project={project} onDone={onClose} />}

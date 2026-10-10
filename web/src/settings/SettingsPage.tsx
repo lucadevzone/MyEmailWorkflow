@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useConfirm } from '../ui/confirm.tsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type AccountDto, type ComposeFont, type ComposeFontSize, type ConnectionTestResult, type MailProvider, type SettingsDto } from '@mmw/shared';
+import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type AccountDto, type ComposeFont, type ComposeFontSize, type ConnectionTestResult, type MailProvider, type SettingsDto, type SignatureDto } from '@mmw/shared';
 import { RichEditor } from '../ui/RichEditor.tsx';
 import { api } from '../api.ts';
 
@@ -16,6 +16,7 @@ export function SettingsPage() {
       <SystemStatus />
       <Accounts />
       <Compose />
+      <Signatures />
       <AiModel />
       <General />
       </div>
@@ -137,17 +138,6 @@ function AccountCard({ account }: { account: AccountDto }) {
     },
   });
   const inKeychain = account.credentialRef.startsWith('keychain:');
-  const [sigOpen, setSigOpen] = useState(false);
-  const [sig, setSig] = useState<{ html: string; text: string } | null>(null);
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.settings });
-  const saveSig = useMutation({
-    mutationFn: (v: { html: string; text: string }) => api.setAccountSignature(account.id, v.html, v.text),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['accounts'] });
-      setSig(null);
-      setSigOpen(false);
-    },
-  });
   const remove = useMutation({
     mutationFn: () => api.deleteAccount(account.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
@@ -170,9 +160,7 @@ function AccountCard({ account }: { account: AccountDto }) {
           <button className={button} onClick={() => setNewPassword(newPassword === null ? '' : null)}>
             Cambia password
           </button>
-          <button className={button} aria-expanded={sigOpen} onClick={() => setSigOpen(!sigOpen)}>
-            {account.signatureText ? 'Modifica firma' : 'Aggiungi firma'}
-          </button>
+
           <button
             className={button}
             disabled={remove.isPending}
@@ -197,31 +185,6 @@ function AccountCard({ account }: { account: AccountDto }) {
         </form>
       )}
       {setPassword.error && <div className="pm-error">{(setPassword.error as Error).message}</div>}
-      {!sigOpen && account.signatureText && (
-        <div className="pm-settings__sigpreview" title="Firma di questo account">
-          <span className="pm-muted">Firma:</span> {account.signatureText.split('\n').join(' · ')}
-        </div>
-      )}
-      {sigOpen && (
-        <div className="pm-settings__signature">
-          <span className="pm-muted">Firma di {account.email}: compare in fondo a ogni mail nuova di questo account, e si può ritoccare mail per mail.</span>
-          <RichEditor
-            boxed
-            label="Firma"
-            minHeight={80}
-            initialHtml={account.signatureHtml ?? ''}
-            onChange={(html, text) => setSig({ html, text })}
-            font={settings?.composeFormat === 'html' ? COMPOSE_FONTS[settings.composeFont].css : undefined}
-            size={settings?.composeFormat === 'html' ? COMPOSE_FONT_SIZES[settings.composeFontSize].css : undefined}
-            autoFocus="end"
-          />
-          <div className="pm-inlineform__actions">
-            <button type="button" className={button} onClick={() => { setSig(null); setSigOpen(false); }}>Annulla</button>
-            <button type="button" className={primary} disabled={!sig || saveSig.isPending} onClick={() => sig && saveSig.mutate(sig)}>Salva firma</button>
-          </div>
-          {saveSig.error && <div className="pm-error">{(saveSig.error as Error).message}</div>}
-        </div>
-      )}
       {test.error && <div className="pm-error">{(test.error as Error).message}</div>}
       {test.data && <TestResult result={test.data} />}
     </div>
@@ -432,10 +395,93 @@ function Compose() {
         >
           {html ? 'Così appariranno le tue mail: «Ciao, ti mando il documento aggiornato.»' : 'Le mail in testo semplice usano il carattere di chi le legge.'}
         </p>
-        <span className="pm-row__sub">Ogni bozza può comunque passare da formattato a testo semplice. La firma si imposta in ogni account, qui sopra.</span>
+        <span className="pm-row__sub">Ogni bozza può comunque passare da formattato a testo semplice.</span>
         {save.error && <div className="pm-error">{(save.error as Error).message}</div>}
       </div>
     </Section>
+  );
+}
+
+/** Firme con un nome: ogni progetto ne sceglie una in "Modifica progetto". */
+function Signatures() {
+  const qc = useQueryClient();
+  const ask = useConfirm();
+  const { data: list = [] } = useQuery({ queryKey: ['signatures'], queryFn: api.signatures });
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
+  // null = nessun editor aperto, 'new' = nuova firma, altrimenti l'id della firma in modifica.
+  const [editing, setEditing] = useState<string | null>(null);
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['signatures'] });
+    qc.invalidateQueries({ queryKey: ['projects'] });
+  };
+  const remove = useMutation({ mutationFn: api.deleteSignature, onSuccess: refresh });
+  const font = settings?.composeFormat === 'html' ? COMPOSE_FONTS[settings.composeFont].css : undefined;
+  const size = settings?.composeFormat === 'html' ? COMPOSE_FONT_SIZES[settings.composeFontSize].css : undefined;
+
+  return (
+    <Section
+      title="Firme"
+      action={editing !== 'new' && <button className={button} onClick={() => setEditing('new')}>Nuova firma</button>}
+    >
+      {editing === 'new' && <SignatureForm font={font} size={size} onDone={() => { setEditing(null); refresh(); }} />}
+      {list.length === 0 && editing !== 'new' && (
+        <div className={`${card} pm-muted`}>Nessuna firma. Creane una e sceglila nei progetti (Modifica progetto → Firma).</div>
+      )}
+      {list.map((sig) => {
+        const used = projects.filter((p) => p.signatureId === sig.id).map((p) => p.name);
+        return editing === sig.id ? (
+          <SignatureForm key={sig.id} signature={sig} font={font} size={size} onDone={() => { setEditing(null); refresh(); }} />
+        ) : (
+          <div key={sig.id} className={card}>
+            <div className="pm-settings__acct">
+              <div style={{ minWidth: 0 }}>
+                <div className="pm-row__name">{sig.label}</div>
+                <div className="pm-row__sub pm-truncate">{sig.text.split('\n').join(' · ')}</div>
+                <div className="pm-row__sub">{used.length ? `Usata da: ${used.join(', ')}` : 'Non usata da nessun progetto'}</div>
+              </div>
+              <div className="pm-settings__actions">
+                <button className={button} onClick={() => setEditing(sig.id)}>Modifica</button>
+                <button
+                  className={button}
+                  onClick={async () =>
+                    (await ask({ message: used.length ? `Eliminare la firma «${sig.label}»? ${used.join(', ')} resteranno senza firma.` : `Eliminare la firma «${sig.label}»?`, okLabel: 'Elimina', danger: true })) &&
+                    remove.mutate(sig.id)
+                  }
+                >
+                  Elimina
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </Section>
+  );
+}
+
+function SignatureForm({ signature, font, size, onDone }: { signature?: SignatureDto; font?: string; size?: string; onDone: () => void }) {
+  const [label, setLabel] = useState(signature?.label ?? '');
+  const [body, setBody] = useState<{ html: string; text: string }>({ html: signature?.html ?? '', text: signature?.text ?? '' });
+  const save = useMutation({
+    mutationFn: () => (signature ? api.updateSignature(signature.id, { label, ...body }) : api.createSignature({ label, ...body })),
+    onSuccess: onDone,
+  });
+  return (
+    <div className={`${card} pm-settings__signature`}>
+      <label className="pm-field">
+        <span className="pm-muted">Nome della firma</span>
+        <input className={input} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Es. Lavoro, Personale" autoFocus={!signature} />
+      </label>
+      <RichEditor boxed label="Testo della firma" minHeight={80} initialHtml={signature?.html ?? ''} onChange={(html, text) => setBody({ html, text })} font={font} size={size} autoFocus={signature ? 'end' : false} />
+      <div className="pm-inlineform__actions">
+        <button type="button" className={button} onClick={onDone}>Annulla</button>
+        <button type="button" className={primary} disabled={!label.trim() || !body.text.trim() || save.isPending} onClick={() => save.mutate()}>
+          Salva firma
+        </button>
+      </div>
+      {save.error && <div className="pm-error">{(save.error as Error).message}</div>}
+    </div>
   );
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FolderOpen, Paperclip, Quote, Send, Type, X } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
-import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type AccountDto, type ConversationDetail, type DraftAttachment, type DraftDto, type SettingsDto } from '@mmw/shared';
+import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type ConversationDetail, type SignatureDto, type DraftAttachment, type DraftDto, type SettingsDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { fileSize } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
@@ -37,16 +37,16 @@ const SIG_SEP = '-- ';
 
 /**
  * Campi iniziali di una bozza non ancora salvata, dal seme, dalla conversazione e dalle impostazioni
- * di composizione. La firma dell'account di uscita va in fondo, modificabile come il resto.
+ * di composizione. La firma scelta per il progetto va in fondo, modificabile come il resto.
  */
-function initialFields(seed: DraftSeed, d: ConversationDetail | null, isMe: (e: string) => boolean, settings: SettingsDto, account: AccountDto | undefined): Fields {
+function initialFields(seed: DraftSeed, d: ConversationDetail | null, isMe: (e: string) => boolean, settings: SettingsDto, signature: SignatureDto | undefined): Fields {
   const projectId = seed.projectId ?? d?.projectId ?? null;
   const format = settings.composeFormat;
   const start = seed.body ?? '';
-  const sigText = account?.signatureText ?? null;
+  const sigText = signature?.text ?? null;
   const body = sigText ? `${start}\n\n${SIG_SEP}\n${sigText}` : start;
   const bodyHtml =
-    format === 'html' ? (start ? textToHtml(start) : '<p></p>') + (sigText ? `<p>${SIG_SEP}</p>${account?.signatureHtml ?? textToHtml(sigText)}` : '') : null;
+    format === 'html' ? (start ? textToHtml(start) : '<p></p>') + (sigText ? `<p>${SIG_SEP}</p>${signature?.html || textToHtml(sigText)}` : '') : null;
   const base = {
     projectId,
     to: seed.to ?? [],
@@ -104,19 +104,20 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
   const accounts = accountsQ.data ?? [];
   const settingsQ = useQuery({ queryKey: ['settings'], queryFn: api.settings });
   const settings = settingsQ.data;
+  const signaturesQ = useQuery({ queryKey: ['signatures'], queryFn: api.signatures });
 
   const [f, setF] = useState<Fields | null>(null);
   // Testo con cui la bozza nasce (firma compresa): se resta così, la bozza è "vuota".
   const initialBody = useRef<string | null>(null);
-  // Bozza nuova: nasce quando impostazioni, progetti e account sono pronti (servono formato e firma).
+  // Bozza nuova: nasce quando impostazioni, progetti e firme sono pronti (servono formato e firma).
   useEffect(() => {
-    if (!isNew || f || !settings || !accountsQ.data || !projectsQ.data) return;
+    if (!isNew || f || !settings || !signaturesQ.data || !projectsQ.data) return;
     const projectId = seed.projectId ?? d?.projectId ?? null;
-    const account = accountsQ.data.find((a) => a.id === projectsQ.data.find((p) => p.id === projectId)?.outgoingAccountId);
-    const init = initialFields(seed, d, people.isMe, settings, account);
+    const sigId = projectsQ.data.find((p) => p.id === projectId)?.signatureId;
+    const init = initialFields(seed, d, people.isMe, settings, signaturesQ.data.find((s) => s.id === sigId));
     initialBody.current = init.body;
     setF(init);
-  }, [isNew, f, settings, accountsQ.data, projectsQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isNew, f, settings, signaturesQ.data, projectsQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const editor = useRef<Editor | null>(null);
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [showCc, setShowCc] = useState(false);

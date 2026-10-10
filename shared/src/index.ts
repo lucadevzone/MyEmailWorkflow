@@ -19,9 +19,14 @@ export interface AccountDto {
   /** Riferimento alla credenziale, mai la credenziale stessa ("keychain:<id>"; "env:NOME" solo in sviluppo). */
   credentialRef: string;
   color: string | null;
-  /** Firma dell'account: HTML (dall'editor) e la sua versione in testo semplice. */
-  signatureHtml: string | null;
-  signatureText: string | null;
+}
+
+/** Firma riutilizzabile: si definisce nelle impostazioni e si sceglie nel progetto. */
+export interface SignatureDto {
+  id: string;
+  label: string;
+  html: string;
+  text: string;
 }
 
 export interface CreateAccountInput {
@@ -397,6 +402,8 @@ export interface ProjectDto {
   name: string;
   description: string | null;
   outgoingAccountId: string;
+  /** Firma delle mail del progetto (null = nessuna). */
+  signatureId: string | null;
   color: string | null;
   archived: boolean;
   conversationCount: number;
@@ -409,6 +416,7 @@ export interface ProjectInput {
   name: string;
   description?: string | null;
   outgoingAccountId: string;
+  signatureId?: string | null;
   color?: string | null;
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { MailCheck, Send, Settings2, X } from 'lucide-react';
+import { MailCheck, Send, Settings2, Signature, X } from 'lucide-react';
 import type { ConversationQuery, ProjectDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
@@ -125,6 +125,8 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
     });
   };
   const outgoing = project ? accounts.find((a) => a.id === project.outgoingAccountId) : undefined;
+  const { data: signatures = [] } = useQuery({ queryKey: ['signatures'], queryFn: api.signatures, enabled: !!project });
+  const signature = project?.signatureId ? signatures.find((s) => s.id === project.signatureId) : undefined;
 
   // S2/S3: il carosello prende il posto della lista; la conversazione resta in focus al ritorno.
   if (messageId || draftId) {
@@ -164,11 +166,18 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
             </span>
           )}
           {/* Account di uscita del progetto: tutte le mail nuove e le risposte partono da qui. */}
-          <span className="pm-subtabs__account" title="Account di uscita del progetto">
+          <span className="pm-subtabs__account">
             {project && (
               <>
-                <Ic icon={Send} size={15} />
-                {outgoing ? <span className="pm-truncate">{outgoing.email}</span> : 'Account di uscita non trovato'}
+                <span className="pm-subtabs__item" title="Account di uscita del progetto">
+                  <Ic icon={Send} size={15} />
+                  {outgoing ? <span className="pm-truncate">{outgoing.email}</span> : 'Account di uscita non trovato'}
+                </span>
+                <span className="pm-subtabs__sep" aria-hidden="true" />
+                <button type="button" className="pm-subtabs__item pm-subtabs__sig" title={signature ? `Firma: ${signature.text}` : 'Nessuna firma: sceglila in Modifica progetto'} onClick={() => onEditProject(project)}>
+                  <Ic icon={Signature} size={15} />
+                  <span className="pm-truncate">{signature ? signature.label : 'Nessuna firma'}</span>
+                </button>
               </>
             )}
           </span>

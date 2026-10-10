@@ -106,6 +106,13 @@
       "when": 1791654194540,
       "tag": "0014_compose_html",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1791666639180,
+      "tag": "0015_project_signatures",
+      "breakpoints": true
     }
   ]
 }

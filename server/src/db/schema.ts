@@ -45,9 +45,17 @@ export const accounts = sqliteTable('accounts', {
   authType: text('auth_type', { enum: ['password', 'oauth2'] }).notNull(),
   credentialRef: text('credential_ref').notNull(),
   color: text('color'),
-  /** Firma: HTML dall'editor e versione in testo semplice. */
-  signatureHtml: text('signature_html'),
-  signatureText: text('signature_text'),
+  ...meta(),
+});
+
+/** Firme definite nelle impostazioni; ogni progetto ne sceglie una (o nessuna). */
+export const signatures = sqliteTable('signatures', {
+  id: text('id').primaryKey(),
+  /** Nome con cui la si sceglie ("Lavoro", "Personale"). */
+  label: text('label').notNull(),
+  /** HTML dall'editor e sua versione in testo semplice. */
+  html: text('html').notNull(),
+  text: text('text').notNull(),
   ...meta(),
 });
 
@@ -77,6 +85,8 @@ export const projects = sqliteTable('projects', {
   outgoingAccountId: text('outgoing_account_id').notNull().references(() => accounts.id),
   archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
   color: text('color'),
+  /** Firma delle mail del progetto; NULL = nessuna. */
+  signatureId: text('signature_id'),
   /** Ordine nella barra dei progetti (indice frazionario); NULL = in fondo, per nome. */
   rank: text('rank'),
   ...meta(),

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { SignatureError, SignatureService, signatureInputSchema } from '../signatures/service.ts';
 import { CredentialError } from '../mail/credentials.ts';
 import type { HealthDto } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
@@ -73,6 +74,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
       err instanceof NotesError ||
       err instanceof SuggestionError ||
       err instanceof TaskError ||
+      err instanceof SignatureError ||
       err instanceof CredentialError
     ) {
       return reply.code(400).send({ error: err.message });
@@ -122,9 +124,16 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
 
   app.post<{ Params: { id: string } }>('/api/accounts/:id/test', async (req) => accountsSvc.testConnection(req.params.id));
 
-  app.put<{ Params: { id: string }; Body: { html?: string | null; text?: string | null } }>('/api/accounts/:id/signature', async (req) =>
-    accountsSvc.setSignature(req.params.id, { html: req.body?.html ?? null, text: req.body?.text ?? null }),
-  );
+  // Firme (impostazioni generali); il progetto ne sceglie una con signatureId.
+  const signaturesSvc = new SignatureService(deps.db);
+  app.get('/api/signatures', async () => signaturesSvc.list());
+  app.post('/api/signatures', async (req, reply) => reply.code(201).send(signaturesSvc.create(parse(signatureInputSchema, req.body))));
+  app.put<{ Params: { id: string } }>('/api/signatures/:id', async (req) => signaturesSvc.update(req.params.id, parse(signatureInputSchema, req.body)));
+  app.delete<{ Params: { id: string } }>('/api/signatures/:id', async (req, reply) => {
+    signaturesSvc.remove(req.params.id);
+    bus.publish({ type: 'projects' });
+    return reply.code(204).send();
+  });
 
   // Nuova password: nel Portachiavi; la sincronizzazione riparte con la credenziale aggiornata.
   app.put<{ Params: { id: string }; Body: { password?: string } }>('/api/accounts/:id/password', async (req, reply) => {

@@ -10,6 +10,7 @@ export const projectInputSchema = z.object({
   name: z.string().trim().min(1, 'Il nome è obbligatorio'),
   description: z.string().trim().nullable().optional(),
   outgoingAccountId: z.string().min(1, "Serve un account d'uscita"),
+  signatureId: z.string().nullable().optional(),
   color: z.string().nullable().optional(),
 });
 
@@ -63,6 +64,7 @@ export class ProjectService {
       name: r.name,
       description: r.description,
       outgoingAccountId: r.outgoingAccountId,
+      signatureId: r.signatureId,
       color: r.color,
       archived: r.archived,
       conversationCount: statsBy.get(r.id)?.conversations ?? 0,
@@ -86,6 +88,7 @@ export class ProjectService {
         name: input.name,
         description: input.description ?? null,
         outgoingAccountId: input.outgoingAccountId,
+        signatureId: input.signatureId ?? null,
         color: input.color ?? null,
         createdAt: t,
         updatedAt: t,

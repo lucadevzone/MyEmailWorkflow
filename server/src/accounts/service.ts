@@ -60,8 +60,6 @@ function toDto(row: AccountRow): AccountDto {
     authType: row.authType,
     credentialRef: row.credentialRef,
     color: row.color,
-    signatureHtml: row.signatureHtml,
-    signatureText: row.signatureText,
   };
 }
 
@@ -103,26 +101,12 @@ export class AccountService {
       authType: 'password',
       credentialRef: input.password ? storeAccountPassword(id, input.password) : input.credentialRef!,
       color: input.color ?? null,
-      signatureHtml: null,
-      signatureText: null,
       createdAt: t,
       updatedAt: t,
       deletedAt: null,
     };
     this.db.insert(accounts).values(row).run();
     return toDto(row);
-  }
-
-  /** Firma dell'account (HTML dall'editor + versione testo); vuota = nessuna firma. */
-  setSignature(id: string, sig: { html: string | null; text: string | null }): AccountDto {
-    if (!this.get(id)) throw new Error('Account non trovato');
-    const empty = !sig.text?.trim();
-    this.db
-      .update(accounts)
-      .set({ signatureHtml: empty ? null : sig.html, signatureText: empty ? null : sig.text, updatedAt: now() })
-      .where(eq(accounts.id, id))
-      .run();
-    return this.get(id)!;
   }
 
   /** Nuova password: va nel Portachiavi e l'account smette di usare un eventuale env:. */
