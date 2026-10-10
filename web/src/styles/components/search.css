@@ -40,3 +40,18 @@
 .pm-topbar--searching { flex-wrap: nowrap; }
 .pm-topbar--searching .pm-topbar__tabs { flex-wrap: nowrap; overflow: hidden; flex: 1 1 0; }
 .pm-topbar--searching .pm-topbar__tabs .pm-iconbtn { display: none; }
+
+/* Assistente sulla posta (dalla ricerca) */
+.pm-scope--ai { display: inline-flex; align-items: center; gap: 6px; color: #5B3F99; border-color: #D9CDF2; background: #F6F2FD; }
+.pm-scope--ai:hover:not(:disabled) { background: #EFEAF9; }
+.pm-answer { border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px; }
+.pm-answer .pm-results__group { display: flex; align-items: center; gap: 6px; color: #5B3F99; }
+.pm-answer__text { padding: 4px 14px; line-height: var(--lh-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.pm-cite {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; margin: 0 1px;
+  border: 0; border-radius: 9px; background: #EFEAF9; color: #5B3F99; font-size: var(--fs-xs); font-weight: 600; vertical-align: 1px; cursor: pointer;
+}
+.pm-cite:hover { background: #E3DBF5; }
+.pm-answer__sources { display: flex; flex-direction: column; gap: 2px; padding: 8px 14px 0; }
+.pm-answer__source { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 3px 4px; border-radius: var(--r-sm); text-align: left; font-size: var(--fs-md); color: var(--ink-2); min-width: 0; }
+.pm-answer__source:hover { background: var(--surface-chip); }

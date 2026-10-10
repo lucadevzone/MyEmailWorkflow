@@ -125,3 +125,16 @@ describe('contesto del progetto', () => {
     expect(lastTurns[0]!.content).toContain('30 novembre');
   });
 });
+
+describe('assistente sulla posta', () => {
+  it('risponde dalle conversazioni indicate, numerate come fonti', async () => {
+    const a = await incoming('<q1@x>', 21, 'La riunione è spostata a giovedì.');
+    const b = await incoming('<q2@x>', 22, 'Il budget è approvato.');
+    const out = await collect(s.assistant.ask('Quando è la riunione?', [{ conversationId: a.conversationId!, messageId: a.messageId }, { conversationId: b.conversationId! }]));
+    expect(out).toBe('Ciao Mario.');
+    expect(lastTurns[0]!.content).toMatch(/\[1\] Oggetto:/);
+    expect(lastTurns[0]!.content).toMatch(/\[2\] Oggetto:/);
+    expect(lastTurns[0]!.content).toContain('spostata a giovedì');
+    expect(lastTurns[1]!.content).toMatch(/^Quando è la riunione\?/);
+  });
+});

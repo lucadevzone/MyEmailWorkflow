@@ -201,6 +201,25 @@ export const api = {
     }
     return out;
   },
+  /** Domanda all'assistente su più conversazioni (dalla ricerca), in streaming. */
+  assistantAsk: async (question: string, sources: { conversationId: string; messageId?: string }[], onPiece: (piece: string) => void, signal?: AbortSignal): Promise<string> => {
+    const res = await fetch('/api/assistant/ask', {
+      method: 'POST',
+      headers: { 'x-mmw': '1', 'content-type': 'application/json' },
+      body: JSON.stringify({ question, sources }),
+      signal,
+    });
+    if (!res.ok || !res.body) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    let out = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      out += value;
+      onPiece(value);
+    }
+    return out;
+  },
   uploadDraftFile: async (id: string, file: File): Promise<DraftDto> => {
     const res = await fetch(`/api/drafts/${id}/attachments?filename=${encodeURIComponent(file.name)}`, {
       method: 'POST',

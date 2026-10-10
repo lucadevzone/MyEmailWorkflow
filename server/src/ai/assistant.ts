@@ -17,14 +17,14 @@ export interface ChatTurn {
 }
 
 /** Generatore di testo a pezzi (Ollama in produzione, finto nei test). */
-export type ChatStream = (turns: ChatTurn[], signal?: AbortSignal) => AsyncIterable<string>;
+export type ChatStream = (turns: ChatTurn[], signal?: AbortSignal, opts?: { temperature?: number }) => AsyncIterable<string>;
 
-export const ollamaStream: ChatStream = async function* (turns, signal) {
+export const ollamaStream: ChatStream = async function* (turns, signal, opts) {
   const res = await fetch(`${config.ollama.url}/api/chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     signal,
-    body: JSON.stringify({ model: config.ollama.llmModel, stream: true, options: { temperature: 0.4 }, messages: turns }),
+    body: JSON.stringify({ model: config.ollama.llmModel, stream: true, options: { temperature: opts?.temperature ?? 0.4 }, messages: turns }),
   });
   if (!res.ok || !res.body) throw new Error(`Ollama HTTP ${res.status}: ${await res.text().catch(() => '')}`);
   const decoder = new TextDecoder();
@@ -290,5 +290,49 @@ export class AssistantService {
       .slice(0, 3);
     this.ideas.set(conversationId, { key: last.id, ideas });
     return ideas;
+  }
+
+  /**
+   * Domanda su più conversazioni (dalla ricerca): l'assistente legge sintesi e ultimi messaggi delle
+   * conversazioni indicate, nell'ordine dato, e risponde citandole come [1], [2]… Non si salva.
+   */
+  async *ask(question: string, sourcesIn: { conversationId: string; messageId?: string | null }[], signal?: AbortSignal): AsyncGenerator<string> {
+    const { db } = this.deps;
+    const sources = sourcesIn.slice(0, 6).map(({ conversationId: id, messageId: hitId }, n) => {
+      const conv = db.select().from(conversations).where(eq(conversations.id, id)).get();
+      if (!conv) return '';
+      // Il messaggio più pertinente (dalla ricerca) e gli ultimi due della conversazione.
+      const latest = db
+        .select()
+        .from(messages)
+        .where(and(eq(messages.conversationId, id), isNull(messages.deletedAt)))
+        .orderBy(desc(messages.date))
+        .limit(2)
+        .all();
+      const hit = hitId && !latest.some((m) => m.id === hitId) ? db.select().from(messages).where(eq(messages.id, hitId)).get() : undefined;
+      const recent = [...(hit ? [hit] : []), ...latest]
+        .sort((a, b) => a.date - b.date)
+        .map((m) => {
+          const who = m.direction === 'out' ? "Tu (l'utente)" : m.fromName || m.fromAddress || 'Sconosciuto';
+          const when = new Date(m.date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' });
+          return `[${when}] ${who}: ${(m.bodyTextClean || m.bodyText || '').replace(/\s+/g, ' ').slice(0, 700)}`;
+        });
+      return [`[${n + 1}] Oggetto: ${conv.subject ?? '(nessuno)'}`, conv.summaryDetailed || conv.summary ? `Sintesi: ${conv.summaryDetailed || conv.summary}` : '', ...recent]
+        .filter(Boolean)
+        .join('\n');
+    });
+    const system = [
+      "Sei l'assistente di posta personale dell'utente. " + WHO,
+      'Rispondi in italiano, in modo conciso, usando SOLO quello che è scritto nelle conversazioni qui sotto: non aggiungere conoscenze tue.',
+      'Ogni frase deve finire con il numero della conversazione da cui viene, tra parentesi quadre.',
+      'Esempio di forma: "La riunione è stata spostata a giovedì [1]. Il budget è approvato [2]."',
+      'Se le conversazioni non contengono la risposta, scrivi: "Nelle conversazioni trovate non c\'è la risposta."',
+      'Testo semplice: niente titoli né grassetti; per gli elenchi usa righe che iniziano con "-".',
+      '',
+      'CONVERSAZIONI',
+      sources.filter(Boolean).join('\n\n---\n\n') || '(nessuna conversazione trovata)',
+    ].join('\n');
+    const user = `${question}\n\n(Rispondi solo dalle conversazioni, citando ogni frase con [n].)`;
+    for await (const piece of this.deps.stream([{ role: 'system', content: system }, { role: 'user', content: user }], signal, { temperature: 0.1 })) yield piece;
   }
 }

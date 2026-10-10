@@ -590,6 +590,34 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
       .send(Readable.from(body()));
   });
 
+  // Domanda su più conversazioni (dalla ricerca), in streaming.
+  app.post<{ Body: { question?: string; sources?: { conversationId?: string; messageId?: string }[] } }>('/api/assistant/ask', async (req, reply) => {
+    const question = String(req.body?.question ?? '').trim().slice(0, 1000);
+    const ids = (Array.isArray(req.body?.sources) ? req.body!.sources! : [])
+      .filter((x) => typeof x?.conversationId === 'string')
+      .map((x) => ({ conversationId: x.conversationId!, messageId: typeof x.messageId === 'string' ? x.messageId : null }))
+      .slice(0, 6);
+    if (!question) throw new ActionError('Scrivi una domanda');
+    const abort = new AbortController();
+    reply.raw.on('close', () => abort.abort());
+    const gen = deps.assistant.ask(question, ids, abort.signal);
+    let first: IteratorResult<string>;
+    try {
+      first = await gen.next();
+    } catch (err) {
+      return reply.code(502).send({ error: `Assistente non disponibile: ${(err as Error).message}` });
+    }
+    async function* body() {
+      if (!first.done) yield first.value;
+      try {
+        for await (const piece of { [Symbol.asyncIterator]: () => gen }) yield piece;
+      } catch (err) {
+        if (!abort.signal.aborted) yield `\n[errore] ${(err as Error).message}`;
+      }
+    }
+    return reply.header('content-type', 'text/plain; charset=utf-8').header('cache-control', 'no-cache').send(Readable.from(body()));
+  });
+
   app.put<{ Params: { id: string }; Body: { summary?: string } }>('/api/conversations/:id/summary', async (req) => {
     const text = String(req.body?.summary ?? '').trim();
     if (!text) throw new ActionError('La sintesi è vuota');
