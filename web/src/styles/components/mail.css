@@ -63,8 +63,6 @@
 .pm-msg--focused {
   width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-4xl);
   padding: 22px 28px; box-shadow: var(--shadow-focus); display: flex; flex-direction: column; gap: 16px;
-  /* occupa lo spazio visibile sotto la linea di lettura, lasciando intravedere il messaggio successivo */
-  min-height: calc(var(--carousel-h, 600px) * (1 - var(--reading-line, .2)) - 40px);
 }
 .pm-msg__head { display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap; }
 .pm-msg__headmain { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -79,9 +77,8 @@
 
 .pm-msg__side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; margin-left: auto; }
 .pm-msg__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-.pm-msg__body { font-size: var(--fs-lg); line-height: var(--lh-read); max-width: 900px; text-wrap: pretty; min-height: 120px; }
+.pm-msg__body { font-size: var(--fs-lg); line-height: var(--lh-read); max-width: 900px; text-wrap: pretty; }
 .pm-msg__body pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
-.pm-msg__body iframe { min-height: 320px; }
 .pm-msg__quoted { color: var(--ink-muted); border-left: 2px solid var(--border); padding-left: 14px; margin-top: 12px; }
 .pm-msg__files { display: flex; flex-wrap: wrap; gap: 8px; }
 .pm-msg__quotebtn { align-self: flex-start; }
@@ -192,4 +189,19 @@
   .pm-draft__body { padding: 14px; }
   .pm-draft__tools, .pm-draft__files { padding-left: 14px; padding-right: 14px; }
   .pm-send { padding: 12px 14px; }
+}
+
+/* Anteprima dei messaggi vicini a quello in focus */
+.pm-carousel__preview { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: center; }
+.pm-carousel__previewbox { width: 90%; display: flex; }
+.pm-msg--preview {
+  width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; max-height: 168px; overflow: hidden;
+  padding: 10px 16px 12px; background: #F3F2EE; border: 1px solid var(--border); border-radius: var(--r-2xl);
+  color: var(--ink-2); text-align: left; position: relative;
+}
+.pm-msg--preview:hover { border-color: var(--border-strong); }
+.pm-msg__previewhead { display: flex; align-items: center; gap: 8px; font-size: var(--fs-md); flex: none; }
+.pm-msg__previewtext {
+  font-size: var(--fs-base); line-height: var(--lh-body); color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical;
 }

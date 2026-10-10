@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Bookmark, ChevronDown, ChevronUp, Forward, Image, Paperclip, ReplyAll } from 'lucide-react';
+import { Bookmark, ChevronsDownUp, ChevronsUpDown, Forward, Image, Paperclip, ReplyAll } from 'lucide-react';
 import type { ConversationDetail, MessageDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { fileSize, longDate, shortDate } from '../lib/format.ts';
@@ -71,6 +71,28 @@ export function CompactMessage({ m, onClick, label }: { m: MessageDto; onClick: 
   );
 }
 
+/**
+ * Anteprima di un messaggio vicino a quello in focus: più stretta, su fondo grigio, con le prime
+ * righe del testo pulito (senza citazioni). Un clic lo porta in focus.
+ */
+export function PreviewMessage({ m, onClick, label }: { m: MessageDto; onClick: () => void; label: string }) {
+  const name = useDisplayName();
+  const from = m.from ?? UNKNOWN;
+  const text = (m.bodyTextClean || m.bodyText || '').trim();
+  return (
+    <button type="button" className="pm-msg--preview" onClick={onClick} aria-label={label}>
+      <span className="pm-msg__previewhead">
+        <PersonAvatar person={from} size={24} />
+        <span className="pm-msg__who">{name(from)}</span>
+        <span style={{ flex: 1 }} />
+        {m.important && <Ic icon={Bookmark} size={14} className="pm-bookmark" />}
+        <span className="pm-msg__time">{shortDate(m.date)}</span>
+      </span>
+      <span className="pm-msg__previewtext">{text || m.subject || '(vuoto)'}</span>
+    </button>
+  );
+}
+
 /** Messaggio in focus (D10): intestazione, azioni, corpo, testo citato in fondo. */
 export function MessageCard({ m, d, index, total, onCompose, active = true }: {
   m: MessageDto;
@@ -93,7 +115,8 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
   const showHtml = m.hasHtml;
   const clean = m.bodyTextClean || '';
   const full = m.bodyText || '';
-  const hasQuote = !showHtml && full.trim().length > clean.trim().length + 20;
+  const [htmlQuotes, setHtmlQuotes] = useState(false);
+  const hasQuote = showHtml ? htmlQuotes : full.trim().length > clean.trim().length + 20;
 
   // Aprire un messaggio lo segna come letto (su Gmail al prossimo batch).
   useEffect(() => {
@@ -192,11 +215,28 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
 
       <div className="pm-msg__body" onMouseUp={onTextMouseUp} onKeyUp={onTextMouseUp}>
         {showHtml ? (
-          <HtmlFrame src={`/api/messages/${m.id}/html${images ? '?images=1' : ''}`} onSelectText={onSelectText} />
+          <HtmlFrame
+            src={`/api/messages/${m.id}/html${images ? '?images=1' : ''}`}
+            onSelectText={onSelectText}
+            hideQuotes={!quoted}
+            onQuotes={setHtmlQuotes}
+          />
         ) : (
           <pre>{(quoted ? full : clean || full).trim() || '(messaggio vuoto)'}</pre>
         )}
       </div>
+      {hasQuote && (
+        <button
+          type="button"
+          className="pm-btn pm-btn--ghost pm-btn--xs pm-msg__quotebtn"
+          aria-expanded={quoted}
+          onClick={() => setQuoted(!quoted)}
+          title={quoted ? 'Nascondi il testo citato' : 'Mostra il messaggio completo, con il testo citato'}
+        >
+          <Ic icon={quoted ? ChevronsDownUp : ChevronsUpDown} size={15} />
+          {quoted ? 'Nascondi testo citato' : 'Mostra testo citato'}
+        </button>
+      )}
 
       {files.length > 0 && (
         <div className="pm-msg__files">
@@ -211,12 +251,6 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
         </div>
       )}
 
-      {hasQuote && (
-        <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm pm-msg__quotebtn" aria-expanded={quoted} onClick={() => setQuoted(!quoted)}>
-          <Ic icon={quoted ? ChevronUp : ChevronDown} size={15} />
-          {quoted ? 'Nascondi testo citato' : `Testo citato${index > 0 ? ` · ${index} ${index === 1 ? 'messaggio precedente' : 'messaggi precedenti'}` : ''}`}
-        </button>
-      )}
       {/* Fuori dal carosello (traslato): un popover fixed dentro di lui sarebbe posizionato male. */}
       {editor && createPortal(<TagEditor target={editor.target} anchor={editor.anchor} onClose={() => setEditor(null)} />, document.body)}
     </article>

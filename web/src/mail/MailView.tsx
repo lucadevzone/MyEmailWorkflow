@@ -8,7 +8,7 @@ import { shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { paths, SYSTEM_INBOX, SYSTEM_NEWS } from '../shell/paths.ts';
 import type { ComposeRequest } from '../workspace/pane.ts';
-import { CompactMessage, MessageCard } from './MessageCard.tsx';
+import { CompactMessage, MessageCard, PreviewMessage } from './MessageCard.tsx';
 import { DraftCard, type SentInfo } from './DraftCard.tsx';
 import { Assistant, type DraftHandle } from './Assistant.tsx';
 import { composeTarget, NEW_DRAFT, seedOf, type DraftSeed } from './seed.ts';
@@ -16,7 +16,7 @@ import { composeTarget, NEW_DRAFT, seedOf, type DraftSeed } from './seed.ts';
 const time = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' });
 
 /** Linea di lettura (frazione dell'altezza visibile): il messaggio che la attraversa è quello in focus. */
-const READING_LINE = 0.2;
+const READING_LINE = 0.28;
 /** Riga compressa e spazio tra le schede (px). */
 const COMPACT = 34;
 const GAP = 6;
@@ -24,6 +24,8 @@ const GAP = 6;
 const RAMP = 220;
 /** Altezza stimata di una scheda non ancora misurata. */
 const ESTIMATE = 420;
+/** Altezza massima dell'anteprima dei messaggi vicini a quello in focus. */
+const PREVIEW_MAX = 168;
 /** Margine superiore del primo messaggio quando la conversazione parte dall'inizio. */
 const TOP_MARGIN = 16;
 
@@ -360,7 +362,20 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   let stage: React.ReactNode = null;
   if (conversationId && d) {
     const open = keys.map((_, i) => openness(i, s, L));
-    const heights = full.map((h, i) => COMPACT + (h - COMPACT) * open[i]!);
+    // Vicinanza: i messaggi accanto a quello in lettura sono anteprime, i più lontani righe compresse.
+    // Si calcola sulla posizione frazionaria (indice + avanzamento), così anche questo passaggio è graduale.
+    const kp = indexAt(s, L);
+    const p = kp + Math.min(1, Math.max(0, (s - L.starts[kp]!) / L.lengths[kp]!));
+    const near = keys.map((_, i) => {
+      const dist = p < i ? i - p : p > i + 1 ? p - (i + 1) : 0;
+      // Vicini (distanza ≤ 1): anteprima piena; da 1 a 1,5 diventa riga compressa.
+      return 1 - smoothstep((dist - 1) / 0.5);
+    });
+    const previewH = keys.map((k, i) => (i === n ? COMPACT : Math.min(PREVIEW_MAX, Math.max(COMPACT, measured[`v:${k}`] ?? PREVIEW_MAX))));
+    const heights = full.map((h, i) => {
+      const base = COMPACT + (previewH[i]! - COMPACT) * near[i]!;
+      return base + (Math.max(h, base) - base) * open[i]!;
+    });
     const tops: number[] = [];
     heights.reduce((y, h) => {
       tops.push(y);
@@ -407,8 +422,27 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
                   </div>
                 </div>
               )}
-              {o < 1 && (
-                <div className="pm-carousel__row" style={{ opacity: hasCard ? Math.max(0, 1 - o * 2.5) : 1 }} inert={hasCard && o >= 0.5}>
+              {/* sempre presente (anche invisibile) per misurarne l'altezza prima che serva */}
+              {o < 1 && !isDraft && (
+                <div
+                  className="pm-carousel__preview"
+                  style={{
+                    opacity: smoothstep((near[i]! - 0.3) / 0.4) * Math.max(0, 1 - o * 2.5),
+                    clipPath: h < previewH[i]! ? `inset(0 0 ${previewH[i]! - h}px 0 round 14px)` : undefined,
+                  }}
+                  inert={o >= 0.5 || near[i]! < 0.5}
+                >
+                  <div ref={cardRef(`v:${key}`)} className="pm-carousel__previewbox">
+                    <PreviewMessage m={messages[i]!} label={`Messaggio ${i + 1} di ${n}`} onClick={() => goTo(i)} />
+                  </div>
+                </div>
+              )}
+              {o < 1 && (isDraft || near[i]! < 1) && (
+                <div
+                  className="pm-carousel__row"
+                  style={{ opacity: (hasCard ? Math.max(0, 1 - o * 2.5) : 1) * (isDraft ? 1 : 1 - smoothstep((near[i]! - 0.3) / 0.4)) }}
+                  inert={(hasCard && o >= 0.5) || (!isDraft && near[i]! >= 0.5)}
+                >
                   {isDraft ? (
                     saved ? (
                       <button type="button" className="pm-msg--compact" onClick={() => goTo(n)}>
