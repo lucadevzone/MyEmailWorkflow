@@ -89,6 +89,7 @@ export const api = {
   deleteAccount: (id: string) => request<void>('DELETE', `/api/accounts/${id}`),
   testAccount: (id: string) => request<ConnectionTestResult>('POST', `/api/accounts/${id}/test`),
   setAccountPassword: (id: string, password: string) => request<AccountDto>('PUT', `/api/accounts/${id}/password`, { password }),
+  setAccountSignature: (id: string, html: string, text: string) => request<AccountDto>('PUT', `/api/accounts/${id}/signature`, { html, text }),
   settings: () => request<SettingsDto>('GET', '/api/settings'),
   syncStatus: () => request<SyncStatusDto[]>('GET', '/api/sync/status'),
   syncNow: () => request<SyncStatusDto[]>('POST', '/api/sync/now'),

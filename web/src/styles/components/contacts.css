@@ -73,3 +73,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 /* Cambio password dell'account */
 .pm-settings__password { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
 .pm-settings__password .pm-input { flex: 1 1 220px; }
+
+/* Composizione e firma */
+.pm-field--check { flex-direction: row; align-items: center; gap: 8px; align-self: end; padding-bottom: 8px; }
+.pm-settings__fontpreview { margin: 12px 0 6px; padding: 10px 12px; border-radius: var(--r-lg); background: var(--surface-soft); }
+.pm-settings__signature { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.pm-settings__sigpreview { margin-top: 8px; font-size: var(--fs-md); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FolderOpen, Paperclip, Quote, Send, X } from 'lucide-react';
-import type { ConversationDetail, DraftAttachment, DraftDto } from '@mmw/shared';
+import { FolderOpen, Paperclip, Quote, Send, Type, X } from 'lucide-react';
+import type { Editor } from '@tiptap/react';
+import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type AccountDto, type ConversationDetail, type DraftAttachment, type DraftDto, type SettingsDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { fileSize } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
@@ -9,6 +10,7 @@ import { usePeopleIndex } from '../ui/People.tsx';
 import { useConfirm } from '../ui/confirm.tsx';
 import { useToast } from '../ui/toast.tsx';
 import { RecipientField } from './RecipientField.tsx';
+import { RichEditor, textToHtml } from '../ui/RichEditor.tsx';
 import type { DraftHandle } from './Assistant.tsx';
 import { NEW_DRAFT, normalizeSubject, replyRecipients, type DraftSeed } from './seed.ts';
 
@@ -19,6 +21,8 @@ interface Fields {
   bcc: string[];
   subject: string;
   body: string;
+  format: 'text' | 'html';
+  bodyHtml: string | null;
   includeQuote: boolean;
 }
 
@@ -29,10 +33,31 @@ export interface SentInfo {
 
 const SAVE_DELAY = 800;
 
-/** Campi iniziali di una bozza non ancora salvata, dal seme e dalla conversazione. */
-function initialFields(seed: DraftSeed, d: ConversationDetail | null, isMe: (e: string) => boolean): Fields {
+const SIG_SEP = '-- ';
+
+/**
+ * Campi iniziali di una bozza non ancora salvata, dal seme, dalla conversazione e dalle impostazioni
+ * di composizione. La firma dell'account di uscita va in fondo, modificabile come il resto.
+ */
+function initialFields(seed: DraftSeed, d: ConversationDetail | null, isMe: (e: string) => boolean, settings: SettingsDto, account: AccountDto | undefined): Fields {
   const projectId = seed.projectId ?? d?.projectId ?? null;
-  const base = { projectId, to: seed.to ?? [], cc: [] as string[], bcc: [] as string[], subject: seed.subject ?? '', body: seed.body ?? '', includeQuote: false };
+  const format = settings.composeFormat;
+  const start = seed.body ?? '';
+  const sigText = account?.signatureText ?? null;
+  const body = sigText ? `${start}\n\n${SIG_SEP}\n${sigText}` : start;
+  const bodyHtml =
+    format === 'html' ? (start ? textToHtml(start) : '<p></p>') + (sigText ? `<p>${SIG_SEP}</p>${account?.signatureHtml ?? textToHtml(sigText)}` : '') : null;
+  const base = {
+    projectId,
+    to: seed.to ?? [],
+    cc: [] as string[],
+    bcc: [] as string[],
+    subject: seed.subject ?? '',
+    body,
+    format,
+    bodyHtml,
+    includeQuote: !!seed.replyToMessageId && settings.replyIncludeQuote,
+  };
   if (seed.forwardMessageId) return base;
   const parent = seed.replyToMessageId ? d?.messages.find((m) => m.id === seed.replyToMessageId) : undefined;
   if (parent) {
@@ -49,6 +74,8 @@ const fieldsOf = (x: DraftDto): Fields => ({
   bcc: x.bcc,
   subject: x.subject,
   body: x.body,
+  format: x.format,
+  bodyHtml: x.bodyHtml,
   includeQuote: x.includeQuote,
 });
 
@@ -71,10 +98,26 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
   const people = usePeopleIndex();
   const isNew = draftId === NEW_DRAFT;
   const saved = useQuery({ queryKey: ['draft', draftId], queryFn: () => api.draft(draftId), enabled: !isNew, staleTime: Infinity });
-  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
-  const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
+  const projectsQ = useQuery({ queryKey: ['projects'], queryFn: api.projects });
+  const projects = projectsQ.data ?? [];
+  const accountsQ = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
+  const accounts = accountsQ.data ?? [];
+  const settingsQ = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+  const settings = settingsQ.data;
 
-  const [f, setF] = useState<Fields | null>(() => (isNew ? initialFields(seed, d, people.isMe) : null));
+  const [f, setF] = useState<Fields | null>(null);
+  // Testo con cui la bozza nasce (firma compresa): se resta così, la bozza è "vuota".
+  const initialBody = useRef<string | null>(null);
+  // Bozza nuova: nasce quando impostazioni, progetti e account sono pronti (servono formato e firma).
+  useEffect(() => {
+    if (!isNew || f || !settings || !accountsQ.data || !projectsQ.data) return;
+    const projectId = seed.projectId ?? d?.projectId ?? null;
+    const account = accountsQ.data.find((a) => a.id === projectsQ.data.find((p) => p.id === projectId)?.outgoingAccountId);
+    const init = initialFields(seed, d, people.isMe, settings, account);
+    initialBody.current = init.body;
+    setF(init);
+  }, [isNew, f, settings, accountsQ.data, projectsQ.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const editor = useRef<Editor | null>(null);
   const [attachments, setAttachments] = useState<DraftAttachment[]>([]);
   const [showCc, setShowCc] = useState(false);
   const [urgent, setUrgent] = useState(false);
@@ -97,6 +140,7 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
   useEffect(() => {
     if (!saved.data || f) return;
     setF(fieldsOf(saved.data));
+    initialBody.current = null;
     setAttachments(saved.data.attachments);
     setShowCc(saved.data.cc.length > 0 || saved.data.bcc.length > 0);
     onSaved(saved.data.updatedAt);
@@ -175,7 +219,10 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
     if (!el || caretPlaced.current || !f?.body || f.to.length === 0) return;
     caretPlaced.current = true;
     el.focus();
-    el.setSelectionRange(el.value.length, el.value.length);
+    // Prima della firma: il testo nuovo si scrive sopra.
+    const sig = el.value.lastIndexOf(`\n\n${SIG_SEP}\n`);
+    const at = isNew && sig >= 0 ? sig : el.value.length;
+    el.setSelectionRange(at, at);
   }, [f]);
 
   // L'assistente inserisce le proposte dove sta il cursore (o in fondo).
@@ -184,6 +231,10 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
     handle.current = {
       body: () => latest.current?.body ?? '',
       insert: (text) => {
+        if (latest.current?.format === 'html' && editor.current) {
+          editor.current.chain().focus().insertContent(textToHtml(text)).run();
+          return;
+        }
         const cur = latest.current?.body ?? '';
         const el = textarea.current;
         const at = el && document.activeElement === el ? el.selectionStart : el && el.selectionStart > 0 ? el.selectionStart : cur.length;
@@ -255,7 +306,7 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
   };
 
   const cancel = async () => {
-    const empty = !f.body.trim() && attachments.length === 0;
+    const empty = (!f.body.trim() || f.body === initialBody.current) && attachments.length === 0;
     if (!empty && !(await ask({ message: 'Eliminare la bozza?', okLabel: 'Elimina', danger: true }))) return;
     done.current = true;
     if (timer.current) window.clearTimeout(timer.current);
@@ -314,15 +365,27 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
           <span className="pm-draft__label">Oggetto</span>
           <input className="pm-draft__subject" value={f.subject} onChange={(e) => set({ subject: e.target.value })} />
         </label>
-        <textarea
-          ref={textarea}
-          className="pm-draft__body"
-          aria-label="Testo"
-          value={f.body}
-          onChange={(e) => set({ body: e.target.value })}
-          autoFocus={f.to.length > 0}
-          placeholder={replyTo ? 'Scrivi la risposta…' : 'Scrivi il messaggio…'}
-        />
+        {f.format === 'html' ? (
+          <RichEditor
+            key={`rich-${draftId}`}
+            initialHtml={f.bodyHtml ?? textToHtml(f.body)}
+            onChange={(bodyHtml, body) => set({ bodyHtml, body })}
+            font={settings ? COMPOSE_FONTS[settings.composeFont].css : undefined}
+            size={settings ? COMPOSE_FONT_SIZES[settings.composeFontSize].css : undefined}
+            autoFocus={f.to.length > 0 ? 'start' : false}
+            onReady={(e) => (editor.current = e)}
+          />
+        ) : (
+          <textarea
+            ref={textarea}
+            className="pm-draft__body"
+            aria-label="Testo"
+            value={f.body}
+            onChange={(e) => set({ body: e.target.value })}
+            autoFocus={f.to.length > 0}
+            placeholder={replyTo ? 'Scrivi la risposta…' : 'Scrivi il messaggio…'}
+          />
+        )}
         {attachments.length > 0 && (
           <div className="pm-draft__files">
             {attachments.map((a) => (
@@ -371,6 +434,23 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
             title={f.projectId ? undefined : 'Scegli prima il progetto'}
           >
             <Ic icon={FolderOpen} size={15} /> Da risorse del progetto
+          </button>
+          <button
+            type="button"
+            className="pm-btn pm-btn--secondary pm-btn--sm"
+            aria-pressed={f.format === 'html'}
+            title={f.format === 'html' ? 'Passa a testo semplice (la formattazione si perde)' : 'Passa a testo formattato'}
+            style={f.format === 'html' ? { background: 'var(--surface-chip)', fontWeight: 600 } : undefined}
+            onClick={async () => {
+              if (f.format === 'html') {
+                if (f.body.trim() && !(await ask({ message: 'Passare a testo semplice? La formattazione si perde.', okLabel: 'Testo semplice' }))) return;
+                set({ format: 'text', bodyHtml: null });
+              } else {
+                set({ format: 'html', bodyHtml: textToHtml(f.body) });
+              }
+            }}
+          >
+            <Ic icon={Type} size={15} /> Formattato
           </button>
           {replyTo && (
             <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" aria-pressed={f.includeQuote} onClick={() => set({ includeQuote: !f.includeQuote })} style={f.includeQuote ? { background: 'var(--surface-chip)', fontWeight: 600 } : undefined}>

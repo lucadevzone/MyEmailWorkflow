@@ -215,3 +215,32 @@
 .pm-annot__badge--note { background: var(--note-bg); color: var(--note-icon); border: 1px solid var(--note-border); }
 .pm-annot__badge--task { background: var(--task-bg); color: var(--task-heading); border: 1px solid var(--task-border); }
 .pm-annot__badge--done { opacity: .55; }
+
+/* Editor formattato (bozze HTML e firme) */
+.pm-rich { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.pm-rich__bar {
+  display: flex; align-items: center; gap: 2px; flex-wrap: wrap; padding: 6px 20px;
+  border-bottom: 1px solid var(--border-subtle); position: sticky; top: 0; background: inherit; z-index: 1;
+}
+.pm-rich__btn {
+  display: inline-grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--ink-2); cursor: pointer;
+}
+.pm-rich__btn:hover { background: var(--surface-chip); color: var(--ink); }
+.pm-rich__btn--on { background: var(--accent-soft); color: var(--accent); }
+.pm-rich__sep { width: 1px; height: 18px; background: var(--border-subtle); margin: 0 4px; }
+.pm-rich__link { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; flex: 1 1 220px; }
+.pm-rich__link .pm-input { height: 30px; flex: 1; }
+.pm-rich__content {
+  outline: none; min-height: var(--rich-min, 200px); padding: 16px 24px 20px;
+  font-family: var(--rich-font, inherit); font-size: var(--rich-size, var(--fs-lg)); line-height: var(--lh-read);
+}
+.pm-rich__content p { margin: 0; }
+.pm-rich__content ul, .pm-rich__content ol { margin: .4em 0; padding-left: 1.6em; }
+.pm-rich__content a { color: var(--accent); text-decoration: underline; }
+.pm-rich__content blockquote { margin: .4em 0; padding-left: 1ex; border-left: 2px solid var(--border-strong); color: var(--ink-2); }
+/* Dentro una scheda (firma): bordo e sfondo propri */
+.pm-rich--boxed { border: 1px solid var(--border-strong); border-radius: var(--r-lg); background: var(--surface); }
+.pm-rich--boxed .pm-rich__bar { padding: 4px 8px; }
+.pm-rich--boxed .pm-rich__content { padding: 10px 12px; }
+@media (max-width: 720px) { .pm-rich__content { padding: 12px 14px; } .pm-rich__bar { padding: 6px 10px; } }

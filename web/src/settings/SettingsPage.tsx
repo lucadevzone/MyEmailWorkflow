@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useConfirm } from '../ui/confirm.tsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AccountDto, ConnectionTestResult, MailProvider } from '@mmw/shared';
+import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type AccountDto, type ComposeFont, type ComposeFontSize, type ConnectionTestResult, type MailProvider, type SettingsDto } from '@mmw/shared';
+import { RichEditor } from '../ui/RichEditor.tsx';
 import { api } from '../api.ts';
 
 export function SettingsPage() {
@@ -14,6 +15,7 @@ export function SettingsPage() {
       <div className="pm-settings">
       <SystemStatus />
       <Accounts />
+      <Compose />
       <AiModel />
       <General />
       </div>
@@ -135,6 +137,17 @@ function AccountCard({ account }: { account: AccountDto }) {
     },
   });
   const inKeychain = account.credentialRef.startsWith('keychain:');
+  const [sigOpen, setSigOpen] = useState(false);
+  const [sig, setSig] = useState<{ html: string; text: string } | null>(null);
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+  const saveSig = useMutation({
+    mutationFn: (v: { html: string; text: string }) => api.setAccountSignature(account.id, v.html, v.text),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['accounts'] });
+      setSig(null);
+      setSigOpen(false);
+    },
+  });
   const remove = useMutation({
     mutationFn: () => api.deleteAccount(account.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['accounts'] }),
@@ -156,6 +169,9 @@ function AccountCard({ account }: { account: AccountDto }) {
           </button>
           <button className={button} onClick={() => setNewPassword(newPassword === null ? '' : null)}>
             Cambia password
+          </button>
+          <button className={button} aria-expanded={sigOpen} onClick={() => setSigOpen(!sigOpen)}>
+            {account.signatureText ? 'Modifica firma' : 'Aggiungi firma'}
           </button>
           <button
             className={button}
@@ -181,6 +197,31 @@ function AccountCard({ account }: { account: AccountDto }) {
         </form>
       )}
       {setPassword.error && <div className="pm-error">{(setPassword.error as Error).message}</div>}
+      {!sigOpen && account.signatureText && (
+        <div className="pm-settings__sigpreview" title="Firma di questo account">
+          <span className="pm-muted">Firma:</span> {account.signatureText.split('\n').join(' · ')}
+        </div>
+      )}
+      {sigOpen && (
+        <div className="pm-settings__signature">
+          <span className="pm-muted">Firma di {account.email}: compare in fondo a ogni mail nuova di questo account, e si può ritoccare mail per mail.</span>
+          <RichEditor
+            boxed
+            label="Firma"
+            minHeight={80}
+            initialHtml={account.signatureHtml ?? ''}
+            onChange={(html, text) => setSig({ html, text })}
+            font={settings?.composeFormat === 'html' ? COMPOSE_FONTS[settings.composeFont].css : undefined}
+            size={settings?.composeFormat === 'html' ? COMPOSE_FONT_SIZES[settings.composeFontSize].css : undefined}
+            autoFocus="end"
+          />
+          <div className="pm-inlineform__actions">
+            <button type="button" className={button} onClick={() => { setSig(null); setSigOpen(false); }}>Annulla</button>
+            <button type="button" className={primary} disabled={!sig || saveSig.isPending} onClick={() => sig && saveSig.mutate(sig)}>Salva firma</button>
+          </div>
+          {saveSig.error && <div className="pm-error">{(saveSig.error as Error).message}</div>}
+        </div>
+      )}
       {test.error && <div className="pm-error">{(test.error as Error).message}</div>}
       {test.data && <TestResult result={test.data} />}
     </div>
@@ -342,6 +383,61 @@ function General() {
 }
 
 // ─── Modello di Ollama ───────────────────────────────────────────────────────
+
+/** Impostazioni generali di composizione: formato, carattere, citazione. Le firme stanno negli account. */
+function Compose() {
+  const qc = useQueryClient();
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+  const save = useMutation({
+    mutationFn: (patch: Partial<SettingsDto>) => api.updateSettings(patch),
+    onSuccess: (s) => qc.setQueryData(['settings'], s),
+  });
+  if (!settings) return null;
+  const html = settings.composeFormat === 'html';
+  return (
+    <Section title="Composizione">
+      <div className={card}>
+        <div className="pm-settings__grid">
+          <label className="pm-field">
+            <span className="pm-muted">Formato delle mail nuove</span>
+            <select className={input} value={settings.composeFormat} onChange={(e) => save.mutate({ composeFormat: e.target.value as 'text' | 'html' })}>
+              <option value="html">Formattato (HTML)</option>
+              <option value="text">Testo semplice</option>
+            </select>
+          </label>
+          <label className="pm-field">
+            <span className="pm-muted">Carattere</span>
+            <select className={input} value={settings.composeFont} disabled={!html} onChange={(e) => save.mutate({ composeFont: e.target.value as ComposeFont })}>
+              {Object.entries(COMPOSE_FONTS).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="pm-field">
+            <span className="pm-muted">Dimensione</span>
+            <select className={input} value={settings.composeFontSize} disabled={!html} onChange={(e) => save.mutate({ composeFontSize: e.target.value as ComposeFontSize })}>
+              {Object.entries(COMPOSE_FONT_SIZES).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="pm-field pm-field--check">
+            <input type="checkbox" checked={settings.replyIncludeQuote} onChange={(e) => save.mutate({ replyIncludeQuote: e.target.checked })} />
+            <span>Nelle risposte includi il messaggio originale</span>
+          </label>
+        </div>
+        <p
+          className="pm-settings__fontpreview"
+          style={html ? { fontFamily: COMPOSE_FONTS[settings.composeFont].css, fontSize: COMPOSE_FONT_SIZES[settings.composeFontSize].css } : undefined}
+        >
+          {html ? 'Così appariranno le tue mail: «Ciao, ti mando il documento aggiornato.»' : 'Le mail in testo semplice usano il carattere di chi le legge.'}
+        </p>
+        <span className="pm-row__sub">Ogni bozza può comunque passare da formattato a testo semplice. La firma si imposta in ogni account, qui sopra.</span>
+        {save.error && <div className="pm-error">{(save.error as Error).message}</div>}
+      </div>
+    </Section>
+  );
+}
 
 function AiModel() {
   const qc = useQueryClient();
