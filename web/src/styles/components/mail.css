@@ -88,7 +88,7 @@
   width: 100%; box-sizing: border-box; background: var(--surface); border: 1.5px solid var(--ink); border-radius: var(--r-4xl);
   box-shadow: var(--shadow-focus); display: flex; flex-direction: column; overflow: clip;
   /* la bozza riempie lo spazio visibile; il testo cresce con quello che si scrive */
-  min-height: max(360px, calc(var(--carousel-h, 600px) * (1 - var(--reading-line, .2)) - 24px));
+  min-height: max(360px, calc(var(--carousel-h, 600px) * (1 - var(--reading-line, .2)) - 16px));
 }
 .pm-draft__scroll { flex: 1 1 auto; display: flex; flex-direction: column; }
 .pm-draft__row { display: flex; align-items: center; gap: 10px; padding: 12px 24px; border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap; flex: none; position: relative; }

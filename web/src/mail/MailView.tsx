@@ -15,8 +15,12 @@ import { composeTarget, NEW_DRAFT, seedOf, type DraftSeed } from './seed.ts';
 
 const time = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' });
 
-/** Linea di lettura (frazione dell'altezza visibile): il messaggio che la attraversa è quello in focus. */
-const READING_LINE = 0.28;
+/**
+ * Linea di lettura: dove si ferma il bordo superiore della mail in focus. In prova: in alto, alla stessa
+ * altezza della prima mail della conversazione (FOCUS_AT_TOP = true). Con false torna al 28% dell'altezza.
+ */
+const FOCUS_AT_TOP = true;
+const READING_FRACTION = 0.28;
 /** Riga compressa e spazio tra le schede (px). */
 const COMPACT = 34;
 const GAP = 6;
@@ -36,8 +40,11 @@ const HOLD = RAMP / 2 + DWELL;
 /** Margine superiore del primo messaggio quando la conversazione parte dall'inizio. */
 const TOP_MARGIN = 16;
 
+/** Linea di lettura in px dal bordo superiore del carosello. */
+const lineOf = (viewport: number) => (FOCUS_AT_TOP ? TOP_MARGIN : viewport * READING_FRACTION);
+
 /** Il primo messaggio parte già allineato in alto: il suo tratto è più corto di questa quantità. */
-const leadOf = (viewport: number) => Math.max(0, viewport * READING_LINE - TOP_MARGIN);
+const leadOf = (viewport: number) => Math.max(0, lineOf(viewport) - TOP_MARGIN);
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
@@ -84,7 +91,7 @@ function openness(i: number, s: number, L: Layout): number {
 }
 
 /** Quanto l'ultimo elemento (la bozza) eccede lo spazio sotto la linea di lettura. */
-const overflowOf = (h: number, viewport: number) => Math.max(0, h - (viewport * (1 - READING_LINE) - 16));
+const overflowOf = (h: number, viewport: number) => Math.max(0, h - (viewport - lineOf(viewport) - 16));
 
 const indexAt = (s: number, L: Layout) => {
   const k = L.starts.findIndex((a, i) => s >= a && s < a + L.lengths[i]!);
@@ -153,7 +160,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     const apply = () => {
       setViewport(el.clientHeight);
       el.style.setProperty('--carousel-h', `${el.clientHeight}px`);
-      el.style.setProperty('--reading-line', String(READING_LINE));
+      el.style.setProperty('--reading-line', String(lineOf(el.clientHeight) / Math.max(1, el.clientHeight)));
     };
     apply();
     const ro = new ResizeObserver(apply);
@@ -427,7 +434,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
       const t = Math.min(travel, Math.max(0, u - HOLD));
       local = lead + (t / travel) * (heights[k]! + GAP - lead);
     }
-    const lineY = viewport * READING_LINE;
+    const lineY = lineOf(viewport);
     let shift = lineY - (tops[k]! + local);
     // Con la bozza aperta la colonna non sale oltre il suo fondo: resta ferma sul bordo inferiore.
     // La regola entra in proporzione all'apertura della bozza, così non ci sono salti.
