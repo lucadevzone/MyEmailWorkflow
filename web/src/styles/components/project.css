@@ -220,3 +220,8 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
 }
 /* Sintesi in cima alla colonna dei messaggi */
 .pm-summary--side { margin: 12px 14px 0; }
+
+/* Task terminato: resta nella conversazione, barrato e attenuato */
+.pm-tag--done { opacity: .6; }
+.pm-tag--done .pm-tag__text { text-decoration: line-through; }
+.pm-tag--done::before { background: var(--ink-muted); }

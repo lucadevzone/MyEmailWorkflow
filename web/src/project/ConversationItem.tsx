@@ -198,6 +198,12 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
   const hasReplyTask = openTasks.some((t) => t.title.startsWith('Rispondere a '));
   const lastIn = d?.messages.filter((m) => m.direction === 'in').at(-1);
   const remindReply = () => void api.remindReply(c.id).then(refreshItems);
+  // Solo se l'ultimo messaggio è arrivato (non ho ancora risposto).
+  const awaitingReply = d?.messages.at(-1)?.direction === 'in'; // i messaggi arrivano in ordine di data
+  const canRemind = !!c.projectId && !hasReplyTask && awaitingReply;
+  const doneTasks = tasks.filter((t) => t.status === 'done');
+  // Lo stesso suggerimento due volte (vecchie estrazioni ripetute) si mostra una volta sola.
+  const uniqueSuggestions = suggestions.filter((s, i, all) => all.findIndex((x) => actions.suggestionLabel(x) === actions.suggestionLabel(s)) === i);
   const toast = useToast();
   // Io non compaio tra i partecipanti: ci sono sempre.
   const people = c.participants.filter((p) => p.email.toLowerCase() !== me?.email.toLowerCase());
@@ -251,9 +257,14 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
           ))}
           <span className="pm-muted" style={{ fontSize: 'var(--fs-md)' }}>· {c.messageCount} {c.messageCount === 1 ? 'messaggio' : 'messaggi'}</span>
         </div>
-        {suggestions.length > 0 && (
+        {(uniqueSuggestions.length > 0 || canRemind) && (
           <div className="pm-conv__suggestions">
-            {suggestions.map((s) => (
+            {canRemind && (
+              <span className="pm-tag pm-tag--ai" title="Crea il task «Rispondere a…»: si chiude da solo quando rispondi">
+                <button type="button" onClick={remindReply} className="pm-tag__text">+ Task: Ricordami di rispondere</button>
+              </span>
+            )}
+            {uniqueSuggestions.map((s) => (
               <SuggestionTag key={s.id} label={actions.suggestionLabel(s)!} reason={(s.payload as { reason?: string }).reason} onRun={() => actions.runSuggestion(s)} onReject={() => actions.rejectSug.mutate(s)} />
             ))}
           </div>
@@ -270,7 +281,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
                   title: 'Task',
                   actions: [
                     { id: 'new', icon: 'add_task', label: 'Nuovo task', primary: true, run: () => newTask(anchor) },
-                    ...(!hasReplyTask && lastIn ? [{ id: 'remind', icon: 'reply', label: 'Ricordami di rispondere', primary: true, run: remindReply }] : []),
+                    ...(canRemind ? [{ id: 'remind', icon: 'reply', label: 'Ricordami di rispondere', primary: true, run: remindReply }] : []),
                   ],
                 }))(e);
               }}
@@ -296,15 +307,24 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
                     {t.messageId && <Ic icon={Mail} size={12} className="pm-tag__source" label="nato da una mail" />}
                   </button>
                 ))}
+                {doneTasks.map((t) => (
+                  <button key={t.id} type="button" className="pm-tag pm-tag--task pm-tag--done" title={`Terminato: ${t.title}`} aria-label={`Task terminato: ${t.title}`}
+                    onClick={(e) => onEditor({ target: { kind: 'task', task: t, projectId: c.projectId!, conversationId: c.id }, anchor: e.currentTarget.getBoundingClientRect() })}
+                    onContextMenu={menuAt(() => ({
+                      title: t.title,
+                      actions: [
+                        { id: 'reopen', icon: 'undo', label: 'Riapri', primary: true, run: () => void api.updateTask(t.id, { status: 'open' }).then(refreshItems) },
+                        ...(t.messageId ? [{ id: 'mail', icon: 'mail', label: 'Vai alla mail', primary: true, run: () => cb.onOpenMessage(t.messageId!) }] : []),
+                        { id: 'del', icon: 'delete', label: 'Elimina', tone: 'danger' as const, run: async () => (await ask({ message: 'Eliminare il task?', okLabel: 'Elimina', danger: true })) && api.deleteTask(t.id).then(refreshItems) },
+                      ],
+                    }))}>
+                    <span className="pm-tag__text">{t.title}</span>
+                  </button>
+                ))}
                 <button type="button" className="pm-tag pm-tag--task pm-tag--add"
                   onClick={(e) => onEditor({ target: { kind: 'task', projectId: c.projectId!, conversationId: c.id }, anchor: e.currentTarget.getBoundingClientRect() })}>
                   <Ic icon={Plus} size={15} /> task
                 </button>
-                {!hasReplyTask && lastIn && (
-                  <button type="button" className="pm-tag pm-tag--task pm-tag--add" title="Crea il task «Rispondere a…»: si chiude da solo quando rispondi" onClick={remindReply}>
-                    <Ic icon={Reply} size={15} /> ricordami di rispondere
-                  </button>
-                )}
               </div>
             </section>
           )}
