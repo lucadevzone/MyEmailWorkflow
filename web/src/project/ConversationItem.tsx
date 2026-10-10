@@ -329,11 +329,11 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
       </div>
 
       <section className="pm-conv__tree" aria-label="Sintesi e messaggi della conversazione">
+        <div className="pm-tree__head">Messaggi · {d?.messages.length ?? c.messageCount}</div>
         <section className="pm-summary pm-summary--side" aria-label="Sintesi">
           <div className="pm-label pm-summary__label">Sintesi</div>
           <p>{c.summaryDetailed ?? c.summary ?? 'La sintesi viene generata in background.'}</p>
         </section>
-        <div className="pm-tree__head">Messaggi · {d?.messages.length ?? c.messageCount}</div>
         {!d && <div className="pm-empty">Caricamento…</div>}
         {d && <MessageTree d={d} selectedId={selectedMessageId} onOpen={cb.onOpenMessage} onCompose={cb.onCompose} />}
       </section>

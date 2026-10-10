@@ -219,4 +219,4 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
   background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; line-height: 18px; white-space: nowrap;
 }
 /* Sintesi in cima alla colonna dei messaggi */
-.pm-summary--side { margin: 14px 14px 6px; }
+.pm-summary--side { margin: 12px 14px 0; }
