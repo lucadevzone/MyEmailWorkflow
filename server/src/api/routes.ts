@@ -327,6 +327,21 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
 
   app.post<{ Params: { id: string } }>('/api/activities/:id/cancel', async (req) => deps.activities.cancel(req.params.id));
 
+  // Blocca invio: l'invio in coda torna bozza (dall'attività o dal messaggio in uscita).
+  const blockSend = (activityId: string) => {
+    const draft = deps.drafts.blockSend(activityId);
+    bus.publish({ type: 'activities' });
+    bus.publish({ type: 'conversations', ids: draft.conversationId ? [draft.conversationId] : [] });
+    bus.publish({ type: 'projects' });
+    return draft;
+  };
+  app.post<{ Params: { id: string } }>('/api/activities/:id/block', async (req) => blockSend(req.params.id));
+  app.post<{ Params: { id: string } }>('/api/messages/:id/block-send', async (req) => {
+    const row = deps.activities.sendFor(req.params.id);
+    if (!row) throw new ActivityError('Questo messaggio non è più in coda: troppo tardi per bloccarlo');
+    return blockSend(row.id);
+  });
+
   app.post<{ Params: { id: string } }>('/api/activities/:id/run', async (req) => {
     deps.activities.markUrgent(req.params.id);
     void deps.runner.run([req.params.id]);

@@ -310,6 +310,14 @@ export class MailActions {
         inReplyTo: parent?.rfcMessageId ?? null,
         references,
         attachments: outgoing,
+        draft: {
+          projectId: project.id,
+          replyToMessageId: parent?.id ?? null,
+          forwardMessageId: forwarded?.id ?? null,
+          includeQuote: input.includeQuote,
+          body: input.body,
+          attachments: input.attachments,
+        },
       };
       const activity = this.deps.activities.enqueue('send', account.id, payload, input.urgent);
       return { activityId: activity.id, conversationId, messageId };

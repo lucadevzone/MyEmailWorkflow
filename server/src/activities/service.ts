@@ -43,6 +43,19 @@ export interface SendPayload {
   inReplyTo: string | null;
   references: string[];
   attachments?: { blobSha: string; filename: string; mime: string | null }[];
+  /** Quanto serve per rimettere l'invio in bozza ("Blocca invio") senza perdere nulla. */
+  draft?: SendDraftSnapshot;
+}
+
+export interface SendDraftSnapshot {
+  projectId: string;
+  replyToMessageId: string | null;
+  forwardMessageId: string | null;
+  includeQuote: boolean;
+  /** Testo scritto dall'utente, senza citazione o inoltro aggiunti all'invio. */
+  body: string;
+  /** Solo gli allegati aggiunti dall'utente (quelli dell'inoltro tornano da soli). */
+  attachments: { blobSha: string; filename: string; mime: string | null }[];
 }
 
 export type ActivityPayload = FlagsPayload | ConversationOpPayload | SendPayload;
@@ -131,6 +144,16 @@ export class ActivityService {
     });
     bus.publish({ type: 'conversations', ids: [conversationOf(row)].filter(Boolean) as string[] });
     return this.get(id)!;
+  }
+
+  /** L'invio (in coda o fallito) che riguarda un messaggio in uscita. */
+  sendFor(messageId: string): ActivityRow | undefined {
+    return this.db
+      .select()
+      .from(activities)
+      .where(and(eq(activities.kind, 'send'), inArray(activities.status, ['pending', 'failed'])))
+      .all()
+      .find((r) => (JSON.parse(r.payload) as SendPayload).messageId === messageId);
   }
 
   retry(id: string): void {

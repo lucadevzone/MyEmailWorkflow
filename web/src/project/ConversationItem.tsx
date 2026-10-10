@@ -12,6 +12,7 @@ import { ProjectDialog } from '../projects/ProjectDialog.tsx';
 import type { ComposeRequest } from '../workspace/pane.ts';
 import { TagEditor, type TagEditorTarget } from './TagEditor.tsx';
 import { ResourcesArea, TaskArea } from './ConversationAreas.tsx';
+import { useBlockSend } from '../activities/blockSend.ts';
 import { useConversationActions } from './useConversationActions.ts';
 
 export interface ItemCallbacks {
@@ -315,6 +316,8 @@ function TreeNode({ m, depth, current, onOpen, onCompose, projectId, conversatio
   const from = m.from ?? { name: null, email: 'sconosciuto' };
   const unread = !m.seen && m.direction === 'in';
   const qc = useQueryClient();
+  const block = useBlockSend();
+  const queued = m.outgoingStatus === 'queued' || m.outgoingStatus === 'failed';
   const remind = () =>
     void api.remindReply(conversationId, m.id).then(() => {
       for (const k of [['tasks'], ['conversations']]) qc.invalidateQueries({ queryKey: k });
@@ -324,6 +327,7 @@ function TreeNode({ m, depth, current, onOpen, onCompose, projectId, conversatio
     title: `${name(from)} · ${shortDate(m.date)}`,
     actions: [
       { id: 'open', icon: 'mail', label: 'Apri', primary: true, run: onOpen },
+      ...(queued ? [{ id: 'block', icon: 'cancel_schedule_send', label: 'Blocca invio', primary: true, run: () => void block.byMessage(m.id) }] : []),
       { id: 'reply-all', icon: 'reply_all', label: 'Rispondi a tutti', primary: true, run: () => onCompose({ replyTo: m, replyAll: true, projectId }) },
       ...(projectId && m.direction === 'in' ? [{ id: 'remind', icon: 'alarm', label: 'Ricordami di rispondere', primary: true, run: remind }] : []),
       { id: 'reply', icon: 'reply', label: 'Rispondi al mittente', run: () => onCompose({ replyTo: m, replyAll: false, projectId }) },

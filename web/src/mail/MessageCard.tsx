@@ -13,6 +13,7 @@ import { HtmlFrame } from '../workspace/HtmlFrame.tsx';
 import type { ComposeRequest } from '../workspace/pane.ts';
 import { useOpenMenu } from '../ui/contextMenu.tsx';
 import { TagEditor, type TagEditorTarget } from '../project/TagEditor.tsx';
+import { useBlockSend } from '../activities/blockSend.ts';
 
 /** Testo citato come in una risposta ("> " su ogni riga). */
 const quoteText = (t: string) => t.split('\n').map((l) => `> ${l}`).join('\n');
@@ -131,6 +132,7 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
 
   const compose = (r: Omit<ComposeRequest, 'projectId' | 'conversationId'>) => onCompose({ ...r, projectId: d.projectId, conversationId: d.id });
   const toast = useToast();
+  const block = useBlockSend();
   // Task di default "Rispondere a…": si chiude da solo quando rispondo.
   const remindReply = () =>
     void api.remindReply(d.id, m.id).then(() => {
@@ -238,6 +240,12 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
             <span style={{ fontWeight: 600 }}>{name(from)}</span> <span style={{ color: 'var(--ink-muted)' }}>&lt;{from.email}&gt;</span>
             {m.outgoingStatus === 'queued' && <span style={{ color: 'var(--ink-muted)' }}> · in coda di invio</span>}
             {m.outgoingStatus === 'failed' && <span style={{ color: 'var(--danger)' }}> · invio non riuscito</span>}
+            {(m.outgoingStatus === 'queued' || m.outgoingStatus === 'failed') && (
+              <button type="button" className="pm-btn pm-btn--secondary pm-btn--xs" style={{ marginLeft: 8 }} title="Non inviare: rimetti la mail in bozza per modificarla"
+                onClick={() => void block.byMessage(m.id)}>
+                Blocca invio
+              </button>
+            )}
           </div>
           {(m.to.length > 0 || m.cc.length > 0) && (
             <div className="pm-msg__recipients">

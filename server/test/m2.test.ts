@@ -323,6 +323,33 @@ describe('bozze, allegati, inoltro', () => {
     expect(sent[0]!.raw).toContain('Ci vediamo?');
   });
 
+  it('blocca invio: la risposta in coda torna bozza con testo e allegati, e non parte', async () => {
+    const { conversationId, messageId } = await incoming('<b@x>', 31);
+    const d = s.drafts.create({ projectId, conversationId, replyToMessageId: messageId, to: ['mario@x.it'], subject: 'Re: Ci vediamo?' });
+    s.drafts.update(d.id, { body: 'Confermo giovedì.', includeQuote: true });
+    s.drafts.addFile(d.id, 'nota.txt', Buffer.from('contenuto'), 'text/plain');
+    const r = s.drafts.send(d.id, false);
+
+    const back = s.drafts.blockSend(r.activityId);
+    expect(back).toMatchObject({ conversationId, replyToMessageId: messageId, to: ['mario@x.it'], subject: 'Re: Ci vediamo?', body: 'Confermo giovedì.', includeQuote: true });
+    expect(back.attachments.map((a) => [a.filename, a.size])).toEqual([['nota.txt', 9]]);
+    expect(conv().get(conversationId)!.messages.some((m) => m.id === r.messageId)).toBe(false);
+    expect(s.activities.get(r.activityId)!.status).toBe('cancelled');
+    await s.runner.run();
+    expect(sent).toHaveLength(0);
+    // Troppo tardi: un invio già annullato (o partito) non si blocca più.
+    expect(() => s.drafts.blockSend(r.activityId)).toThrow();
+  });
+
+  it('blocca invio di una mail nuova: sparisce la conversazione, resta la bozza senza conversazione', () => {
+    const d = s.drafts.create({ projectId, to: ['a@b.it'], subject: 'Proposta', body: 'Ciao' });
+    const r = s.drafts.send(d.id, false);
+    expect(s.activities.sendFor(r.messageId)?.id).toBe(r.activityId);
+    const back = s.drafts.blockSend(r.activityId);
+    expect(back).toMatchObject({ projectId, conversationId: null, subject: 'Proposta', body: 'Ciao' });
+    expect(conv().get(r.conversationId)).toBeUndefined();
+  });
+
   it('bozza senza progetto non si invia', () => {
     const d = s.drafts.create({ to: ['a@b.it'] });
     expect(() => s.drafts.send(d.id, false)).toThrow(/progetto/);

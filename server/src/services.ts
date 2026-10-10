@@ -68,7 +68,7 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
   const tasks = new TaskService(db);
   const suggestions = new SuggestionService(db, actions, tasks);
   const assistant = new AssistantService({ db, stream: o.chatStream ?? ollamaStream, llm, readBlob: (sha) => blobs.read(sha) });
-  const drafts = new DraftService({ db, blobs, actions, assistant });
+  const drafts = new DraftService({ db, blobs, actions, activities, assistant });
   const search = new SearchService({ sqlite, embedder });
   return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions, tasks, drafts, assistant, search };
 }

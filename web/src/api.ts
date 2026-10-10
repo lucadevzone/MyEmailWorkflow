@@ -123,6 +123,8 @@ export const api = {
 
   activities: () => request<ActivityQueueDto>('GET', '/api/activities'),
   cancelActivity: (id: string) => request<unknown>('POST', `/api/activities/${id}/cancel`),
+  blockActivity: (id: string) => request<DraftDto>('POST', `/api/activities/${id}/block`),
+  blockSend: (messageId: string) => request<DraftDto>('POST', `/api/messages/${messageId}/block-send`),
   runActivity: (id: string) => request<unknown>('POST', `/api/activities/${id}/run`),
   retryActivity: (id: string) => request<unknown>('POST', `/api/activities/${id}/retry`),
   runAllActivities: () => request<unknown>('POST', '/api/activities/run'),

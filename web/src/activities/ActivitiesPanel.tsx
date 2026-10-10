@@ -5,6 +5,7 @@ import type { ActivityDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
+import { useBlockSend } from './blockSend.ts';
 
 const STATUS: Record<ActivityDto['status'], string> = {
   pending: 'In attesa',
@@ -34,6 +35,7 @@ export function ActivitiesPanel({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const { data } = useQuery({ queryKey: ['activities'], queryFn: api.activities });
   const countdown = useCountdown(data?.nextRunAt ?? null);
+  const block = useBlockSend();
   const op = useMutation({
     mutationFn: ({ kind, id }: { kind: 'cancel' | 'run' | 'retry' | 'all'; id?: string }) =>
       kind === 'all' ? api.runAllActivities() : kind === 'cancel' ? api.cancelActivity(id!) : kind === 'run' ? api.runActivity(id!) : api.retryActivity(id!),
@@ -93,6 +95,12 @@ export function ActivitiesPanel({ onClose }: { onClose: () => void }) {
                 <button type="button" className="pm-btn pm-btn--ghost pm-btn--xs" onClick={() => op.mutate({ kind: 'run', id: a.id })}>
                   Esegui ora
                 </button>
+                {a.kind === 'send' && (
+                  <button type="button" className="pm-btn pm-btn--secondary pm-btn--xs" title="Non inviare: rimetti la mail in bozza per modificarla"
+                    onClick={() => void block.byActivity(a.id).then(onClose)}>
+                    Blocca invio
+                  </button>
+                )}
                 <button type="button" className="pm-btn pm-btn--danger pm-btn--xs" onClick={() => op.mutate({ kind: 'cancel', id: a.id })}>
                   Annulla
                 </button>
@@ -103,6 +111,12 @@ export function ActivitiesPanel({ onClose }: { onClose: () => void }) {
                 <button type="button" className="pm-btn pm-btn--ghost pm-btn--xs" onClick={() => op.mutate({ kind: 'retry', id: a.id })}>
                   Riprova
                 </button>
+                {a.kind === 'send' && (
+                  <button type="button" className="pm-btn pm-btn--secondary pm-btn--xs" title="Rimetti la mail in bozza per modificarla"
+                    onClick={() => void block.byActivity(a.id).then(onClose)}>
+                    Rimetti in bozza
+                  </button>
+                )}
                 <button type="button" className="pm-btn pm-btn--danger pm-btn--xs" onClick={() => op.mutate({ kind: 'cancel', id: a.id })}>
                   Annulla
                 </button>
