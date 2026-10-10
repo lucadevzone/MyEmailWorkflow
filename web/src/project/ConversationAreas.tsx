@@ -3,11 +3,12 @@
 
 import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Download, FileText, History, Mail, Paperclip, Plus, SquareCheck, StickyNote, Trash2, FolderOpen } from 'lucide-react';
+import { ChevronDown, Download, FileText, Mail, Paperclip, Plus, SquareCheck, StickyNote, Trash2, FolderOpen } from 'lucide-react';
 import type { ConversationDetail, ConversationListItem, FileDto, NoteDto, ResourceDto, TaskDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { fileSize, personLabel, shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
+import { Icon } from '../ui/Icon.tsx';
 import { useMenuAt } from '../ui/contextMenu.tsx';
 import { useConfirm } from '../ui/confirm.tsx';
 import { useToast } from '../ui/toast.tsx';
@@ -240,7 +241,7 @@ export function ResourcesArea({ c, d, onEditor, onOpenMessage, onUpload, onChang
             <button type="button" className={`pm-res__versions${openHistory ? ' pm-res__versions--open' : ''}`} aria-expanded={openHistory}
               title={versioned ? `${f.versions.length} versioni: mostra le precedenti` : `Ricevuto ${arrivals} volte, stesso contenuto: mostra gli invii`}
               onClick={() => setHistory(openHistory ? null : f.key)}>
-              <Ic icon={History} size={13} /> {versioned ? `v${f.latest.no}` : `${arrivals}×`}
+              <Icon name="file_copy" size={14} /> {versioned ? `v${f.latest.no}` : arrivals}
             </button>
           )}
         </div>
