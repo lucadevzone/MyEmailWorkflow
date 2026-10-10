@@ -14,6 +14,7 @@ export function SettingsPage() {
       <div className="pm-settings">
       <SystemStatus />
       <Accounts />
+      <AiModel />
       <General />
       </div>
     </div>
@@ -308,6 +309,62 @@ function General() {
           </button>
         </div>
       </form>
+    </Section>
+  );
+}
+
+// ─── Modello di Ollama ───────────────────────────────────────────────────────
+
+function AiModel() {
+  const qc = useQueryClient();
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+  const { data: health } = useQuery({ queryKey: ['health'], queryFn: api.health });
+  const save = useMutation({
+    mutationFn: (llmModel: string | null) => api.updateSettings({ llmModel }),
+    onSuccess: (s) => {
+      qc.setQueryData(['settings'], s);
+      qc.invalidateQueries({ queryKey: ['health'] });
+    },
+  });
+  if (!settings || !health) return null;
+  const installed = health.ollama.models.filter((m) => !/embed|bge|nomic|minilm/i.test(m));
+  const current = settings.llmModel ?? '';
+  const missing = settings.llmModel && !health.ollama.models.some((m) => m === settings.llmModel || m.startsWith(`${settings.llmModel}:`));
+
+  return (
+    <Section title="Intelligenza artificiale (Ollama)">
+      <div className={card}>
+        <div className="pm-settings__grid">
+          <label className="pm-field">
+            <span className="pm-muted">Modello per assistente, sintesi, task e suggerimenti</span>
+            <select className={input} value={current} onChange={(e) => save.mutate(e.target.value || null)} disabled={save.isPending}>
+              <option value="">Predefinito ({health.config.defaultLlmModel})</option>
+              {installed.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+              {settings.llmModel && !installed.includes(settings.llmModel) && <option value={settings.llmModel}>{settings.llmModel}</option>}
+            </select>
+          </label>
+          <div className="pm-field">
+            <span className="pm-muted">Modello per gli embedding (ricerca per significato)</span>
+            <span style={{ padding: '8px 0' }}>
+              <code>{health.config.embedModel}</code> <span className="pm-muted">· cambiarlo richiede di reindicizzare la posta</span>
+            </span>
+          </div>
+        </div>
+        {!health.ollama.ok && <div className="pm-error">Ollama non è raggiungibile: l'elenco dei modelli installati non è disponibile.</div>}
+        {missing && (
+          <div className="pm-error">
+            Il modello scelto non risulta installato: <code>ollama pull {settings.llmModel}</code>
+          </div>
+        )}
+        <span className="pm-row__sub">
+          Si applica subito alle nuove richieste. Modelli più grandi rispondono meglio ma più lentamente; si installano con <code>ollama pull &lt;nome&gt;</code>.
+        </span>
+        {save.error && <div className="pm-error">{(save.error as Error).message}</div>}
+      </div>
     </Section>
   );
 }

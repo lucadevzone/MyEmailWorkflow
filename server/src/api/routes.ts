@@ -94,6 +94,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
       ollama,
       config: {
         llmModel: config.ollama.llmModel,
+        defaultLlmModel: config.defaultLlmModel,
         embedModel: config.ollama.embedModel,
         llmAvailable,
         embedAvailable,

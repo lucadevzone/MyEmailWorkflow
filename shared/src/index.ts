@@ -57,7 +57,7 @@ export interface HealthDto {
   ok: boolean;
   db: { ok: boolean; vec: string | null };
   ollama: { ok: boolean; url: string; models: string[]; error?: string };
-  config: { llmModel: string; embedModel: string; llmAvailable: boolean; embedAvailable: boolean };
+  config: { llmModel: string; defaultLlmModel: string; embedModel: string; llmAvailable: boolean; embedAvailable: boolean };
 }
 
 export interface SettingsDto {
@@ -65,11 +65,14 @@ export interface SettingsDto {
   activityBatchMinutes: number;
   /** Giorni di posta recente importati e analizzati subito. */
   initialSyncDays: number;
+  /** Modello di Ollama per assistente e analisi; null = quello predefinito (OLLAMA_LLM_MODEL). */
+  llmModel: string | null;
 }
 
 export const DEFAULT_SETTINGS: SettingsDto = {
   activityBatchMinutes: 5,
   initialSyncDays: 90,
+  llmModel: null,
 };
 
 // ─── Sync ────────────────────────────────────────────────────────────────────

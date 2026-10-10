@@ -24,6 +24,8 @@ export const config = {
     llmModel: env('OLLAMA_LLM_MODEL', 'llama3.1:8b'),
     embedModel: env('OLLAMA_EMBED_MODEL', 'bge-m3'),
   },
+  /** Modello LLM predefinito (da ambiente); quello in uso si può cambiare dalle impostazioni. */
+  defaultLlmModel: env('OLLAMA_LLM_MODEL', 'llama3.1:8b'),
   /** Dimensione dei vettori di embedding. Deve combaciare con il modello (bge-m3 = 1024). */
   embedDim: 1024,
 };

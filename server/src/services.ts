@@ -3,7 +3,7 @@ import type Database from 'better-sqlite3';
 import type { AccountDto } from '@mmw/shared';
 import type { Db } from './db/client.ts';
 import { BlobStore } from './store/blobs.ts';
-import { SettingsService } from './settings/service.ts';
+import { applyLlmModel, SettingsService } from './settings/service.ts';
 import { AccountService } from './accounts/service.ts';
 import { SyncManager } from './sync/manager.ts';
 import { ActivityService } from './activities/service.ts';
@@ -39,6 +39,7 @@ export interface ServiceOverrides {
 export function buildServices(db: Db, sqlite: Database.Database, blobDir: string, o: ServiceOverrides = {}) {
   const blobs = new BlobStore(db, blobDir);
   const settings = new SettingsService(db);
+  applyLlmModel(settings.get());
   const accounts = new AccountService(db);
   const providerFactory = o.createProvider ?? createProvider;
   const sync = new SyncManager({ db, sqlite, blobs }, () => settings.get().initialSyncDays, providerFactory);
