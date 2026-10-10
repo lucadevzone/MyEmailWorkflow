@@ -97,6 +97,15 @@ function openness(i: number, s: number, L: Layout): number {
 /** Quanto l'ultimo elemento (la bozza) eccede lo spazio sotto la linea di lettura. */
 const overflowOf = (h: number, viewport: number) => Math.max(0, h - (viewport - lineOf(viewport) - 16));
 
+/**
+ * Dissolvenze tra gli strati di un elemento (riga, anteprima, scheda piena). Le altezze cambiano in modo
+ * graduale; lo scambio di strato avviene invece in un tratto breve, così non si vedono due strati insieme.
+ * cardFade(o): opacità della scheda piena; con `out`, quanto deve sparire lo strato sotto (prima che compaia la scheda).
+ */
+const cardFade = (o: number, out = false) => (out ? smoothstep((o - 0.08) / 0.14) : smoothstep((o - 0.2) / 0.2));
+/** Anteprima (1) o riga compressa (0) secondo la vicinanza. */
+const nearFade = (near: number) => smoothstep((near - 0.42) / 0.16);
+
 const indexAt = (s: number, L: Layout) => {
   const k = L.starts.findIndex((a, i) => s >= a && s < a + L.lengths[i]!);
   return k >= 0 ? k : s <= 0 ? 0 : L.starts.length - 1;
@@ -419,7 +428,9 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     const up0 = s - L.starts[kp]!;
     const rest = target(kp) - L.starts[kp]!;
     const phase = up0 < rest ? -0.5 * ((rest - up0) / Math.max(1, rest)) : 0.5 * ((up0 - rest) / Math.max(1, L.lengths[kp]! - rest));
-    const pr = kp + phase;
+    // Oltre l'ultimo elemento (la bozza resta ferma mentre si continua a scorrere) la posizione non avanza:
+    // altrimenti i messaggi sopra si comporterebbero come se ce ne fosse un altro dopo.
+    const pr = kp + (kp === keys.length - 1 ? Math.min(0, phase) : phase);
     const near = keys.map((_, i) => 1 - smoothstep((Math.abs(i - pr) - 1.25) / 0.5));
     // Le anteprime sopra la mail in lettura si riducono all'intestazione e a una riga (quel che si vede
     // sopra la linea di lettura); il passaggio è graduale mentre il messaggio sale oltre il focus.
@@ -478,7 +489,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
                   className="pm-carousel__card"
                   style={{
                     transform: offset ? `translateY(${offset}px)` : undefined,
-                    opacity: Math.min(1, o * 1.6),
+                    opacity: cardFade(o),
                     clipPath: o < 1 ? `inset(${-offset}px 0 ${full[i]! - h + offset}px 0 round 18px)` : undefined,
                   }}
                   inert={o < 0.5}
@@ -493,7 +504,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
                 <div
                   className="pm-carousel__preview"
                   style={{
-                    opacity: smoothstep((near[i]! - 0.3) / 0.4) * Math.max(0, 1 - o * 2.5),
+                    opacity: nearFade(near[i]!) * (1 - cardFade(o, true)),
                     // ritagliata all'altezza dell'elemento: non sborda mai sotto la mail successiva
                     clipPath: `inset(0 0 ${Math.max(0, (measured[`v:${key}`] ?? PREVIEW_MAX) - h)}px 0 round 14px)`,
                   }}
@@ -507,7 +518,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
               {o < 1 && (isDraft || near[i]! < 1) && (
                 <div
                   className="pm-carousel__row"
-                  style={{ opacity: (hasCard ? Math.max(0, 1 - o * 2.5) : 1) * (isDraft ? 1 : 1 - smoothstep((near[i]! - 0.3) / 0.4)) }}
+                  style={{ opacity: (hasCard ? 1 - cardFade(o, true) : 1) * (isDraft ? 1 : 1 - nearFade(near[i]!)) }}
                   inert={(hasCard && o >= 0.5) || (!isDraft && near[i]! >= 0.5)}
                 >
                   {isDraft ? (
