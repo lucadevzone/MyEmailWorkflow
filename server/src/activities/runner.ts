@@ -150,6 +150,7 @@ export class ActivityRunner {
           bcc: p.bcc,
           subject: p.subject,
           text: p.body,
+          html: p.html ?? null,
           messageId: msg.rfcMessageId!,
           inReplyTo: p.inReplyTo,
           references: p.references,

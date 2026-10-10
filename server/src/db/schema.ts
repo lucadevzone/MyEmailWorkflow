@@ -45,6 +45,9 @@ export const accounts = sqliteTable('accounts', {
   authType: text('auth_type', { enum: ['password', 'oauth2'] }).notNull(),
   credentialRef: text('credential_ref').notNull(),
   color: text('color'),
+  /** Firma: HTML dall'editor e versione in testo semplice. */
+  signatureHtml: text('signature_html'),
+  signatureText: text('signature_text'),
   ...meta(),
 });
 
@@ -440,6 +443,8 @@ export const drafts = sqliteTable(
     bcc: text('bcc').notNull().default('[]'),
     subject: text('subject').notNull().default(''),
     body: text('body').notNull().default(''),
+    format: text('format', { enum: ['text', 'html'] }).notNull().default('text'),
+    bodyHtml: text('body_html'),
     includeQuote: integer('include_quote', { mode: 'boolean' }).notNull().default(false),
     /** JSON: { id, blobSha, filename, mime, size }[]. */
     attachments: text('attachments').notNull().default('[]'),

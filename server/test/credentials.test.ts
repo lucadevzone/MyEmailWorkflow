@@ -43,4 +43,10 @@ describe('password nel portachiavi', () => {
     expect(resolveSecret(moved.credentialRef)).toBe('dal-file-env');
     delete process.env.MMW_TEST_SECRET_X;
   });
+
+  it('firma per account: HTML e testo; vuota = nessuna firma', () => {
+    const a = accounts.create({ name: 'Luca', email: 'me@gmail.com', provider: 'gmail', password: 'x' });
+    expect(accounts.setSignature(a.id, { html: '<p>Luca<br>ICAR-CNR</p>', text: 'Luca\nICAR-CNR' })).toMatchObject({ signatureHtml: '<p>Luca<br>ICAR-CNR</p>', signatureText: 'Luca\nICAR-CNR' });
+    expect(accounts.setSignature(a.id, { html: '<p></p>', text: '  ' })).toMatchObject({ signatureHtml: null, signatureText: null });
+  });
 });

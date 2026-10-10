@@ -40,6 +40,8 @@ export interface SendPayload {
   bcc: string[];
   subject: string;
   body: string;
+  /** Versione HTML completa (con citazione/inoltro), se la mail è in HTML. */
+  html?: string | null;
   inReplyTo: string | null;
   references: string[];
   attachments?: { blobSha: string; filename: string; mime: string | null }[];
@@ -54,6 +56,8 @@ export interface SendDraftSnapshot {
   includeQuote: boolean;
   /** Testo scritto dall'utente, senza citazione o inoltro aggiunti all'invio. */
   body: string;
+  format?: 'text' | 'html';
+  bodyHtml?: string | null;
   /** Solo gli allegati aggiunti dall'utente (quelli dell'inoltro tornano da soli). */
   attachments: { blobSha: string; filename: string; mime: string | null }[];
 }

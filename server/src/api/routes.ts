@@ -122,6 +122,10 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
 
   app.post<{ Params: { id: string } }>('/api/accounts/:id/test', async (req) => accountsSvc.testConnection(req.params.id));
 
+  app.put<{ Params: { id: string }; Body: { html?: string | null; text?: string | null } }>('/api/accounts/:id/signature', async (req) =>
+    accountsSvc.setSignature(req.params.id, { html: req.body?.html ?? null, text: req.body?.text ?? null }),
+  );
+
   // Nuova password: nel Portachiavi; la sincronizzazione riparte con la credenziale aggiornata.
   app.put<{ Params: { id: string }; Body: { password?: string } }>('/api/accounts/:id/password', async (req, reply) => {
     const password = String(req.body?.password ?? '');

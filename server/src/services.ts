@@ -53,7 +53,7 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
     sendSmtp: o.sendSmtp ?? sendViaSmtp,
     batchMinutes: () => settings.get().activityBatchMinutes,
   });
-  const actions = new MailActions({ db, sqlite, activities, runner, getAccount: (id) => accounts.get(id) });
+  const actions = new MailActions({ db, sqlite, activities, runner, getAccount: (id) => accounts.get(id), blobs, getSettings: () => settings.get() });
   const people = new PeopleService(db, sqlite, blobs);
   const notes = new NotesService(db, blobs);
   const jobs = new JobRunner(db);

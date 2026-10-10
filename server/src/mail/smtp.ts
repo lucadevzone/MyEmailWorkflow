@@ -10,6 +10,8 @@ export interface OutgoingMessage {
   bcc: string[];
   subject: string;
   text: string;
+  /** Se c'è, la mail parte come multipart/alternative (testo + HTML). */
+  html?: string | null;
   messageId: string;
   inReplyTo?: string | null;
   references?: string[];
@@ -29,6 +31,7 @@ export async function buildMime(msg: OutgoingMessage): Promise<Buffer> {
     bcc: msg.bcc.length ? msg.bcc : undefined,
     subject: msg.subject,
     text: msg.text,
+    html: msg.html ?? undefined,
     messageId: msg.messageId,
     inReplyTo: msg.inReplyTo ?? undefined,
     references: msg.references?.length ? msg.references : undefined,

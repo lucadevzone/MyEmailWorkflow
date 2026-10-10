@@ -3,7 +3,8 @@
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { ulid } from 'ulid';
-import type { AccountDto } from '@mmw/shared';
+import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type AccountDto, type SettingsDto } from '@mmw/shared';
+import type { BlobStore } from '../store/blobs.ts';
 import type Database from 'better-sqlite3';
 import type { Db } from '../db/client.ts';
 import { attachments, blobs, conversations, drafts, messageAddresses, messages, notes, projects, tasks } from '../db/schema.ts';
@@ -34,6 +35,9 @@ export const composeSchema = z
     bcc: z.array(z.email('Indirizzo non valido')).default([]),
     subject: z.string().trim().default(''),
     body: z.string().default(''),
+    format: z.enum(['text', 'html']).default('text'),
+    /** Corpo HTML dall'editor (senza citazione: si aggiunge qui). body è la sua versione in testo. */
+    bodyHtml: z.string().nullable().optional(),
     urgent: z.boolean().default(false),
   })
   .refine((c) => c.to.length + c.cc.length + c.bcc.length > 0, { message: 'Serve almeno un destinatario' });
@@ -46,6 +50,9 @@ export interface MailActionsDeps {
   activities: ActivityService;
   runner: ActivityRunner;
   getAccount: (id: string) => AccountDto | undefined;
+  /** Per le mail HTML (carattere, dimensione) e l'HTML salvato del messaggio in uscita. */
+  blobs?: BlobStore;
+  getSettings?: () => SettingsDto;
 }
 
 export class MailActions {
@@ -299,6 +306,14 @@ export class MailActions {
     let fullBody = input.body;
     if (parent && input.includeQuote) fullBody += quoteBlock(parent);
     if (forwarded) fullBody += forwardBlock(forwarded);
+    // Versione HTML: corpo dall'editor + citazione/inoltro, nel carattere scelto nelle impostazioni.
+    let fullHtml: string | null = null;
+    if (input.format === 'html' && input.bodyHtml != null) {
+      let inner = input.bodyHtml;
+      if (parent && input.includeQuote) inner += quoteHtml(parent);
+      if (forwarded) inner += forwardHtml(forwarded);
+      fullHtml = wrapHtml(inner, this.deps.getSettings?.());
+    }
     const bodyTextClean = cleanBody(input.body);
     // Inoltro: si portano dietro gli allegati del messaggio originale.
     const outgoing = [...input.attachments];
@@ -354,6 +369,7 @@ export class MailActions {
           labels: JSON.stringify([]),
           seen: true,
           hasAttachments: outgoing.length > 0,
+          htmlBlobSha: fullHtml && this.deps.blobs ? this.deps.blobs.put(Buffer.from(fullHtml, 'utf8'), 'text/html') : null,
           outgoingStatus: 'queued',
           createdAt: t,
           updatedAt: t,
@@ -400,6 +416,7 @@ export class MailActions {
         bcc: input.bcc,
         subject,
         body: fullBody,
+        html: fullHtml,
         inReplyTo: parent?.rfcMessageId ?? null,
         references,
         attachments: outgoing,
@@ -409,6 +426,8 @@ export class MailActions {
           forwardMessageId: forwarded?.id ?? null,
           includeQuote: input.includeQuote,
           body: input.body,
+          format: input.format,
+          bodyHtml: input.bodyHtml ?? null,
           attachments: input.attachments,
         },
       };
@@ -482,6 +501,33 @@ export function quoteBlock(m: { date: number; fromName: string | null; fromAddre
   const who = m.fromName ? `${m.fromName} <${m.fromAddress}>` : (m.fromAddress ?? 'qualcuno');
   const text = (m.bodyTextClean || m.bodyText || '').split('\n').map((l) => `> ${l}`).join('\n');
   return `\n\nIl ${quoteDate(m.date)}, ${who} ha scritto:\n${text}`;
+}
+
+const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const textToHtml = (s: string) => escapeHtml(s).replace(/\r?\n/g, '<br>');
+
+/** Citazione in HTML: intestazione e testo originale in un blockquote (come Gmail). */
+export function quoteHtml(m: { date: number; fromName: string | null; fromAddress: string | null; bodyText: string | null; bodyTextClean: string | null }): string {
+  const who = m.fromName ? `${m.fromName} <${m.fromAddress}>` : (m.fromAddress ?? 'qualcuno');
+  return (
+    `<br><div>Il ${escapeHtml(quoteDate(m.date))}, ${escapeHtml(who)} ha scritto:</div>` +
+    `<blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">${textToHtml(m.bodyTextClean || m.bodyText || '')}</blockquote>`
+  );
+}
+
+export function forwardHtml(m: { date: number; fromName: string | null; fromAddress: string | null; subject: string | null; bodyText: string | null }): string {
+  const who = m.fromName ? `${m.fromName} <${m.fromAddress}>` : (m.fromAddress ?? '');
+  return (
+    `<br><div>---------- Messaggio inoltrato ----------<br>Da: ${escapeHtml(who)}<br>Data: ${escapeHtml(quoteDate(m.date))}<br>` +
+    `Oggetto: ${escapeHtml(m.subject ?? '')}</div><br><div>${textToHtml(m.bodyText ?? '')}</div>`
+  );
+}
+
+/** Documento HTML della mail, con il carattere delle impostazioni. */
+export function wrapHtml(inner: string, s?: Pick<SettingsDto, 'composeFont' | 'composeFontSize'>): string {
+  const font = COMPOSE_FONTS[s?.composeFont ?? 'sans'].css;
+  const size = COMPOSE_FONT_SIZES[s?.composeFontSize ?? 'normal'].css;
+  return `<!doctype html><html><head><meta charset="utf-8"></head><body><div style="font-family:${font};font-size:${size}">${inner}</div></body></html>`;
 }
 
 /** Intestazione e testo del messaggio inoltrato. */

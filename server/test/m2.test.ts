@@ -350,6 +350,29 @@ describe('bozze, allegati, inoltro', () => {
     expect(conv().get(r.conversationId)).toBeUndefined();
   });
 
+  it('bozza HTML: parte testo + HTML nel carattere scelto, con la citazione in blockquote; blocca invio la riporta HTML', async () => {
+    s.settings.update({ composeFont: 'serif', composeFontSize: 'large' });
+    const { conversationId, messageId } = await incoming('<h@x>', 40);
+    const d = s.drafts.create({ projectId, conversationId, replyToMessageId: messageId, to: ['mario@x.it'], format: 'html' });
+    s.drafts.update(d.id, { body: 'Va bene, a giovedì.', bodyHtml: '<p>Va <strong>bene</strong>, a giovedì.</p>', includeQuote: true });
+    const r = s.drafts.send(d.id, false);
+    const out = conv().get(conversationId)!.messages.find((m) => m.id === r.messageId)!;
+    expect(out.hasHtml).toBe(true);
+
+    const back = s.drafts.blockSend(r.activityId);
+    expect(back).toMatchObject({ format: 'html', bodyHtml: '<p>Va <strong>bene</strong>, a giovedì.</p>', body: 'Va bene, a giovedì.' });
+    s.drafts.send(back.id, false);
+    await s.runner.run();
+    const raw = sent[0]!.raw;
+    expect(raw).toContain('multipart/alternative');
+    expect(raw).toContain('text/plain');
+    expect(raw).toContain('text/html');
+    expect(raw).toMatch(/Georgia/);
+    expect(raw).toMatch(/18px/);
+    expect(raw).toMatch(/<strong>bene<\/strong>/);
+    expect(raw).toMatch(/blockquote/);
+  });
+
   it('bozza senza progetto non si invia', () => {
     const d = s.drafts.create({ to: ['a@b.it'] });
     expect(() => s.drafts.send(d.id, false)).toThrow(/progetto/);

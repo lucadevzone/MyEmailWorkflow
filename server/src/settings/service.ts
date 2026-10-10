@@ -15,6 +15,10 @@ export const settingsPatchSchema = z
     activityBatchMinutes: z.number().int().min(1).max(24 * 60),
     initialSyncDays: z.number().int().min(1).max(3650),
     llmModel: z.string().trim().min(1).max(120).nullable(),
+    composeFormat: z.enum(['text', 'html']),
+    composeFont: z.enum(['sans', 'serif', 'mono']),
+    composeFontSize: z.enum(['small', 'normal', 'large']),
+    replyIncludeQuote: z.boolean(),
   })
   .partial();
 

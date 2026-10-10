@@ -19,6 +19,9 @@ export interface AccountDto {
   /** Riferimento alla credenziale, mai la credenziale stessa ("keychain:<id>"; "env:NOME" solo in sviluppo). */
   credentialRef: string;
   color: string | null;
+  /** Firma dell'account: HTML (dall'editor) e la sua versione in testo semplice. */
+  signatureHtml: string | null;
+  signatureText: string | null;
 }
 
 export interface CreateAccountInput {
@@ -70,12 +73,39 @@ export interface SettingsDto {
   initialSyncDays: number;
   /** Modello di Ollama per assistente e analisi; null = quello predefinito (OLLAMA_LLM_MODEL). */
   llmModel: string | null;
+  /** Formato con cui nasce una bozza nuova. */
+  composeFormat: ComposeFormat;
+  /** Carattere e dimensione delle mail HTML. */
+  composeFont: ComposeFont;
+  composeFontSize: ComposeFontSize;
+  /** Nelle risposte si include il messaggio originale (si può cambiare in ogni bozza). */
+  replyIncludeQuote: boolean;
 }
+
+export type ComposeFormat = 'text' | 'html';
+export type ComposeFont = 'sans' | 'serif' | 'mono';
+export type ComposeFontSize = 'small' | 'normal' | 'large';
+
+/** CSS dei caratteri delle mail HTML: font comuni, presenti anche sui computer di chi legge. */
+export const COMPOSE_FONTS: Record<ComposeFont, { label: string; css: string }> = {
+  sans: { label: 'Senza grazie (Arial)', css: 'Arial, Helvetica, sans-serif' },
+  serif: { label: 'Con grazie (Georgia)', css: "Georgia, 'Times New Roman', serif" },
+  mono: { label: 'A spaziatura fissa (Courier)', css: "'Courier New', Courier, monospace" },
+};
+export const COMPOSE_FONT_SIZES: Record<ComposeFontSize, { label: string; css: string }> = {
+  small: { label: 'Piccolo', css: '13px' },
+  normal: { label: 'Normale', css: '15px' },
+  large: { label: 'Grande', css: '18px' },
+};
 
 export const DEFAULT_SETTINGS: SettingsDto = {
   activityBatchMinutes: 5,
   initialSyncDays: 90,
   llmModel: null,
+  composeFormat: 'html',
+  composeFont: 'sans',
+  composeFontSize: 'normal',
+  replyIncludeQuote: true,
 };
 
 // ─── Sync ────────────────────────────────────────────────────────────────────
@@ -454,13 +484,16 @@ export interface DraftDto {
   cc: string[];
   bcc: string[];
   subject: string;
+  /** Testo semplice; per le bozze HTML è la versione in testo dell'HTML (ricerca, assistente, invio). */
   body: string;
+  format: ComposeFormat;
+  bodyHtml: string | null;
   includeQuote: boolean;
   attachments: DraftAttachment[];
   updatedAt: number;
 }
 
-export type DraftPatch = Partial<Pick<DraftDto, 'projectId' | 'to' | 'cc' | 'bcc' | 'subject' | 'body' | 'includeQuote'>>;
+export type DraftPatch = Partial<Pick<DraftDto, 'projectId' | 'to' | 'cc' | 'bcc' | 'subject' | 'body' | 'format' | 'bodyHtml' | 'includeQuote'>>;
 
 // ─── Assistente ──────────────────────────────────────────────────────────────
 

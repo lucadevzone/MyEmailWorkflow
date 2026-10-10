@@ -24,6 +24,8 @@ export const draftCreateSchema = z.object({
   bcc: emails.optional(),
   subject: z.string().max(998).optional(),
   body: z.string().max(1_000_000).optional(),
+  format: z.enum(['text', 'html']).optional(),
+  bodyHtml: z.string().max(2_000_000).nullable().optional(),
   includeQuote: z.boolean().optional(),
 });
 
@@ -34,6 +36,8 @@ export const draftPatchSchema = z.object({
   bcc: emails.optional(),
   subject: z.string().max(998).optional(),
   body: z.string().max(1_000_000).optional(),
+  format: z.enum(['text', 'html']).optional(),
+  bodyHtml: z.string().max(2_000_000).nullable().optional(),
   includeQuote: z.boolean().optional(),
 });
 
@@ -50,6 +54,8 @@ const toDto = (r: Row): DraftDto => ({
   bcc: JSON.parse(r.bcc) as string[],
   subject: r.subject,
   body: r.body,
+  format: r.format,
+  bodyHtml: r.bodyHtml,
   includeQuote: r.includeQuote,
   attachments: JSON.parse(r.attachments) as DraftAttachment[],
   updatedAt: r.updatedAt,
@@ -94,6 +100,8 @@ export class DraftService {
         bcc: JSON.stringify(input.bcc ?? []),
         subject: input.subject ?? '',
         body: input.body ?? '',
+        format: input.format ?? 'text',
+        bodyHtml: input.bodyHtml ?? null,
         includeQuote: input.includeQuote ?? false,
         createdAt: t,
         updatedAt: t,
@@ -111,6 +119,8 @@ export class DraftService {
     if (patch.bcc) set.bcc = JSON.stringify(patch.bcc);
     if (patch.subject !== undefined) set.subject = patch.subject;
     if (patch.body !== undefined) set.body = patch.body;
+    if (patch.format !== undefined) set.format = patch.format;
+    if (patch.bodyHtml !== undefined) set.bodyHtml = patch.bodyHtml;
     if (patch.includeQuote !== undefined) set.includeQuote = patch.includeQuote;
     this.deps.db.update(drafts).set(set).where(eq(drafts.id, id)).run();
     return this.get(id);
@@ -173,6 +183,8 @@ export class DraftService {
       forwardMessageId: null,
       includeQuote: false,
       body: msg?.bodyTextClean || p.body,
+      format: 'text' as const,
+      bodyHtml: null,
       attachments: p.attachments ?? [],
     };
     // Prima si annulla (controlla che sia ancora in tempo), poi nasce la bozza.
@@ -187,6 +199,8 @@ export class DraftService {
       bcc: p.bcc,
       subject: p.subject,
       body: snap.body,
+      format: snap.format ?? 'text',
+      bodyHtml: snap.bodyHtml ?? null,
       includeQuote: snap.includeQuote,
     });
     const files: DraftAttachment[] = snap.attachments.map((a) => ({
@@ -213,6 +227,8 @@ export class DraftService {
       bcc: d.bcc,
       subject: d.subject,
       body: d.body,
+      format: d.format,
+      bodyHtml: d.format === 'html' ? d.bodyHtml : null,
       urgent,
     });
     this.deps.db.delete(drafts).where(eq(drafts.id, id)).run();
