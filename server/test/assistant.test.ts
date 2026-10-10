@@ -103,3 +103,25 @@ describe('assistente', () => {
     expect(s.assistant.thread(r.conversationId)).toHaveLength(2);
   });
 });
+
+describe('contesto del progetto', () => {
+  it('note, testo delle risorse leggibili e solo il nome degli allegati entrano nel contesto', async () => {
+    const { projectContext } = await import('../src/ai/project-context.ts');
+    const { conversationId } = await incoming('<p1@x>', 11, 'Hai visto il capitolato?');
+    s.actions.move(conversationId, projectId);
+    s.notes.createNote({ conversationId, body: 'Il cliente preferisce le consegne il martedì' });
+    s.notes.addFile({ conversationId }, 'capitolato.md', Buffer.from('# Capitolato\nConsegna entro il 30 novembre.'), 'text/markdown');
+    s.notes.addFile({ conversationId }, 'logo.png', Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0]), 'image/png');
+    const ctx = projectContext(s.db, projectId, (sha) => s.blobs.read(sha));
+    expect(ctx).toContain('PROGETTO «PNRR»');
+    expect(ctx).toContain('consegne il martedì');
+    expect(ctx).toContain('Consegna entro il 30 novembre');
+    expect(ctx).toContain('Altre risorse (solo nome): logo.png');
+    expect(ctx).not.toContain('PNG');
+
+    // L'assistente lo riceve nel contesto della chat.
+    await collect(s.assistant.chat({ conversationId, mode: 'read', text: 'Quando si consegna?' }));
+    expect(lastTurns[0]!.content).toContain('CONTESTO DEL PROGETTO');
+    expect(lastTurns[0]!.content).toContain('30 novembre');
+  });
+});

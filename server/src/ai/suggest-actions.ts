@@ -9,6 +9,7 @@ import { bus } from '../events/bus.ts';
 import { config } from '../config.ts';
 import { enqueueJob, PRIORITY } from '../jobs/queue.ts';
 import type { Llm } from './classify.ts';
+import { projectContext, type BlobReader } from './project-context.ts';
 
 export type QuickAction = 'reply' | 'archive' | 'noise';
 
@@ -39,7 +40,7 @@ export function clearActionSuggestions(db: Db, conversationId: string, only?: Qu
   return rows.length;
 }
 
-export async function suggestActions(db: Db, messageId: string, llm: Llm) {
+export async function suggestActions(db: Db, messageId: string, llm: Llm, readBlob?: BlobReader) {
   const m = db.select().from(messages).where(eq(messages.id, messageId)).get();
   if (!m || m.deletedAt || m.direction !== 'in') return;
   const conv = db.select().from(conversations).where(eq(conversations.id, m.conversationId)).get();
@@ -60,6 +61,7 @@ export async function suggestActions(db: Db, messageId: string, llm: Llm) {
     `Da: ${m.fromName ? `${m.fromName} <${m.fromAddress}>` : m.fromAddress}`,
     `Oggetto: ${m.subject ?? ''}`,
     conv.summary ? `Contesto della conversazione: ${conv.summaryDetailed ?? conv.summary}` : '',
+    readBlob && conv.projectId ? `\nContesto del progetto (note e materiali dell'utente, da usare se pertinenti):\n${projectContext(db, conv.projectId, readBlob).slice(0, 5000)}\n` : '',
     '',
     text,
     '',

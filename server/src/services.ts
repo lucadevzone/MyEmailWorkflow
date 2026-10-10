@@ -64,10 +64,10 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
   const llm: Llm = o.llm ?? ollamaJson;
   jobs.register('classify', (p) => classifyConversation({ db, sqlite, people, llm }, (p as { conversationId: string }).conversationId));
   jobs.register('extract_tasks', (p) => extractTasks(db, (p as { messageId: string }).messageId, llm));
-  jobs.register('suggest_actions', (p) => suggestActions(db, (p as { messageId: string }).messageId, llm));
+  jobs.register('suggest_actions', (p) => suggestActions(db, (p as { messageId: string }).messageId, llm, (sha) => blobs.read(sha)));
   const tasks = new TaskService(db);
   const suggestions = new SuggestionService(db, actions, tasks);
-  const assistant = new AssistantService({ db, stream: o.chatStream ?? ollamaStream, llm });
+  const assistant = new AssistantService({ db, stream: o.chatStream ?? ollamaStream, llm, readBlob: (sha) => blobs.read(sha) });
   const drafts = new DraftService({ db, blobs, actions, assistant });
   const search = new SearchService({ sqlite, embedder });
   return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions, tasks, drafts, assistant, search };

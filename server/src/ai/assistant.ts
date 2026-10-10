@@ -9,6 +9,7 @@ import { assistantMessages, conversations, drafts, messages } from '../db/schema
 import { newId, now } from '../lib/ids.ts';
 import { config } from '../config.ts';
 import type { Llm } from './classify.ts';
+import { projectContext, type BlobReader } from './project-context.ts';
 
 export interface ChatTurn {
   role: 'system' | 'user' | 'assistant';
@@ -117,7 +118,21 @@ const toDto = (r: typeof assistantMessages.$inferSelect): AssistantMessageDto =>
 export class AssistantService {
   private ideas = new Map<string, { key: string; ideas: { title: string; description: string }[] }>();
 
-  constructor(private deps: { db: Db; stream: ChatStream; llm: Llm }) {}
+  constructor(private deps: { db: Db; stream: ChatStream; llm: Llm; readBlob?: BlobReader }) {}
+
+  /** Progetto della conversazione o della bozza (per il contesto: note, risorse, allegati). */
+  private projectOf(input: { conversationId?: string | null; draftId?: string | null }): string | null {
+    const { db } = this.deps;
+    if (input.conversationId) return db.select({ p: conversations.projectId }).from(conversations).where(eq(conversations.id, input.conversationId)).get()?.p ?? null;
+    if (input.draftId && input.draftId !== 'new') return db.select({ p: drafts.projectId }).from(drafts).where(eq(drafts.id, input.draftId)).get()?.p ?? null;
+    return null;
+  }
+
+  private projectBlock(input: { conversationId?: string | null; draftId?: string | null }): string {
+    if (!this.deps.readBlob) return '';
+    const text = projectContext(this.deps.db, this.projectOf(input), this.deps.readBlob);
+    return text ? `\nCONTESTO DEL PROGETTO (note e materiali dell'utente: usali se pertinenti)\n${text}` : '';
+  }
 
   thread(thread: string): AssistantMessageDto[] {
     return this.deps.db
@@ -210,6 +225,7 @@ export class AssistantService {
       '',
       'CONVERSAZIONE',
       context,
+      this.projectBlock(input),
       draft ? `\nBOZZA ATTUALE DELL'UTENTE\n${draft}` : '',
     ].join('\n');
 
@@ -262,6 +278,7 @@ export class AssistantService {
       `${SYSTEM_READ} Rispondi solo con un oggetto JSON.`,
       [
         this.context(conversationId),
+        this.projectBlock({ conversationId }),
         '',
         'Proponi da 2 a 3 modi diversi in cui io potrei rispondere all\'ultimo messaggio.',
         'JSON: {"idee": [{"titolo": "massimo 5 parole, all\'imperativo", "descrizione": "una riga su cosa dire"}]}',
