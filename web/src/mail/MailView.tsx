@@ -16,11 +16,14 @@ import { composeTarget, NEW_DRAFT, seedOf, type DraftSeed } from './seed.ts';
 const time = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' });
 
 /**
- * Linea di lettura: dove si ferma il bordo superiore della mail in focus. In prova: in alto, alla stessa
- * altezza della prima mail della conversazione (FOCUS_AT_TOP = true). Con false torna al 28% dell'altezza.
+ * Linea di lettura: dove si ferma il bordo superiore della mail in focus, uguale per tutte (prima mail e
+ * bozza comprese). 'peek': in alto, lasciando vedere l'intestazione del messaggio precedente;
+ * 'top': a 16 px dal bordo; 'fraction': al 28% dell'altezza.
  */
-const FOCUS_AT_TOP = true;
+const FOCUS_LINE = 'peek' as 'peek' | 'top' | 'fraction';
 const READING_FRACTION = 0.28;
+/** Quanto si vede del messaggio precedente: intestazione e una riga di testo. */
+const PEEK = 64;
 /** Riga compressa e spazio tra le schede (px). */
 const COMPACT = 34;
 const GAP = 6;
@@ -41,10 +44,11 @@ const HOLD = RAMP / 2 + DWELL;
 const TOP_MARGIN = 16;
 
 /** Linea di lettura in px dal bordo superiore del carosello. */
-const lineOf = (viewport: number) => (FOCUS_AT_TOP ? TOP_MARGIN : viewport * READING_FRACTION);
+const lineOf = (viewport: number) =>
+  FOCUS_LINE === 'peek' ? TOP_MARGIN + PEEK + GAP : FOCUS_LINE === 'top' ? TOP_MARGIN : viewport * READING_FRACTION;
 
 /** Il primo messaggio parte già allineato in alto: il suo tratto è più corto di questa quantità. */
-const leadOf = (viewport: number) => Math.max(0, lineOf(viewport) - TOP_MARGIN);
+const leadOf = (viewport: number) => (FOCUS_LINE === 'fraction' ? Math.max(0, lineOf(viewport) - TOP_MARGIN) : 0);
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
@@ -169,34 +173,41 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   }, [conversationId]);
 
   // Altezza piena di ogni scheda (cambia, per esempio, quando l'HTML dell'email finisce di caricare).
-  const observer = useMemo(
-    () =>
-      new ResizeObserver((entries) => {
-        setMeasured((prev) => {
-          let next = prev;
-          for (const e of entries) {
-            const el = e.target as HTMLElement;
-            const h = Math.round(el.offsetHeight);
-            if (h && prev[el.dataset.key!] !== h) next = { ...next, [el.dataset.key!]: h };
-          }
-          return next;
-        });
-      }),
-    [],
-  );
-  useEffect(() => () => observer.disconnect(), [observer]);
+  // L'osservatore vive in un effetto e, quando (ri)nasce, osserva tutti gli elementi già montati:
+  // così resta attivo anche dopo il doppio montaggio di React in sviluppo.
+  const observed = useRef(new Map<string, HTMLElement>());
+  const observer = useRef<ResizeObserver | null>(null);
+  useEffect(() => {
+    const ro = new ResizeObserver((entries) => {
+      setMeasured((prev) => {
+        let next = prev;
+        for (const e of entries) {
+          const el = e.target as HTMLElement;
+          const h = Math.round(el.offsetHeight);
+          if (h && prev[el.dataset.key!] !== h) next = { ...next, [el.dataset.key!]: h };
+        }
+        return next;
+      });
+    });
+    observer.current = ro;
+    for (const el of observed.current.values()) ro.observe(el);
+    return () => {
+      ro.disconnect();
+      observer.current = null;
+    };
+  }, []);
   const refs = useRef(new Map<string, (el: HTMLElement | null) => void>());
   const cardRef = (key: string) => {
     let fn = refs.current.get(key);
     if (!fn) {
-      let current: HTMLElement | null = null;
       fn = (el) => {
-        if (current) observer.unobserve(current);
-        current = el;
+        const prev = observed.current.get(key);
+        if (prev && prev !== el) observer.current?.unobserve(prev);
         if (el) {
           el.dataset.key = key;
-          observer.observe(el);
-        }
+          observed.current.set(key, el);
+          observer.current?.observe(el);
+        } else observed.current.delete(key);
       };
       refs.current.set(key, fn);
     }
@@ -410,7 +421,15 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     const phase = up0 < rest ? -0.5 * ((rest - up0) / Math.max(1, rest)) : 0.5 * ((up0 - rest) / Math.max(1, L.lengths[kp]! - rest));
     const pr = kp + phase;
     const near = keys.map((_, i) => 1 - smoothstep((Math.abs(i - pr) - 1.25) / 0.5));
-    const previewH = keys.map((k, i) => (i === n ? COMPACT : Math.min(PREVIEW_MAX, Math.max(COMPACT, measured[`v:${k}`] ?? PREVIEW_MAX))));
+    // Le anteprime sopra la mail in lettura si riducono all'intestazione e a una riga (quel che si vede
+    // sopra la linea di lettura); il passaggio è graduale mentre il messaggio sale oltre il focus.
+    const previewH = keys.map((k, i) => {
+      if (i === n) return COMPACT;
+      const fullPreview = Math.min(PREVIEW_MAX, Math.max(COMPACT, measured[`v:${k}`] ?? PREVIEW_MAX));
+      if (FOCUS_LINE !== 'peek') return fullPreview;
+      const above = smoothstep((pr - i - 0.5) / 0.5);
+      return fullPreview + (Math.min(fullPreview, PEEK) - fullPreview) * above;
+    });
     const heights = full.map((h, i) => {
       const base = COMPACT + (previewH[i]! - COMPACT) * near[i]!;
       return base + (Math.max(h, base) - base) * open[i]!;
@@ -475,7 +494,8 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
                   className="pm-carousel__preview"
                   style={{
                     opacity: smoothstep((near[i]! - 0.3) / 0.4) * Math.max(0, 1 - o * 2.5),
-                    clipPath: h < previewH[i]! ? `inset(0 0 ${previewH[i]! - h}px 0 round 14px)` : undefined,
+                    // ritagliata all'altezza dell'elemento: non sborda mai sotto la mail successiva
+                    clipPath: `inset(0 0 ${Math.max(0, (measured[`v:${key}`] ?? PREVIEW_MAX) - h)}px 0 round 14px)`,
                   }}
                   inert={o >= 0.5 || near[i]! < 0.5}
                 >
