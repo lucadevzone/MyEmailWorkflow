@@ -26,6 +26,13 @@ const RAMP = 220;
 const ESTIMATE = 420;
 /** Altezza massima dell'anteprima dei messaggi vicini a quello in focus. */
 const PREVIEW_MAX = 168;
+/**
+ * Sosta ("calamita"): tratto di scorrimento in cui la mail appena aperta resta ferma e piena,
+ * prima che la colonna riprenda a scorrere. Dà resistenza all'uscita dal focus.
+ */
+const DWELL = 150;
+/** Inizio del tratto in cui la colonna scorre dentro l'elemento: prima c'è l'apertura e poi la sosta. */
+const HOLD = RAMP / 2 + DWELL;
 /** Margine superiore del primo messaggio quando la conversazione parte dall'inizio. */
 const TOP_MARGIN = 16;
 
@@ -48,8 +55,9 @@ interface Layout {
 }
 
 /**
- * Spazio di scorrimento: ogni elemento occupa un tratto lungo quanto la sua scheda piena;
- * l'ultimo solo quanto basta perché il suo fondo arrivi al bordo inferiore.
+ * Spazio di scorrimento. Ogni messaggio ha: mezza rampa di apertura e la sosta (la colonna è ferma,
+ * con il bordo superiore della mail sulla linea di lettura), poi un tratto lungo quanto la scheda
+ * in cui la colonna scorre. L'ultimo elemento (la bozza) solo apertura ed eventuale eccedenza.
  */
 function scrollLayout(full: number[], viewport: number): Layout {
   const starts: number[] = [];
@@ -58,7 +66,7 @@ function scrollLayout(full: number[], viewport: number): Layout {
   full.forEach((h, i) => {
     const last = i === full.length - 1;
     const lead = i === 0 ? leadOf(viewport) : 0;
-    const len = last ? Math.max(RAMP, h - viewport * (1 - READING_LINE) + RAMP) : Math.max(RAMP, h + GAP - lead);
+    const len = last ? RAMP / 2 + Math.max(RAMP / 2, overflowOf(h, viewport)) : HOLD + Math.max(1, h + GAP - lead);
     starts.push(at);
     lengths.push(len);
     at += len;
@@ -74,6 +82,9 @@ function openness(i: number, s: number, L: Layout): number {
   const down = i === L.starts.length - 1 ? 1 : smoothstep((b + RAMP / 2 - s) / RAMP);
   return Math.min(up, down);
 }
+
+/** Quanto l'ultimo elemento (la bozza) eccede lo spazio sotto la linea di lettura. */
+const overflowOf = (h: number, viewport: number) => Math.max(0, h - (viewport * (1 - READING_LINE) - 16));
 
 const indexAt = (s: number, L: Layout) => {
   const k = L.starts.findIndex((a, i) => s >= a && s < a + L.lengths[i]!);
@@ -186,7 +197,13 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   };
 
   /** Posizione di scorrimento in cui l'elemento i è aperto del tutto. */
-  const target = useCallback((i: number) => L.starts[i]! + (i === 0 ? 0 : Math.min(RAMP / 2, L.lengths[i]! / 2)), [L]);
+  // Posizione di riposo: a metà della sosta (la bozza: appena aperta; il primo messaggio: all'inizio).
+  const target = useCallback(
+    (i: number) => (i === 0 ? 0 : i === L.starts.length - 1 ? L.starts[i]! + RAMP / 2 : L.starts[i]! + RAMP / 2 + DWELL / 2),
+    [L],
+  );
+  const layoutRef = useRef(L);
+  layoutRef.current = L;
   const targetRef = useRef(target);
   targetRef.current = target;
   // Elemento richiesto da un comando: a fine scorrimento si completa il movimento con le misure aggiornate
@@ -274,7 +291,22 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
       goal.current = null;
     };
     const settle = () => {
-      if (goal.current === null) return;
+      if (goal.current === null) {
+        // Calamita: fermandosi a metà di un passaggio tra due mail, ci si appoggia sulla più vicina.
+        const Lc = layoutRef.current;
+        const st = el.scrollTop;
+        const last = Lc.starts.length - 1;
+        for (let i = 0; i < last; i++) {
+          const b = Lc.starts[i]! + Lc.lengths[i]!;
+          if (st <= b - RAMP / 2 || st >= b + RAMP / 2) continue;
+          const before = b - RAMP / 2; // mail i ancora piena, al suo fondo
+          const after = b + RAMP / 2; // mail i+1 piena, inizio della sosta
+          const to = st - before < after - st ? before : after;
+          el.scrollTo({ top: to, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+          break;
+        }
+        return;
+      }
       const t = targetRef.current(goal.current);
       if (Math.abs(el.scrollTop - t) > 4) el.scrollTo({ top: t, behavior: 'smooth' });
       else goal.current = null;
@@ -364,13 +396,13 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     const open = keys.map((_, i) => openness(i, s, L));
     // Vicinanza: i messaggi accanto a quello in lettura sono anteprime, i più lontani righe compresse.
     // Si calcola sulla posizione frazionaria (indice + avanzamento), così anche questo passaggio è graduale.
+    // Posizione continua "in indici": vale k a riposo sull'elemento k e k ± 0,5 ai suoi confini.
     const kp = indexAt(s, L);
-    const p = kp + Math.min(1, Math.max(0, (s - L.starts[kp]!) / L.lengths[kp]!));
-    const near = keys.map((_, i) => {
-      const dist = p < i ? i - p : p > i + 1 ? p - (i + 1) : 0;
-      // Vicini (distanza ≤ 1): anteprima piena; da 1 a 1,5 diventa riga compressa.
-      return 1 - smoothstep((dist - 1) / 0.5);
-    });
+    const up0 = s - L.starts[kp]!;
+    const rest = target(kp) - L.starts[kp]!;
+    const phase = up0 < rest ? -0.5 * ((rest - up0) / Math.max(1, rest)) : 0.5 * ((up0 - rest) / Math.max(1, L.lengths[kp]! - rest));
+    const pr = kp + phase;
+    const near = keys.map((_, i) => 1 - smoothstep((Math.abs(i - pr) - 1.25) / 0.5));
     const previewH = keys.map((k, i) => (i === n ? COMPACT : Math.min(PREVIEW_MAX, Math.max(COMPACT, measured[`v:${k}`] ?? PREVIEW_MAX))));
     const heights = full.map((h, i) => {
       const base = COMPACT + (previewH[i]! - COMPACT) * near[i]!;
@@ -384,9 +416,17 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
     // Punto della colonna che sta sulla linea di lettura: avanza dentro l'elemento corrente con lo scorrimento.
     const k = indexAt(s, L);
     const lastIdx = keys.length - 1;
-    const progress = Math.min(1, Math.max(0, (s - L.starts[k]!) / L.lengths[k]!));
+    const u = s - L.starts[k]!;
     const lead = k === 0 ? Math.min(leadOf(viewport), heights[0]! + GAP) : 0;
-    const local = k === lastIdx ? Math.min(progress * L.lengths[k]!, heights[k]!) : lead + progress * (heights[k]! + GAP - lead);
+    let local: number;
+    if (k === lastIdx) {
+      local = Math.min(Math.max(0, u - RAMP / 2), overflowOf(heights[k]!, viewport));
+    } else {
+      // Fermo durante apertura e sosta; poi la colonna scorre dentro la mail fino al suo fondo.
+      const travel = Math.max(1, L.lengths[k]! - HOLD);
+      const t = Math.min(travel, Math.max(0, u - HOLD));
+      local = lead + (t / travel) * (heights[k]! + GAP - lead);
+    }
     const lineY = viewport * READING_LINE;
     let shift = lineY - (tops[k]! + local);
     // Con la bozza aperta la colonna non sale oltre il suo fondo: resta ferma sul bordo inferiore.
