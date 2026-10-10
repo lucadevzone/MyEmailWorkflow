@@ -37,3 +37,8 @@
   .pm-searchwrap { flex: 1 1 auto; }
   .pm-results { width: calc(100vw - 12px); left: -6px; }
 }
+
+/* Pulsante "ricevi nuovi messaggi" mentre lavora */
+.pm-spin { animation: pm-spin 0.9s linear infinite; }
+@keyframes pm-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pm-spin { animation: none; opacity: .5; } }

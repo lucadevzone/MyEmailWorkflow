@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { NavLink, useMatch, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { ArrowRightLeft, Inbox, Plus, Search, SlidersHorizontal, Users } from 'lucide-react';
+import { ArrowRightLeft, Inbox, Plus, RefreshCw, Search, SlidersHorizontal, Users } from 'lucide-react';
 import { SearchBox } from './Search.tsx';
 import { useEditing } from '../ui/editing.tsx';
 import { ProjectsEditor } from './ProjectsEditor.tsx';
@@ -44,6 +44,7 @@ export function TopBar({ onNewProject, onEditProject }: { onNewProject: () => vo
           <Ic icon={Search} />
         </button>
       )}
+      {!searching && <CheckMailButton />}
       <span className="pm-topbar__sep" aria-hidden="true" />
       <nav className="pm-topbar__tabs" aria-label="Progetti">
         <Tab to={paths.project(SYSTEM_INBOX)} label="Da smistare" icon unread={counts?.inboxUnread} total={counts?.inbox} />
@@ -117,5 +118,31 @@ function Tab({ to, label, icon, unread, total, project, onEditProject }: {
       {label}
       {!!count && <span className={`pm-tab__count${unread ? ' pm-tab__count--unread' : ''}`}>{count > 99 ? '99+' : count}</span>}
     </NavLink>
+  );
+}
+
+/** Controlla subito la posta, senza aspettare che il server la segnali. */
+function CheckMailButton() {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const statuses = await api.syncNow();
+      const failed = statuses.find((s) => s.phase === 'error');
+      if (failed) toast({ text: `Ricezione non riuscita: ${failed.error ?? 'errore di connessione'}` });
+      else if (!statuses.length) toast({ text: 'Nessun account configurato' });
+    } catch (err) {
+      toast({ text: (err as Error).message });
+    } finally {
+      // Un giro minimo di animazione: i messaggi nuovi arrivano poi da soli nella lista.
+      setTimeout(() => setBusy(false), 1200);
+    }
+  };
+  return (
+    <button type="button" className="pm-iconbtn" aria-label="Ricevi nuovi messaggi" title="Ricevi nuovi messaggi" onClick={() => void run()} disabled={busy}>
+      <Ic icon={RefreshCw} className={busy ? 'pm-spin' : undefined} />
+    </button>
   );
 }

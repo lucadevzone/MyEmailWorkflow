@@ -59,6 +59,12 @@ export class AccountSync {
     return this.run();
   }
 
+  /** Controllo manuale della posta: scarica subito i messaggi nuovi (o ritenta subito la connessione). */
+  checkNow() {
+    this.pendingNew = true;
+    this.wake?.();
+  }
+
   async stop(): Promise<void> {
     this.stopped = true;
     this.wake?.();

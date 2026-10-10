@@ -90,6 +90,7 @@ export const api = {
   testAccount: (id: string) => request<ConnectionTestResult>('POST', `/api/accounts/${id}/test`),
   settings: () => request<SettingsDto>('GET', '/api/settings'),
   syncStatus: () => request<SyncStatusDto[]>('GET', '/api/sync/status'),
+  syncNow: () => request<SyncStatusDto[]>('POST', '/api/sync/now'),
   conversations: (q: ConversationQuery) => {
     const p = new URLSearchParams({ view: q.view });
     if (q.projectId) p.set('projectId', q.projectId);

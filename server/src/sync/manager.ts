@@ -35,6 +35,10 @@ export class SyncManager {
     await Promise.all([...this.syncs.keys()].map((id) => this.stop(id)));
   }
 
+  checkNow() {
+    for (const s of this.syncs.values()) s.checkNow();
+  }
+
   statuses(): SyncStatusDto[] {
     return [...this.syncs.values()].map((s) => s.getStatus());
   }

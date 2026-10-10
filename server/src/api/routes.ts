@@ -133,6 +133,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   // ─── Sync ──────────────────────────────────────────────────────────────────
 
   app.get('/api/sync/status', async () => deps.sync.statuses());
+  // Pulsante "controlla la posta": non aspetta IDLE.
+  app.post('/api/sync/now', async () => {
+    deps.sync.checkNow();
+    return deps.sync.statuses();
+  });
 
   // ─── Conversazioni ─────────────────────────────────────────────────────────
 
