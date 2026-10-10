@@ -211,6 +211,10 @@ export function ResourcesArea({ c, d, onEditor, onOpenMessage, onUpload, onChang
 
   const attachmentRow = (f: FileDto) => {
     const versioned = f.versions.length > 1;
+    // Ricevuto più volte: nuove versioni o lo stesso contenuto rimandato (anche con un altro nome, es. "(1)").
+    const arrivals = f.versions.reduce((n, v) => n + 1 + v.resent.length, 0);
+    const lastArrival = Math.max(...f.versions.flatMap((v) => [v.date, ...v.resent.map((r) => r.date)]));
+    const hasHistory = arrivals > 1;
     const openHistory = history === f.key;
     return (
       <div key={f.key}>
@@ -220,7 +224,7 @@ export function ResourcesArea({ c, d, onEditor, onOpenMessage, onUpload, onChang
             actions: [
               { id: 'dl', icon: 'download', label: 'Scarica', primary: true, run: () => download(`/api/attachments/${f.latest.attachmentId}`) },
               { id: 'mail', icon: 'mail', label: 'Vai alla mail', primary: true, run: () => onOpenMessage(f.latest.messageId) },
-              ...(versioned ? [{ id: 'hist', icon: 'history', label: 'Versioni precedenti', primary: true, run: () => setHistory(f.key) }] : []),
+              ...(hasHistory ? [{ id: 'hist', icon: 'history', label: versioned ? 'Versioni precedenti' : 'Storia degli invii', primary: true, run: () => setHistory(f.key) }] : []),
               { id: 'res', icon: 'create_new_folder', label: 'Salva tra i file', run: () => toResource.mutate(f.latest.attachmentId) },
             ],
           }))}>
@@ -229,12 +233,14 @@ export function ResourcesArea({ c, d, onEditor, onOpenMessage, onUpload, onChang
             <span className="pm-res__name pm-truncate">{f.name}</span>
             <span className="pm-res__meta">
               {f.latest.from ? personLabel(f.latest.from) : '—'} · {shortDate(f.latest.date)} · {fileSize(f.latest.size)}
+              {lastArrival > f.latest.date && <> · rinviato {shortDate(lastArrival)}</>}
             </span>
           </a>
-          {versioned && (
+          {hasHistory && (
             <button type="button" className={`pm-res__versions${openHistory ? ' pm-res__versions--open' : ''}`} aria-expanded={openHistory}
-              title={`${f.versions.length} versioni: mostra le precedenti`} onClick={() => setHistory(openHistory ? null : f.key)}>
-              <Ic icon={History} size={13} /> v{f.latest.no}
+              title={versioned ? `${f.versions.length} versioni: mostra le precedenti` : `Ricevuto ${arrivals} volte, stesso contenuto: mostra gli invii`}
+              onClick={() => setHistory(openHistory ? null : f.key)}>
+              <Ic icon={History} size={13} /> {versioned ? `v${f.latest.no}` : `${arrivals}×`}
             </button>
           )}
         </div>
@@ -254,7 +260,8 @@ export function ResourcesArea({ c, d, onEditor, onOpenMessage, onUpload, onChang
                 </div>
                 {v.resent.map((r) => (
                   <button key={r.attachmentId} type="button" className="pm-version__resent" onClick={() => onOpenMessage(r.messageId)} title="Apri la mail">
-                    stesso file rinviato da {r.from ? personLabel(r.from) : '—'} · {shortDate(r.date)}
+                    stesso contenuto rinviato da {r.from ? personLabel(r.from) : '—'} · {shortDate(r.date)}
+                    {r.filename && r.filename !== v.filename && <> · come «{r.filename}»</>}
                   </button>
                 ))}
               </li>

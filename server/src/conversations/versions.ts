@@ -73,7 +73,7 @@ export function buildFileHistory(items: AttachmentOccurrence[]): FileDto[] {
     for (const a of list) {
       const existing = bySha.get(a.blobSha);
       if (existing) {
-        existing.resent.push({ attachmentId: a.id, messageId: a.messageId, date: a.date, from: a.from });
+        existing.resent.push({ attachmentId: a.id, messageId: a.messageId, filename: a.filename, date: a.date, from: a.from });
         continue;
       }
       const v: FileVersionDto = {

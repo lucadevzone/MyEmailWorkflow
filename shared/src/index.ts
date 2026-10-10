@@ -174,7 +174,7 @@ export interface FileVersionDto {
   date: number;
   from: PersonRef | null;
   /** Stesso contenuto rimandato più tardi (non è una nuova versione). */
-  resent: { attachmentId: string; messageId: string; date: number; from: PersonRef | null }[];
+  resent: { attachmentId: string; messageId: string; filename: string | null; date: number; from: PersonRef | null }[];
 }
 
 /** Un file della conversazione con la sua storia (versioni dalla più recente). */
