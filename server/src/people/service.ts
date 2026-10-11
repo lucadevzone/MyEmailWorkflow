@@ -528,7 +528,8 @@ export class PeopleService {
   // ─── Progetto suggerito ────────────────────────────────────────────────────
 
   /** Progetti in cui compaiono questi indirizzi (e gli altri indirizzi dei loro contatti). */
-  suggestProjects(emails: string[]): ProjectSuggestion[] {
+  /** Progetti in cui compaiono queste persone, per numero di conversazioni (limit: quanti progetti). */
+  suggestProjects(emails: string[], limit = 5): ProjectSuggestion[] {
     const list = emails.map((e) => e.toLowerCase()).filter(Boolean);
     if (!list.length) return [];
     const ph = list.map(() => '?').join(',');
@@ -548,9 +549,9 @@ export class PeopleService {
           where ma.contact_address_id in (select id from addr)
           group by p.id
           order by conversations desc, max(c.last_message_at) desc
-          limit 5`,
+          limit ?`,
       )
-      .all(...list, ...list) as ProjectSuggestion[];
+      .all(...list, ...list, limit) as ProjectSuggestion[];
   }
 }
 

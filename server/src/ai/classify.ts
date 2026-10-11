@@ -13,6 +13,7 @@ import { config } from '../config.ts';
 import { enqueueJob, PRIORITY } from '../jobs/queue.ts';
 import type { PeopleService } from '../people/service.ts';
 import { similarConversations } from './embed.ts';
+import { contentVote, decide, peopleVote, type SignalKind, type Vote } from './auto-sort.ts';
 
 export type Llm = <T>(system: string, user: string) => Promise<T>;
 
@@ -35,8 +36,14 @@ interface LlmAnswer {
 export interface ProjectSuggestionPayload {
   projectId: string | null;
   projectName: string;
+  /** Motivi leggibili, uniti: "Luca: 5 conversazioni su 5 in X · simile a 3 conversazioni di X · …". */
   reason: string;
   signals: { people: number; similarity: number };
+  /** Segnali che indicano questo progetto (RF-E6). */
+  votes?: SignalKind[];
+  /** La regola dello spostamento automatico è soddisfatta; altrimenti il perché. */
+  ruleOk?: boolean;
+  ruleWhy?: string | null;
 }
 
 export function enqueueClassification(db: Db, conversationId: string, priority: number = PRIORITY.normal) {
@@ -204,18 +211,42 @@ export async function classifyConversation(deps: { db: Db; sqlite: Database.Data
   const idx = /^P(\d+)$/.exec(choice)?.[1];
   const picked = idx ? candidates[Number(idx) - 1] : undefined;
 
+  // ── Segnali sì/no e regola (RF-E6) ───────────────────────────────────────
+  const nameOf = (id: string) => active.find((p) => p.id === id)?.name ?? 'progetto';
+  const peopleCounts = deps.people.suggestProjects([...participants.keys()], 50).filter((c) => !rejected.has(c.projectId));
+  const named = [...participants.values()].filter(Boolean);
+  const who = participants.size === 1 ? (named[0] ?? [...participants.keys()][0]!) : 'le persone coinvolte';
+  const votes: Vote[] = [];
+  const pv = peopleVote(peopleCounts, who);
+  if (pv) votes.push(pv);
+  const cv = contentVote(similarConversations(sqlite, conversationId).filter((n) => !n.projectId || !rejected.has(n.projectId)), nameOf);
+  if (cv) votes.push(cv);
+  // L'LLM vota solo se è abbastanza convinto: sotto la soglia la sua scelta non conta.
+  if (picked && llmConf >= 0.5) votes.push({ kind: 'llm', projectId: picked.p.id, reason: answer.motivo?.trim() || `l'analizzatore sceglie ${picked.p.name}` });
+  const size = new Map(
+    (sqlite.prepare('select project_id as id, count(*) as n from conversations where project_id is not null and deleted_at is null group by project_id').all() as { id: string; n: number }[]).map(
+      (r) => [r.id, r.n],
+    ),
+  );
+  const decision = decide(votes, {
+    projectSize: (id) => size.get(id) ?? 0,
+    blocked: (id) => rejected.has(id) || isBlocked(db, senderOf(msgs, own), id),
+    knownSender: peopleCounts.length > 0,
+  });
+
   clearProjectSuggestions(db, conversationId);
-  if (picked) {
-    // La confidenza mostrata combina il giudizio dell'LLM con gli indizi oggettivi.
-    const confidence = 0.6 * llmConf + 0.4 * Math.min(1, picked.signal * 1.5);
-    if (confidence >= MIN_CONFIDENCE) {
-      saveSuggestion(db, conversationId, 'project', confidence, {
-        projectId: picked.p.id,
-        projectName: picked.p.name,
-        reason: answer.motivo?.trim() || '',
-        signals: { people: round(picked.people), similarity: round(picked.similarity) },
-      });
-    }
+  if (decision.projectId) {
+    const p = active.find((x) => x.id === decision.projectId)!;
+    const s = scored.find((x) => x.p.id === p.id);
+    saveSuggestion(db, conversationId, 'project', decision.votes.length / 3, {
+      projectId: p.id,
+      projectName: p.name,
+      reason: decision.votes.map((v) => v.reason).join(' · '),
+      signals: { people: round(s?.people ?? 0), similarity: round(s?.similarity ?? 0) },
+      votes: decision.votes.map((v) => v.kind),
+      ruleOk: decision.ruleOk,
+      ruleWhy: decision.why,
+    });
   } else if (choice === 'NUOVO' && answer.nome_nuovo?.trim() && llmConf >= 0.6) {
     saveSuggestion(db, conversationId, 'new_project', llmConf * 0.8, {
       projectId: null,
@@ -226,6 +257,16 @@ export async function classifyConversation(deps: { db: Db; sqlite: Database.Data
   }
   done();
   bus.publish({ type: 'conversations', ids: [conversationId] });
+}
+
+/** Mittente della conversazione: chi ha scritto il primo messaggio arrivato (non i propri account). */
+export function senderOf(msgs: { direction: string; fromAddress: string | null }[], own: Set<string>): string | null {
+  return msgs.find((m) => m.direction === 'in' && m.fromAddress && !own.has(m.fromAddress))?.fromAddress?.toLowerCase() ?? null;
+}
+
+/** Quel progetto è stato rifiutato per quel mittente (vedi il registro dell'osservazione). */
+function isBlocked(_db: Db, _sender: string | null, _projectId: string): boolean {
+  return false;
 }
 
 function saveSuggestion(db: Db, conversationId: string, kind: 'project' | 'new_project', confidence: number, payload: ProjectSuggestionPayload) {

@@ -116,8 +116,23 @@ describe('progetto suggerito', () => {
     expect(last).toContain('descrizione: Rendicontazione del progetto PNRR');
     expect(last).toContain('conversazioni recenti: Rendicontazione PNRR');
     const [sug] = projectSugs(conv().list({ view: 'inbox' }).find((c) => c.id === r.conversationId));
-    expect(sug).toMatchObject({ kind: 'project', payload: { projectId: pnrr, projectName: 'PNRR', reason: 'Riguarda PNRR' } });
-    expect(sug!.confidence).toBeGreaterThan(0.6);
+    // Una sola conversazione di storia: vota solo l'LLM, quindi resta un suggerimento (RF-E6).
+    expect(sug).toMatchObject({ kind: 'project', payload: { projectId: pnrr, projectName: 'PNRR', reason: 'Riguarda PNRR', votes: ['llm'], ruleOk: false, ruleWhy: 'un solo segnale' } });
+    expect(sug!.confidence).toBeCloseTo(0.33, 2);
+  });
+
+  it('con abbastanza storia i segnali concordano e la regola dello spostamento automatico è soddisfatta', async () => {
+    for (let i = 1; i <= 5; i++) {
+      const r = await mail({ id: `<h${i}@x>`, from: 'Mario Rossi <mario@x.it>', subject: `Rendicontazione PNRR ${i}`, body: 'Allego la rendicontazione trimestrale del progetto PNRR con le spese del personale.' });
+      s.actions.move(r.conversationId, pnrr);
+    }
+    await s.jobs.drain();
+    const r = await mail({ id: '<n2@x>', from: 'Mario Rossi <mario@x.it>', subject: 'Spese personale', body: 'Ti mando le spese del personale per la rendicontazione PNRR.' });
+    await s.jobs.drain();
+    const [sug] = projectSugs(conv().list({ view: 'inbox' }).find((c) => c.id === r.conversationId));
+    expect(sug!.payload).toMatchObject({ projectId: pnrr, ruleOk: true, ruleWhy: null });
+    expect((sug!.payload as { votes: string[] }).votes.sort()).toEqual(['content', 'llm', 'people']);
+    expect((sug!.payload as { reason: string }).reason).toContain('Mario Rossi: 5 conversazioni su 5 in PNRR');
   });
 
   it('accettare sposta la conversazione; scartare non ripropone quel progetto', async () => {
