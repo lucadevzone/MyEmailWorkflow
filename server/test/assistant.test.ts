@@ -44,7 +44,10 @@ beforeEach(() => {
     },
     llm: (async () => {
       llmCalls++;
-      return { idee: [{ titolo: 'Conferma la data', descrizione: 'Dì che giovedì va bene.' }, { titolo: '', descrizione: 'scartata' }] };
+      return {
+        idee: [{ titolo: 'Conferma la data', descrizione: 'Dì che giovedì va bene.' }, { titolo: '', descrizione: 'scartata' }],
+        domande: ['Quando è la riunione?', 'Riassumi la conversazione', 'Chi deve portare il report', 'x'],
+      };
     }) as never,
   });
   accountId = s.accounts.create({ name: 'Prova', email: 'me@gmail.com', provider: 'gmail', credentialRef: 'env:X' }).id;
@@ -109,6 +112,27 @@ describe('assistente', () => {
     expect(llmCalls).toBe(1);
     await incoming('<5@x>', 5, 'Oppure venerdì?');
     await s.assistant.replyIdeas(conversationId);
+    expect(llmCalls).toBe(2);
+  });
+
+  it('ritocco sulla selezione: lavora solo sul pezzo selezionato, non su tutta la bozza', async () => {
+    const { conversationId } = await incoming('<s1@x>', 31, 'Ci vediamo giovedì?');
+    const draftBody = 'Ciao Mario,\nci vediamo giovedì alle dieci, porta il report.\nA presto';
+    await collect(s.assistant.chat({ conversationId, mode: 'compose', action: 'formal', text: 'Più formale', draftBody, selection: 'porta il report' }));
+    expect(lastTurns.at(-1)!.content).toMatch(/porta il report$/);
+    expect(lastTurns.at(-1)!.content).not.toContain('A presto');
+    // Richiesta libera con selezione: si applica solo al pezzo.
+    await collect(s.assistant.chat({ conversationId, mode: 'compose', text: 'rendila più cordiale', draftBody, selection: 'porta il report' }));
+    expect(lastTurns.at(-1)!.content).toMatch(/^rendila più cordiale[\s\S]*soltanto quel pezzo[\s\S]*Pezzo da riscrivere: porta il report$/);
+  });
+
+  it('domande proposte dal contenuto: filtrate, col punto interrogativo, ricalcolate solo con un messaggio nuovo', async () => {
+    const { conversationId } = await incoming('<d1@x>', 41, 'Riunione giovedì, porta il report.');
+    expect(await s.assistant.suggestedQuestions(conversationId)).toEqual(['Quando è la riunione?', 'Chi deve portare il report?']);
+    await s.assistant.suggestedQuestions(conversationId);
+    expect(llmCalls).toBe(1);
+    await incoming('<d2@x>', 42, 'Anzi venerdì.', 1);
+    await s.assistant.suggestedQuestions(conversationId);
     expect(llmCalls).toBe(2);
   });
 

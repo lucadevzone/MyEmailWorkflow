@@ -244,3 +244,10 @@
 .pm-rich--boxed .pm-rich__bar { padding: 4px 8px; }
 .pm-rich--boxed .pm-rich__content { padding: 10px 12px; }
 @media (max-width: 720px) { .pm-rich__content { padding: 12px 14px; } .pm-rich__bar { padding: 6px 10px; } }
+
+/* Domande proposte dall'assistente (viola, come i suggerimenti) e selezione su cui agiscono i ritocchi */
+.pm-quick--ai { height: auto; min-height: 32px; padding: 6px 12px; text-align: left; line-height: 1.3; border-color: #CFC8F3; background: #F1EEFD; color: #3C3489; }
+.pm-assistant__selhint {
+  font-size: var(--fs-sm); color: #3C3489; background: #F1EEFD; border-radius: var(--r-lg);
+  padding: 6px 10px; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}

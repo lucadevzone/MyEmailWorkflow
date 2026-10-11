@@ -24,6 +24,7 @@ interface Case {
   question?: string;
   action?: AssistantAction;
   draftBody?: string;
+  selection?: string;
   conversation?: { subject: string; contains?: string };
   expect: string[][];
   forbid?: string[];
@@ -96,6 +97,7 @@ async function run(c: Case): Promise<Result> {
         draftId: conversationId ? null : 'new',
         action: c.action,
         draftBody: c.draftBody,
+        selection: c.selection,
         text: c.question ?? c.action ?? 'Rispondi',
       },
       undefined,

@@ -82,6 +82,8 @@ export const chatInputSchema = z
     messageId: z.string().nullable().optional(),
     /** Testo della bozza come lo vede l'utente (composizione), anche se non ancora salvato. */
     draftBody: z.string().max(100_000).optional(),
+    /** Pezzo di bozza selezionato: ritocchi e richieste si applicano solo a quello. */
+    selection: z.string().max(20_000).optional(),
     action: z.enum(Object.keys(ACTIONS) as [AssistantAction, ...AssistantAction[]]).optional(),
     /** Ciò che l'utente ha scritto, o l'etichetta dell'azione rapida. */
     text: z.string().trim().min(1).max(4000),
@@ -142,6 +144,7 @@ const toDto = (r: typeof assistantMessages.$inferSelect): AssistantMessageDto =>
 
 export class AssistantService {
   private ideas = new Map<string, { key: string; ideas: { title: string; description: string }[] }>();
+  private questions = new Map<string, { key: string; questions: string[] }>();
 
   constructor(private deps: { db: Db; stream: ChatStream; llm: Llm; readBlob?: BlobReader; search?: SearchService }) {}
 
@@ -252,10 +255,15 @@ export class AssistantService {
 
     let request = input.text;
     if (action?.mode === 'read') request = action.prompt;
+    const selection = mode === 'compose' ? input.selection?.trim() : '';
+    // Un pezzo selezionato va riscritto da solo: il modello vede tutta la bozza e tende a completare la frase.
+    const onlyPiece =
+      'È solo un pezzo della bozza: restituisci soltanto quel pezzo riscritto, senza aggiungere parole che nella bozza stanno prima o dopo.';
+    if (selection && !action) request = `${input.text}\n\n${onlyPiece}\nPezzo da riscrivere: ${selection}`;
     if (action?.mode === 'compose') {
-      const target = this.retouchTarget(thread, input).trim();
+      const target = selection || this.retouchTarget(thread, input).trim();
       if (!target) throw new Error('Non c\'è ancora un testo da ritoccare: scrivi nella bozza o chiedi una proposta.');
-      request = `${action.prompt}\n\n${target}`;
+      request = selection ? `${action.prompt}\n${onlyPiece}\nPezzo da riscrivere: ${target}` : `${action.prompt}\n\n${target}`;
     }
 
     const draft = mode === 'compose' ? this.draftBody(input).trim() : '';
@@ -337,15 +345,45 @@ export class AssistantService {
   }
 
   /**
-   * Domanda su più conversazioni (dalla ricerca): l'assistente legge sintesi e ultimi messaggi delle
-   * conversazioni indicate, nell'ordine dato, e risponde citandole come [1], [2]… Non si salva.
-   */
-  /**
    * Domanda su tutta la posta: la ricerca sceglie i singoli messaggi più pertinenti (testo, significato,
    * nomi degli allegati); a ciascuno si affiancano il messaggio prima e quello dopo nella conversazione
    * (una risposta breve come "forse posso" ha senso solo con la domanda). Le citazioni [n] sono per messaggio.
    * conversationIds: se la barra di ricerca ha già trovato delle conversazioni, si cerca solo lì.
    */
+  /**
+   * Domande rapide proposte dal contenuto della conversazione ("Quando scade la consegna?"), oltre alle
+   * azioni fisse. Ricalcolate solo quando arriva un messaggio nuovo.
+   */
+  async suggestedQuestions(conversationId: string): Promise<string[]> {
+    const last = this.deps.db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt)))
+      .orderBy(desc(messages.date))
+      .get();
+    if (!last) return [];
+    const cached = this.questions.get(conversationId);
+    if (cached?.key === last.id) return cached.questions;
+    const out = await this.deps.llm<{ domande?: unknown[] }>(
+      `${SYSTEM_READ} Rispondi solo con un oggetto JSON.`,
+      [
+        this.context(conversationId),
+        '',
+        'Proponi 3 domande brevi che potrei farti su QUESTA conversazione per capirla o decidere cosa fare:',
+        'specifiche del contenuto (date, scadenze, richieste aperte, file, decisioni, chi deve fare cosa), non generiche come "Riassumi".',
+        'Ogni domanda al massimo 8 parole, in italiano, rivolta a te, con il punto interrogativo.',
+        'JSON: {"domande": ["...", "...", "..."]}',
+      ].join('\n'),
+    );
+    const questions = (out.domande ?? [])
+      .map((q) => String(q ?? '').trim())
+      .filter((q) => q.length > 3 && q.length <= 90 && !/riassum|sintesi/i.test(q))
+      .map((q) => (q.endsWith('?') ? q : `${q}?`))
+      .slice(0, 3);
+    this.questions.set(conversationId, { key: last.id, questions });
+    return questions;
+  }
+
   async prepareAsk(question: string, conversationIds: string[] = []): Promise<{ sources: AskPassage[]; turns: ChatTurn[] }> {
     const { db } = this.deps;
     const hits = this.deps.search ? await this.deps.search.searchMessages(question, { limit: 8, conversationIds }) : [];

@@ -11,7 +11,7 @@ import { useConfirm } from '../ui/confirm.tsx';
 import { useToast } from '../ui/toast.tsx';
 import { RecipientField } from './RecipientField.tsx';
 import { RichEditor, textToHtml } from '../ui/RichEditor.tsx';
-import type { DraftHandle } from './Assistant.tsx';
+import { DRAFT_SELECTION_EVENT, type DraftHandle, type DraftSelection } from './Assistant.tsx';
 import { NEW_DRAFT, normalizeSubject, replyRecipients, type DraftSeed } from './seed.ts';
 
 interface Fields {
@@ -226,11 +226,58 @@ export function DraftCard({ draftId, seed, d, onCreated, onSaved, onSent, onCanc
     el.setSelectionRange(at, at);
   }, [f]);
 
-  // L'assistente inserisce le proposte dove sta il cursore (o in fondo).
+  // Selezione corrente nella bozza (testo semplice o editor formattato).
+  const currentSelection = (): DraftSelection | null => {
+    if (latest.current?.format === 'html') {
+      const e = editor.current;
+      if (!e) return null;
+      const { from, to } = e.state.selection;
+      const text = e.state.doc.textBetween(from, to, '\n').trim();
+      return from < to && text ? { from, to, text } : null;
+    }
+    const el = textarea.current;
+    if (!el || el.selectionStart === el.selectionEnd) return null;
+    const text = el.value.slice(el.selectionStart, el.selectionEnd);
+    return text.trim() ? { from: el.selectionStart, to: el.selectionEnd, text } : null;
+  };
+  // Avvisa l'assistente quando la selezione cambia.
+  useEffect(() => {
+    let last = '';
+    const notify = () => {
+      const text = currentSelection()?.text ?? '';
+      if (text === last) return;
+      last = text;
+      window.dispatchEvent(new CustomEvent(DRAFT_SELECTION_EVENT, { detail: { text } }));
+    };
+    document.addEventListener('selectionchange', notify);
+    document.addEventListener('keyup', notify);
+    return () => {
+      document.removeEventListener('selectionchange', notify);
+      document.removeEventListener('keyup', notify);
+      window.dispatchEvent(new CustomEvent(DRAFT_SELECTION_EVENT, { detail: { text: '' } }));
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // L'assistente inserisce le proposte dove sta il cursore (o in fondo), o sostituisce la selezione.
   useEffect(() => {
     if (!handle) return;
     handle.current = {
       body: () => latest.current?.body ?? '',
+      selection: currentSelection,
+      replace: (sel, text) => {
+        if (latest.current?.format === 'html') {
+          const e = editor.current;
+          if (!e || e.state.doc.textBetween(sel.from, sel.to, '\n').trim() !== sel.text.trim()) return false;
+          // Un pezzo su una riga resta testo dentro il paragrafo; più paragrafi diventano paragrafi.
+          const content = /\n\s*\n/.test(text.trim()) ? textToHtml(text.trim()) : { type: 'text', text: text.trim() };
+          e.chain().focus().insertContentAt({ from: sel.from, to: sel.to }, content).run();
+          return true;
+        }
+        const cur = latest.current?.body ?? '';
+        if (cur.slice(sel.from, sel.to) !== sel.text) return false;
+        set({ body: cur.slice(0, sel.from) + text.trim() + cur.slice(sel.to) });
+        return true;
+      },
       insert: (text) => {
         if (latest.current?.format === 'html' && editor.current) {
           editor.current.chain().focus().insertContent(textToHtml(text)).run();

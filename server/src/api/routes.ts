@@ -630,6 +630,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return reply.code(204).send();
   });
   app.get<{ Params: { id: string } }>('/api/conversations/:id/reply-ideas', async (req) => deps.assistant.replyIdeas(req.params.id));
+  app.get<{ Params: { id: string } }>('/api/conversations/:id/questions', async (req) => deps.assistant.suggestedQuestions(req.params.id));
 
   // Risposta in streaming (testo semplice, a pezzi). Un errore a metà arriva come riga "[errore] …".
   app.post('/api/assistant/chat', async (req, reply) => {

@@ -6,11 +6,25 @@ import { api, type AssistantAction } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { useToast } from '../ui/toast.tsx';
 
+/** Pezzo di bozza selezionato, fotografato quando si chiede il ritocco. */
+export interface DraftSelection {
+  from: number;
+  to: number;
+  text: string;
+}
+
 /** Ciò che l'assistente può fare sulla bozza aperta nel carosello. */
 export interface DraftHandle {
   body: () => string;
   insert: (text: string) => void;
+  /** Il testo selezionato nella bozza (null se non c'è selezione). */
+  selection: () => DraftSelection | null;
+  /** Sostituisce quel pezzo; false se nel frattempo la bozza è cambiata lì. */
+  replace: (sel: DraftSelection, text: string) => boolean;
 }
+
+/** La bozza avvisa l'assistente quando cambia la selezione (per mostrare su cosa agiscono i ritocchi). */
+export const DRAFT_SELECTION_EVENT = 'mmw:draft-selection';
 
 const READ_ACTIONS: { action: AssistantAction; label: string }[] = [
   { action: 'summarize', label: 'Riassumi la conversazione' },
@@ -24,6 +38,18 @@ const RETOUCHES: { action: AssistantAction; label: string }[] = [
   { action: 'english', label: 'In inglese' },
   { action: 'fix', label: 'Correggi' },
 ];
+
+/**
+ * Il modello riscrive un pezzo di frase come se fosse una frase intera (maiuscola, punto finale):
+ * la proposta si adatta al pezzo che sostituisce.
+ */
+export function fitFragment(original: string, proposal: string): string {
+  let out = proposal.trim().replace(/^["«“]|["»”]$/g, '');
+  const o = original.trim();
+  if (!/[.!?…]$/.test(o)) out = out.replace(/[.!…]+$/, '');
+  if (/^\p{Ll}/u.test(o) && /^\p{Lu}\p{Ll}/u.test(out)) out = out[0]!.toLowerCase() + out.slice(1);
+  return out;
+}
 
 const COLLAPSED_KEY = 'mmw.assistant.collapsed';
 const readCollapsed = () => {
@@ -67,7 +93,23 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
     staleTime: Infinity,
     retry: false,
   });
+  const questions = useQuery({
+    queryKey: ['assistant-questions', conversationId],
+    queryFn: () => api.suggestedQuestions(conversationId!),
+    enabled: mode === 'read' && !!conversationId,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  // Testo selezionato nella bozza: i ritocchi agiscono su quello.
+  const [draftSel, setDraftSel] = useState('');
+  // Ultimo ritocco fatto su una selezione: la proposta può sostituirla al suo posto.
+  const [replaceTarget, setReplaceTarget] = useState<DraftSelection | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setDraftSel((e as CustomEvent<{ text: string }>).detail.text);
+    window.addEventListener(DRAFT_SELECTION_EVENT, on);
+    return () => window.removeEventListener(DRAFT_SELECTION_EVENT, on);
+  }, []);
   const [text, setText] = useState('');
   const [pending, setPending] = useState<Pending | null>(null);
   // Chat di una nuova mail non ancora salvata: resta solo in pagina.
@@ -94,15 +136,18 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
   const ask = async (question: string, opts: { action?: AssistantAction; mode?: 'read' | 'compose' } = {}) => {
     if (pending && !pending.error) return;
     const m = opts.mode ?? mode;
+    // La selezione si fotografa adesso: è il pezzo che la proposta potrà sostituire.
+    const sel = m === 'compose' ? (draft.current?.selection() ?? null) : null;
     setPending({ question, mode: m, answer: '' });
     const ctrl = new AbortController();
     abort.current = ctrl;
     try {
       const answer = await api.assistantChat(
-        { ...scope, mode: m, messageId, draftBody: m === 'compose' ? draft.current?.body() : undefined, action: opts.action, text: question },
+        { ...scope, mode: m, messageId, draftBody: m === 'compose' ? draft.current?.body() : undefined, selection: sel?.text, action: opts.action, text: question },
         (piece) => setPending((p) => (p ? { ...p, answer: p.answer + piece } : p)),
         ctrl.signal,
       );
+      if (m === 'compose') setReplaceTarget(sel);
       if (persisted) {
         await qc.invalidateQueries({ queryKey: threadKey });
       } else {
@@ -155,6 +200,15 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
     draft.current.insert(content);
     toast({ text: 'Inserito nella bozza' });
   };
+  const replaceSelection = (content: string) => {
+    if (!draft.current || !replaceTarget) return insert(content);
+    if (draft.current.replace(replaceTarget, fitFragment(replaceTarget.text, content))) {
+      setReplaceTarget(null);
+      toast({ text: 'Selezione sostituita' });
+    } else {
+      toast({ text: 'Quel pezzo della bozza è cambiato: usa Inserisci nella bozza' });
+    }
+  };
   const clear = async () => {
     if (persisted) {
       await api.clearAssistantThread(scope);
@@ -187,6 +241,7 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
         onSaveNote={conversationId ? () => void saveNote(m.content) : undefined}
         onSummary={conversationId ? () => void useAsSummary(m.content) : undefined}
         onInsert={() => insert(m.content)}
+        onReplace={m === lastProposal && replaceTarget ? () => replaceSelection(m.content) : undefined}
         onRephrase={() => void ask('Riformula', { action: 'rephrase', mode: 'compose' })}
         busy={busy}
       />
@@ -224,6 +279,19 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
                 </button>
               ))}
             </div>
+            {conversationId && (questions.isLoading || (questions.data?.length ?? 0) > 0) && (
+              <>
+                <div className="pm-assistant__section">Domande su questa conversazione</div>
+                {questions.isLoading && <div className="pm-assistant__sub">Sto leggendo la conversazione…</div>}
+                <div className="pm-assistant__chips">
+                  {questions.data?.map((q) => (
+                    <button key={q} type="button" className="pm-quick pm-quick--ai" disabled={busy} onClick={() => void ask(q)}>
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </>
         ) : (
           conversationId && (
@@ -268,6 +336,11 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
       </div>
 
       <form className="pm-assistant__foot" onSubmit={submit}>
+        {mode === 'compose' && draftSel && (
+          <div className="pm-assistant__selhint" title={draftSel}>
+            Sulla selezione: «{draftSel.length > 60 ? `${draftSel.slice(0, 60)}…` : draftSel}»
+          </div>
+        )}
         {mode === 'compose' && (
           <div className="pm-assistant__chips">
             {RETOUCHES.map((r) => (
@@ -306,12 +379,14 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
   );
 }
 
-function AiBubble({ m, canRephrase, onSaveNote, onSummary, onInsert, onRephrase, busy }: {
+function AiBubble({ m, canRephrase, onSaveNote, onSummary, onInsert, onReplace, onRephrase, busy }: {
   m: AssistantMessageDto;
   canRephrase: boolean;
   onSaveNote?: () => void;
   onSummary?: () => void;
   onInsert: () => void;
+  /** Proposta nata da una selezione: la può sostituire al suo posto. */
+  onReplace?: () => void;
   onRephrase: () => void;
   busy: boolean;
 }) {
@@ -320,7 +395,12 @@ function AiBubble({ m, canRephrase, onSaveNote, onSummary, onInsert, onRephrase,
       <div className="pm-bubble pm-bubble--ai">
         <div className="pm-bubble__quote">{m.content}</div>
         <div className="pm-bubble__actions">
-          <button type="button" className="pm-btn pm-btn--primary pm-btn--xs" onClick={onInsert}>
+          {onReplace && (
+            <button type="button" className="pm-btn pm-btn--primary pm-btn--xs" onClick={onReplace}>
+              Sostituisci la selezione
+            </button>
+          )}
+          <button type="button" className={`pm-btn ${onReplace ? 'pm-btn--secondary' : 'pm-btn--primary'} pm-btn--xs`} onClick={onInsert}>
             Inserisci nella bozza
           </button>
           {canRephrase && (
