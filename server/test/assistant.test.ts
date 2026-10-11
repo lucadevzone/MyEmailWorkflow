@@ -16,9 +16,9 @@ let lastTurns: ChatTurn[];
 let reply: string[];
 let llmCalls: number;
 
-async function incoming(id: string, uid: number, body: string) {
+async function incoming(id: string, uid: number, body: string, minute = 0) {
   const source = Buffer.from(
-    [`Message-ID: ${id}`, 'From: Mario <mario@x.it>', 'To: me@gmail.com', 'Subject: Riunione', 'Date: Wed, 07 Oct 2026 10:00:00 +0200', 'Content-Type: text/plain; charset=utf-8'].join('\r\n') +
+    [`Message-ID: ${id}`, 'From: Mario <mario@x.it>', 'To: me@gmail.com', 'Subject: Riunione', `Date: Wed, 07 Oct 2026 10:${String(minute).padStart(2, '0')}:00 +0200`, 'Content-Type: text/plain; charset=utf-8'].join('\r\n') +
       `\r\n\r\n${body}`,
   );
   return ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
@@ -52,6 +52,24 @@ beforeEach(() => {
 });
 
 describe('assistente', () => {
+  it('contesto piccolo: restano il messaggio aperto e i più recenti, i più vecchi si tolgono', async () => {
+    const { config } = await import('../src/config.ts');
+    const saved = config.ollama.numCtx;
+    config.ollama.numCtx = 3000; // ~4.500 caratteri disponibili
+    try {
+      const first = await incoming('<c1@x>', 11, `PRIMO ${'a'.repeat(1400)}`);
+      for (let i = 2; i <= 8; i++) await incoming(`<c${i}@x>`, 10 + i, `MESSAGGIO${i} ${'b'.repeat(1400)}`, i);
+      await collect(s.assistant.chat({ conversationId: first.conversationId, mode: 'read', messageId: first.messageId!, text: 'Di cosa parla?' }));
+      const system = lastTurns[0]!.content;
+      expect(system).toContain('PRIMO'); // il messaggio aperto resta
+      expect(system).toContain('MESSAGGIO8'); // i più recenti restano
+      expect(system).not.toContain('MESSAGGIO2'); // i più vecchi no
+      expect(system.length).toBeLessThan((3000 - 1500) * 3 + 2000);
+    } finally {
+      config.ollama.numCtx = saved;
+    }
+  });
+
   it('lettura: streaming, contesto con la conversazione e chat salvata', async () => {
     const { conversationId, messageId } = await incoming('<1@x>', 1, 'Ci vediamo giovedì alle 10?');
     const out = await collect(s.assistant.chat({ conversationId, mode: 'read', messageId, text: 'Riassumi la conversazione', action: 'summarize' }));

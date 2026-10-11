@@ -1,6 +1,7 @@
 // Assistente (D12): chat in streaming con Ollama su una conversazione o su una bozza.
 // In lettura risponde su ciò che c'è scritto; in composizione propone testo da mettere nella bozza.
 
+import { CHARS_PER_TOKEN, llmRequest, warnIfTruncated } from './ollama-options.ts';
 import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AssistantMessageDto } from '@mmw/shared';
@@ -24,7 +25,7 @@ export const ollamaStream: ChatStream = async function* (turns, signal, opts) {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     signal,
-    body: JSON.stringify({ model: config.ollama.llmModel, stream: true, options: { temperature: opts?.temperature ?? 0.4 }, messages: turns }),
+    body: JSON.stringify({ model: config.ollama.llmModel, stream: true, ...llmRequest(opts?.temperature ?? 0.4), messages: turns }),
   });
   if (!res.ok || !res.body) throw new Error(`Ollama HTTP ${res.status}: ${await res.text().catch(() => '')}`);
   const decoder = new TextDecoder();
@@ -36,8 +37,9 @@ export const ollamaStream: ChatStream = async function* (turns, signal, opts) {
       const line = buf.slice(0, nl).trim();
       buf = buf.slice(nl + 1);
       if (!line) continue;
-      const ev = JSON.parse(line) as { message?: { content?: string }; error?: string };
+      const ev = JSON.parse(line) as { message?: { content?: string }; error?: string; done?: boolean; prompt_eval_count?: number };
       if (ev.error) throw new Error(ev.error);
+      if (ev.done) warnIfTruncated(ev.prompt_eval_count, 'assistente');
       if (ev.message?.content) yield ev.message.content;
     }
   }
@@ -87,6 +89,8 @@ export type ChatInput = z.infer<typeof chatInputSchema>;
 const MAX_MESSAGES = 12;
 const MAX_CHARS_PER_MESSAGE = 1500;
 const HISTORY = 8;
+/** Token tenuti liberi per la risposta del modello. */
+const REPLY_TOKENS = 1500;
 
 const WHO =
   'Nei messaggi, "Tu (l\'utente)" indica i messaggi scritti dall\'utente con cui stai parlando: rivolgiti a lui con il tu ' +
@@ -154,7 +158,8 @@ export class AssistantService {
   }
 
   /** Testo della conversazione per il modello: oggetto, sintesi, ultimi messaggi. */
-  private context(conversationId: string | null, focusId?: string | null): string {
+  /** maxChars: spazio disponibile nel contesto del modello; se non basta si tolgono i messaggi più vecchi. */
+  private context(conversationId: string | null, focusId?: string | null, maxChars = Infinity): string {
     if (!conversationId) return 'Nuova email: non c\'è ancora una conversazione.';
     const { db } = this.deps;
     const conv = db.select().from(conversations).where(eq(conversations.id, conversationId)).get();
@@ -165,14 +170,25 @@ export class AssistantService {
       .where(and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt)))
       .orderBy(asc(messages.date))
       .all();
-    const shown = all.slice(-MAX_MESSAGES);
-    const lines = shown.map((m) => {
+    let shown = all.slice(-MAX_MESSAGES);
+    const render = (m: (typeof all)[number]) => {
       const who = m.direction === 'out' ? "Tu (l'utente)" : m.fromName || m.fromAddress || 'Sconosciuto';
       const when = new Date(m.date).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
       const n = all.indexOf(m) + 1;
       const mark = m.id === focusId ? ' (APERTO)' : '';
       return `Messaggio ${n} di ${all.length}${mark} · [${when}] ${who}:\n${(m.bodyTextClean || m.bodyText || '').slice(0, MAX_CHARS_PER_MESSAGE)}`;
-    });
+    };
+    let lines = shown.map(render);
+    const head = `Oggetto: ${conv.subject ?? '(nessuno)'}\n${conv.summaryDetailed || conv.summary || ''}`.length + 40;
+    const size = () => head + lines.reduce((n, l) => n + l.length + 7, 0);
+    // Fuori budget: via i messaggi più vecchi, mai quello aperto (la sintesi copre il resto).
+    while (shown.length > 1 && size() > maxChars) {
+      const drop = shown.findIndex((m) => m.id !== focusId);
+      if (drop < 0) break;
+      shown = shown.filter((_, i) => i !== drop);
+      lines = shown.map(render);
+    }
+    if (size() > maxChars) lines = lines.map((l) => l.slice(0, Math.max(500, maxChars - head)));
     return [
       `Oggetto: ${conv.subject ?? '(nessuno)'}`,
       conv.summaryDetailed || conv.summary ? `Sintesi: ${conv.summaryDetailed || conv.summary}` : '',
@@ -218,17 +234,8 @@ export class AssistantService {
       request = `${action.prompt}\n\n${target}`;
     }
 
-    const context = this.context(conversationId, input.messageId);
     const draft = mode === 'compose' ? this.draftBody(input).trim() : '';
-    const system = [
-      mode === 'compose' ? SYSTEM_COMPOSE : SYSTEM_READ,
-      '',
-      'CONVERSAZIONE',
-      context,
-      this.projectBlock(input),
-      draft ? `\nBOZZA ATTUALE DELL'UTENTE\n${draft}` : '',
-    ].join('\n');
-
+    const project = this.projectBlock(input);
     const history = thread
       ? this.deps.db
           .select()
@@ -239,6 +246,19 @@ export class AssistantService {
           .all()
           .reverse()
       : [];
+    // Budget: il contesto del modello meno lo spazio per la risposta e tutto il resto del prompt.
+    const fixed = (mode === 'compose' ? SYSTEM_COMPOSE : SYSTEM_READ).length + project.length + draft.length + request.length +
+      history.reduce((n, h) => n + h.content.length, 0);
+    const budget = (config.ollama.numCtx - REPLY_TOKENS) * CHARS_PER_TOKEN - fixed;
+    const context = this.context(conversationId, input.messageId, Math.max(2000, budget));
+    const system = [
+      mode === 'compose' ? SYSTEM_COMPOSE : SYSTEM_READ,
+      '',
+      'CONVERSAZIONE',
+      context,
+      project,
+      draft ? `\nBOZZA ATTUALE DELL'UTENTE\n${draft}` : '',
+    ].join('\n');
     const turns: ChatTurn[] = [
       { role: 'system', content: system },
       ...history.map((h) => ({ role: h.role, content: h.content }) as ChatTurn),

@@ -78,6 +78,8 @@ export interface SettingsDto {
   initialSyncDays: number;
   /** Modello di Ollama per assistente e analisi; null = quello predefinito (OLLAMA_LLM_MODEL). */
   llmModel: string | null;
+  /** Minuti per cui il modello resta caricato in memoria dopo l'ultima richiesta; -1 = sempre. */
+  ollamaKeepAliveMinutes: number;
   /** Formato con cui nasce una bozza nuova. */
   composeFormat: ComposeFormat;
   /** Carattere e dimensione delle mail HTML. */
@@ -107,6 +109,7 @@ export const DEFAULT_SETTINGS: SettingsDto = {
   activityBatchMinutes: 5,
   initialSyncDays: 90,
   llmModel: null,
+  ollamaKeepAliveMinutes: 30,
   composeFormat: 'html',
   composeFont: 'sans',
   composeFontSize: 'normal',

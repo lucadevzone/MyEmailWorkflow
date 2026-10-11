@@ -494,7 +494,7 @@ function AiModel() {
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.settings });
   const { data: health } = useQuery({ queryKey: ['health'], queryFn: api.health });
   const save = useMutation({
-    mutationFn: (llmModel: string | null) => api.updateSettings({ llmModel }),
+    mutationFn: (patch: Partial<SettingsDto>) => api.updateSettings(patch),
     onSuccess: (s) => {
       qc.setQueryData(['settings'], s);
       qc.invalidateQueries({ queryKey: ['health'] });
@@ -511,7 +511,7 @@ function AiModel() {
         <div className="pm-settings__grid">
           <label className="pm-field">
             <span className="pm-muted">Modello per assistente, sintesi, task e suggerimenti</span>
-            <select className={input} value={current} onChange={(e) => save.mutate(e.target.value || null)} disabled={save.isPending}>
+            <select className={input} value={current} onChange={(e) => save.mutate({ llmModel: e.target.value || null })} disabled={save.isPending}>
               <option value="">Predefinito ({health.config.defaultLlmModel})</option>
               {installed.map((m) => (
                 <option key={m} value={m}>
@@ -520,6 +520,21 @@ function AiModel() {
               ))}
               {settings.llmModel && !installed.includes(settings.llmModel) && <option value={settings.llmModel}>{settings.llmModel}</option>}
             </select>
+          </label>
+          <label className="pm-field">
+            <span className="pm-muted">Tieni il modello in memoria dopo l'ultimo uso</span>
+            <select
+              className={input}
+              value={settings.ollamaKeepAliveMinutes}
+              onChange={(e) => save.mutate({ ollamaKeepAliveMinutes: Number(e.target.value) })}
+              disabled={save.isPending}
+            >
+              {[5, 15, 30, 60, 120, 240].map((m) => (
+                <option key={m} value={m}>{m < 60 ? `${m} minuti` : `${m / 60} ${m === 60 ? 'ora' : 'ore'}`}</option>
+              ))}
+              <option value={-1}>Sempre (finché Ollama è attivo)</option>
+            </select>
+            <span className="pm-row__sub">Più a lungo = risposte subito pronte dopo una pausa, ma memoria occupata.</span>
           </label>
           <div className="pm-field">
             <span className="pm-muted">Modello per gli embedding (ricerca per significato)</span>

@@ -1,6 +1,7 @@
 // Embedding dei messaggi (bge-m3 via Ollama) e ricerca dei vicini con sqlite-vec.
 // Si indicizza il testo pulito (senza citazioni né firme), diviso in blocchi; il rumore è escluso.
 
+import { keepAlive } from './ollama-options.ts';
 import { and, eq, inArray, isNull, notExists } from 'drizzle-orm';
 import type Database from 'better-sqlite3';
 import { config } from '../config.ts';
@@ -19,7 +20,8 @@ export const ollamaEmbedder: Embedder = async (texts) => {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     signal: AbortSignal.timeout(120_000),
-    body: JSON.stringify({ model: config.ollama.embedModel, input: texts }),
+    // Anche il modello degli embedding resta caricato: la ricerca non aspetta il caricamento.
+    body: JSON.stringify({ model: config.ollama.embedModel, input: texts, keep_alive: keepAlive() }),
   });
   if (!res.ok) throw new Error(`Ollama embed HTTP ${res.status}`);
   const body = (await res.json()) as { embeddings?: number[][] };

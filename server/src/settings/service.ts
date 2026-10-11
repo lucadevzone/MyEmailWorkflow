@@ -5,9 +5,10 @@ import { settings } from '../db/schema.ts';
 import { now } from '../lib/ids.ts';
 import { config } from '../config.ts';
 
-/** Il modello scelto nelle impostazioni diventa quello usato da tutte le chiamate all'LLM. */
+/** Modello e permanenza in memoria scelti nelle impostazioni valgono per tutte le chiamate a Ollama. */
 export function applyLlmModel(s: SettingsDto) {
   config.ollama.llmModel = s.llmModel || config.defaultLlmModel;
+  config.ollama.keepAliveMinutes = s.ollamaKeepAliveMinutes;
 }
 
 export const settingsPatchSchema = z
@@ -15,6 +16,7 @@ export const settingsPatchSchema = z
     activityBatchMinutes: z.number().int().min(1).max(24 * 60),
     initialSyncDays: z.number().int().min(1).max(3650),
     llmModel: z.string().trim().min(1).max(120).nullable(),
+    ollamaKeepAliveMinutes: z.number().int().min(-1).max(24 * 60),
     composeFormat: z.enum(['text', 'html']),
     composeFont: z.enum(['sans', 'serif', 'mono']),
     composeFontSize: z.enum(['small', 'normal', 'large']),

@@ -1,4 +1,5 @@
 import { config } from '../config.ts';
+import { llmRequest, warnIfTruncated } from './ollama-options.ts';
 
 /** Chiamata a Ollama con risposta JSON. */
 export async function ollamaJson<T>(system: string, user: string, timeoutMs = 180_000): Promise<T> {
@@ -10,7 +11,7 @@ export async function ollamaJson<T>(system: string, user: string, timeoutMs = 18
       model: config.ollama.llmModel,
       stream: false,
       format: 'json',
-      options: { temperature: 0.2 },
+      ...llmRequest(0.2),
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
@@ -18,6 +19,7 @@ export async function ollamaJson<T>(system: string, user: string, timeoutMs = 18
     }),
   });
   if (!res.ok) throw new Error(`Ollama HTTP ${res.status}: ${await res.text().catch(() => '')}`);
-  const body = (await res.json()) as { message?: { content?: string } };
+  const body = (await res.json()) as { message?: { content?: string }; prompt_eval_count?: number };
+  warnIfTruncated(body.prompt_eval_count, 'analisi');
   return JSON.parse(body.message?.content ?? '{}') as T;
 }

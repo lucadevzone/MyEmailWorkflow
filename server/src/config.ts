@@ -23,6 +23,13 @@ export const config = {
     url: env('OLLAMA_URL', 'http://127.0.0.1:11434'),
     llmModel: env('OLLAMA_LLM_MODEL', 'llama3.1:8b'),
     embedModel: env('OLLAMA_EMBED_MODEL', 'bge-m3'),
+    /**
+     * Contesto in token, UGUALE in tutte le chiamate al modello: cambiarlo tra una richiesta e l'altra
+     * fa ricaricare il modello. Senza, Ollama usa il suo default (4096) e taglia i prompt lunghi in silenzio.
+     */
+    numCtx: Number(env('OLLAMA_NUM_CTX', '16384')),
+    /** Quanto resta caricato il modello dopo l'ultima richiesta (minuti; -1 = sempre). Dalle impostazioni. */
+    keepAliveMinutes: 30,
   },
   /** Modello LLM predefinito (da ambiente); quello in uso si può cambiare dalle impostazioni. */
   defaultLlmModel: env('OLLAMA_LLM_MODEL', 'llama3.1:8b'),
