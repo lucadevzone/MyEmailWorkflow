@@ -173,6 +173,33 @@ IDLE/fetch → salva raw (blob) → parse → dedup (gm_msgid / Message-ID)
 
 Prompt e modelli sono versionati, e il campo `suggestion.model` conserva la traccia. Più avanti i suggerimenti accettati e rifiutati possono servire da few-shot.
 
+### 6.2.1 Smistamento automatico con fiducia misurata (RF-E6)
+
+Riguarda solo le **conversazioni nuove** in Da smistare: le risposte ereditano già il progetto (RF-D2).
+Mai per News, mittenti nuovi (senza storia) o quando due progetti sono quasi a pari merito.
+
+**Segnali** (ognuno sì/no con un motivo leggibile, al posto del numero auto-dichiarato dall'LLM):
+
+| Segnale | Scatta quando | Motivo mostrato |
+|---|---|---|
+| Persone | i partecipanti hanno ≥ 3 conversazioni e ≥ 80% stanno in un solo progetto | "Luca Sabatucci: 5 conversazioni su 5 in Sviluppo WebApp" |
+| Contenuto | ≥ 3 delle 4 conversazioni più simili (già smistate) stanno nello stesso progetto | "simile a 3 conversazioni di Sviluppo WebApp" |
+| LLM | sceglie lo stesso progetto leggendo descrizione e messaggi | il motivo dell'LLM |
+
+**Regola**: almeno 2 segnali su 3 concordano sullo stesso progetto e nessuno ne indica un altro; il progetto
+ha ≥ 5 conversazioni; l'utente non ha mai rifiutato quel progetto per quel mittente. Altrimenti resta un
+suggerimento (con i motivi espliciti).
+
+**Fiducia misurata, non dichiarata.** La regola gira prima *in osservazione*: per ogni conversazione registra
+cosa avrebbe deciso e lo confronta con ciò che fa l'utente (accetta il suggerimento, sposta altrove, lascia lì).
+Lo spostamento automatico si attiva solo se la precisione misurata è ≥ 90% su ≥ 10 casi, e si ferma da solo
+se scende sotto. Le impostazioni mostrano la precisione ("avrebbe deciso 12 volte: 11 come te").
+
+**Reversibile e visibile.** Interruttore nelle impostazioni (Spento / Solo suggerimenti / Automatico quando
+affidabile). Una conversazione spostata da sola porta il segno "smistata automaticamente · Annulla" finché non
+la si apre; ogni spostamento automatico compare nel pannello Attività. Annulla la riporta in Da smistare e
+conta come errore (abbassa la precisione e blocca quel mittente → progetto).
+
 ### 6.3 Composizione e invio
 ```
 UI: scegli progetto → Crea (o Rispondi da conversazione)

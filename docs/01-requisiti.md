@@ -92,6 +92,7 @@ Priorità: **MVP** = prima versione utilizzabile; **POST** = successiva; **FUT**
 | RF-E3 | "Pensaci tu" non è un comando ma l'analizzatore che lavora in background: le azioni suggerite sono già pronte quando l'elemento viene mostrato o si apre il menu contestuale. Nulla viene applicato da solo: sceglie sempre l'utente | MVP |
 | RF-E4 | La classificazione della posta in Da smistare avviene in background (anche sullo storico): il progetto suggerito compare sotto la conversazione e nel menu contestuale | MVP |
 | RF-E5 | Suggerimento di bozze di risposta usando il contesto del progetto | POST |
+| RF-E6 | Smistamento automatico delle conversazioni nuove quando la fiducia, misurata sulle scelte dell'utente, è alta; sempre annullabile (vedi system design §6.2.1) | POST |
 
 ### F. Task
 
