@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import { findAskSources } from '../ai/ask-sources.ts';
 import { SignatureError, SignatureService, signatureInputSchema } from '../signatures/service.ts';
 import { CredentialError } from '../mail/credentials.ts';
 import type { HealthDto } from '@mmw/shared';
@@ -664,22 +663,16 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   // Domanda su più conversazioni (dalla ricerca), in streaming.
   app.post<{ Body: { question?: string; sources?: { conversationId?: string; messageId?: string }[] } }>('/api/assistant/ask', async (req, reply) => {
     const question = String(req.body?.question ?? '').trim().slice(0, 1000);
-    const ids = (Array.isArray(req.body?.sources) ? req.body!.sources! : [])
-      .filter((x) => typeof x?.conversationId === 'string')
-      .map((x) => ({ conversationId: x.conversationId!, messageId: typeof x.messageId === 'string' ? x.messageId : null }))
-      .slice(0, 6);
+    // Conversazioni già trovate dalla barra di ricerca: si cercano i messaggi solo lì. Altrimenti in tutta la posta.
+    const conversationIds = (Array.isArray(req.body?.sources) ? req.body!.sources! : [])
+      .map((x) => x?.conversationId)
+      .filter((x): x is string => typeof x === 'string')
+      .slice(0, 20);
     if (!question) throw new ActionError('Scrivi una domanda');
-    // Senza fonti dalla ricerca (es. una domanda lunga che non trova tutte le parole) si cerca in modo più largo.
-    let sources = ids;
-    let found: { conversationId: string; projectId: string | null; isNoise: boolean; title: string }[] = [];
-    if (!sources.length) {
-      const all = await findAskSources(deps.search, question);
-      found = all.map(({ conversationId, projectId, isNoise, title }) => ({ conversationId, projectId, isNoise, title }));
-      sources = all.map(({ conversationId, messageId }) => ({ conversationId, messageId }));
-    }
+    const { sources, turns } = await deps.assistant.prepareAsk(question, conversationIds);
     const abort = new AbortController();
     reply.raw.on('close', () => abort.abort());
-    const gen = deps.assistant.ask(question, sources, abort.signal);
+    const gen = deps.assistant.ask(turns, abort.signal);
     let first: IteratorResult<string>;
     try {
       first = await gen.next();
@@ -697,7 +690,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return reply
       .header('content-type', 'text/plain; charset=utf-8')
       .header('cache-control', 'no-cache')
-      .header('x-mmw-sources', encodeURIComponent(JSON.stringify(found)))
+      .header('x-mmw-sources', encodeURIComponent(JSON.stringify(sources)))
       .send(Readable.from(body()));
   });
 

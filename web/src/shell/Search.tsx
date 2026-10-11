@@ -4,6 +4,7 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { FolderPlus, Paperclip, Search as SearchIcon, Sparkles, SquareCheck, StickyNote } from 'lucide-react';
 import type { SearchScope } from '@mmw/shared';
 import { api, type AskSource } from '../api.ts';
+import { shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { PersonAvatar } from '../ui/People.tsx';
 import { paths, projectKeyOf, SYSTEM_INBOX, SYSTEM_NEWS } from './paths.ts';
@@ -76,12 +77,12 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
     askCtrl.current?.abort();
     const ctrl = new AbortController();
     askCtrl.current = ctrl;
-    const hits = (data?.conversations ?? []).slice(0, 6);
-    setAnswer({ q, text: '', busy: true, sources: hits.map((c) => ({ conversationId: c.conversationId, projectId: c.projectId, isNoise: c.isNoise, title: c.title })) });
+    setAnswer({ q, text: '', busy: true, sources: [] });
     try {
+      // L'assistente cerca da sé i messaggi pertinenti in tutta la posta (non solo tra i risultati qui sotto).
       await api.assistantAsk(
         q,
-        hits.map((c) => ({ conversationId: c.conversationId, messageId: c.messageId })),
+        [],
         (piece) => setAnswer((a) => (a ? { ...a, text: a.text + piece } : a)),
         ctrl.signal,
         (found) => setAnswer((a) => (a ? { ...a, sources: found } : a)),
@@ -91,17 +92,20 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
       if (!ctrl.signal.aborted) setAnswer((a) => (a ? { ...a, busy: false, error: (e as Error).message } : a));
     }
   };
-  /** Testo della risposta con le citazioni [n] trasformate in rimandi cliccabili alle conversazioni. */
+  /** Rimando al messaggio citato: apre la conversazione su quel messaggio. */
+  const toMessage = (s: AskSource) => paths.message(projectKeyOf(s), s.conversationId, s.messageId);
+  const cited = (text: string) => new Set([...text.matchAll(/\[(\d+)\]/g)].map((m) => Number(m[1])));
+  /** Testo della risposta con le citazioni [n] cliccabili; quelle che non corrispondono a nessun messaggio si tolgono. */
   const renderAnswer = (text: string) =>
     text.split(/(\[\d+\])/g).map((part, i) => {
       const m = part.match(/^\[(\d+)\]$/);
-      const hit = m ? answer?.sources[Number(m[1]) - 1] : undefined;
-      return hit ? (
-        <button key={i} type="button" className="pm-cite" title={hit.title} onClick={() => go(where(hit))}>
-          {m![1]}
+      if (!m) return <Fragment key={i}>{part}</Fragment>;
+      const hit = answer?.sources.find((s) => s.n === Number(m[1]));
+      if (!hit) return answer?.busy ? <Fragment key={i}>{part}</Fragment> : null;
+      return (
+        <button key={i} type="button" className="pm-cite" title={`${hit.from} · ${shortDate(hit.date)} · ${hit.title}`} onClick={() => go(toMessage(hit))}>
+          {m[1]}
         </button>
-      ) : (
-        <Fragment key={i}>{part}</Fragment>
       );
     });
 
@@ -278,7 +282,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
             {answer && (
               <div className="pm-answer" aria-live="polite">
                 <div className="pm-results__group">
-                  <Ic icon={Sparkles} size={13} /> Assistente{answer.sources.length ? ` · dalle ${answer.sources.length} conversazioni più pertinenti` : ''}
+                  <Ic icon={Sparkles} size={13} /> Assistente{answer.sources.length ? ` · ha letto ${answer.sources.length} messaggi pertinenti` : ''}
                 </div>
                 {answer.error ? (
                   <div className="pm-answer__text pm-error">{answer.error}</div>
@@ -288,15 +292,17 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
                     {answer.busy && <span className="pm-bubble__cursor" aria-hidden="true" />}
                   </div>
                 )}
-                {!answer.error && !answer.busy && answer.sources.length > 0 && (
+                {!answer.error && !answer.busy && answer.sources.some((s) => cited(answer.text).has(s.n)) && (
                   <div className="pm-answer__sources">
-                    <span className="pm-row__sub">Fonti consultate:</span>
-                    {answer.sources.map((c, i) => (
-                      <button key={c.conversationId} type="button" className="pm-answer__source" onClick={() => go(where(c))}>
-                        <span className="pm-cite" aria-hidden="true">{i + 1}</span>
-                        <span className="pm-truncate">{c.title}</span>
-                      </button>
-                    ))}
+                    <span className="pm-row__sub">Messaggi citati:</span>
+                    {answer.sources
+                      .filter((s) => cited(answer.text).has(s.n))
+                      .map((s) => (
+                        <button key={s.messageId} type="button" className="pm-answer__source" onClick={() => go(toMessage(s))}>
+                          <span className="pm-cite" aria-hidden="true">{s.n}</span>
+                          <span className="pm-truncate">{s.from} · {shortDate(s.date)} · {s.title}</span>
+                        </button>
+                      ))}
                   </div>
                 )}
               </div>

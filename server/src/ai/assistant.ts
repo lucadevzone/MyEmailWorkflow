@@ -6,7 +6,8 @@ import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AssistantMessageDto } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
-import { assistantMessages, conversations, drafts, messages } from '../db/schema.ts';
+import { assistantMessages, attachments, conversations, drafts, messages } from '../db/schema.ts';
+import type { SearchService } from '../search/service.ts';
 import { newId, now } from '../lib/ids.ts';
 import { config } from '../config.ts';
 import type { Llm } from './classify.ts';
@@ -47,7 +48,10 @@ export const ollamaStream: ChatStream = async function* (turns, signal, opts) {
 
 /** Azioni rapide (lettura) e ritocchi (composizione): istruzioni complete per il modello. */
 const ACTIONS = {
-  summarize: { mode: 'read', prompt: 'Riassumi la conversazione in poche frasi: chi scrive, cosa si chiede, a che punto è.' },
+  summarize: {
+    mode: 'read',
+    prompt: 'Riassumi la conversazione in poche frasi: chi scrive, cosa si chiede o si propone (con date, orari, cifre e nomi di file importanti) e a che punto è.',
+  },
   needs_reply: {
     mode: 'read',
     prompt: 'Cosa richiede una mia risposta o un mio intervento in questa conversazione? Elenca le richieste aperte rivolte a me, con "-". Se non ce ne sono, dillo.',
@@ -89,12 +93,29 @@ export type ChatInput = z.infer<typeof chatInputSchema>;
 const MAX_MESSAGES = 12;
 const MAX_CHARS_PER_MESSAGE = 1500;
 const HISTORY = 8;
+/** Messaggi al massimo nei brani di una domanda su tutta la posta. */
+const MAX_PASSAGES = 14;
+
+/** Un messaggio citabile in una risposta su tutta la posta: [n] → quel messaggio. */
+export interface AskPassage {
+  n: number;
+  messageId: string;
+  conversationId: string;
+  projectId: string | null;
+  isNoise: boolean;
+  title: string;
+  from: string;
+  date: number;
+}
+
 /** Token tenuti liberi per la risposta del modello. */
 const REPLY_TOKENS = 1500;
 
 const WHO =
-  'Nei messaggi, "Tu (l\'utente)" indica i messaggi scritti dall\'utente con cui stai parlando: rivolgiti a lui con il tu ' +
-  '("hai scritto", "Mario ti chiede"). Tu, assistente, non compari mai nella conversazione. ';
+  'Nei messaggi, quelli "scritti dall\'utente" sono di chi ti sta parlando: rivolgiti a lui con il tu ("hai scritto", "Mario ti chiede"); ' +
+  'tutti gli altri sono scritti dalla persona indicata, anche se ha lo stesso nome dell\'utente. Tu, assistente, non compari mai nei messaggi. ';
+/** Etichetta del mittente: l'utente non va confuso con un omonimo. */
+const USER_LABEL = "l'UTENTE (cioè chi ti fa la domanda)";
 
 const SYSTEM_READ =
   "Sei l'assistente di posta personale dell'utente. " +
@@ -122,7 +143,7 @@ const toDto = (r: typeof assistantMessages.$inferSelect): AssistantMessageDto =>
 export class AssistantService {
   private ideas = new Map<string, { key: string; ideas: { title: string; description: string }[] }>();
 
-  constructor(private deps: { db: Db; stream: ChatStream; llm: Llm; readBlob?: BlobReader }) {}
+  constructor(private deps: { db: Db; stream: ChatStream; llm: Llm; readBlob?: BlobReader; search?: SearchService }) {}
 
   /** Progetto della conversazione o della bozza (per il contesto: note, risorse, allegati). */
   private projectOf(input: { conversationId?: string | null; draftId?: string | null }): string | null {
@@ -172,11 +193,13 @@ export class AssistantService {
       .all();
     let shown = all.slice(-MAX_MESSAGES);
     const render = (m: (typeof all)[number]) => {
-      const who = m.direction === 'out' ? "Tu (l'utente)" : m.fromName || m.fromAddress || 'Sconosciuto';
+      const who = m.direction === 'out' ? USER_LABEL : m.fromName || m.fromAddress || 'Sconosciuto';
       const when = new Date(m.date).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' });
       const n = all.indexOf(m) + 1;
       const mark = m.id === focusId ? ' (APERTO)' : '';
-      return `Messaggio ${n} di ${all.length}${mark} · [${when}] ${who}:\n${(m.bodyTextClean || m.bodyText || '').slice(0, MAX_CHARS_PER_MESSAGE)}`;
+      const files = this.attachmentNames(m.id);
+      const att = files.length ? `\nAllegati: ${files.join(', ')}` : '';
+      return `Messaggio ${n} di ${all.length}${mark} · [${when}] scritto da ${who}:${att}\n${(m.bodyTextClean || m.bodyText || '').slice(0, MAX_CHARS_PER_MESSAGE)}`;
     };
     let lines = shown.map(render);
     const head = `Oggetto: ${conv.subject ?? '(nessuno)'}\n${conv.summaryDetailed || conv.summary || ''}`.length + 40;
@@ -317,45 +340,109 @@ export class AssistantService {
    * Domanda su più conversazioni (dalla ricerca): l'assistente legge sintesi e ultimi messaggi delle
    * conversazioni indicate, nell'ordine dato, e risponde citandole come [1], [2]… Non si salva.
    */
-  async *ask(question: string, sourcesIn: { conversationId: string; messageId?: string | null }[], signal?: AbortSignal): AsyncGenerator<string> {
+  /**
+   * Domanda su tutta la posta: la ricerca sceglie i singoli messaggi più pertinenti (testo, significato,
+   * nomi degli allegati); a ciascuno si affiancano il messaggio prima e quello dopo nella conversazione
+   * (una risposta breve come "forse posso" ha senso solo con la domanda). Le citazioni [n] sono per messaggio.
+   * conversationIds: se la barra di ricerca ha già trovato delle conversazioni, si cerca solo lì.
+   */
+  async prepareAsk(question: string, conversationIds: string[] = []): Promise<{ sources: AskPassage[]; turns: ChatTurn[] }> {
     const { db } = this.deps;
-    const sources = sourcesIn.slice(0, 6).map(({ conversationId: id, messageId: hitId }, n) => {
-      const conv = db.select().from(conversations).where(eq(conversations.id, id)).get();
-      if (!conv) return '';
-      // Il messaggio più pertinente (dalla ricerca) e gli ultimi otto della conversazione, accorciati.
-      const latest = db
+    const hits = this.deps.search ? await this.deps.search.searchMessages(question, { limit: 8, conversationIds }) : [];
+
+    // Messaggi da mostrare: quelli trovati e i loro vicini, raggruppati per conversazione (in ordine di pertinenza).
+    const byConv = new Map<string, Set<string>>();
+    const hitIds = new Set(hits.map((h) => h.messageId));
+    for (const h of hits) {
+      const conv = db
+        .select({ id: messages.id })
+        .from(messages)
+        .where(and(eq(messages.conversationId, h.conversationId), isNull(messages.deletedAt)))
+        .orderBy(asc(messages.date))
+        .all()
+        .map((m) => m.id);
+      const i = conv.indexOf(h.messageId);
+      const set = byConv.get(h.conversationId) ?? new Set<string>();
+      for (const id of [conv[i - 1], h.messageId, conv[i + 1]]) if (id) set.add(id);
+      byConv.set(h.conversationId, set);
+    }
+
+    const budget = (config.ollama.numCtx - REPLY_TOKENS) * CHARS_PER_TOKEN - 2500;
+    const sources: AskPassage[] = [];
+    const blocks: string[] = [];
+    let used = 0;
+    for (const [conversationId, ids] of byConv) {
+      const conv = db.select().from(conversations).where(eq(conversations.id, conversationId)).get();
+      if (!conv) continue;
+      const rows = db
         .select()
         .from(messages)
-        .where(and(eq(messages.conversationId, id), isNull(messages.deletedAt)))
-        .orderBy(desc(messages.date))
-        .limit(8)
-        .all();
-      const hit = hitId && !latest.some((m) => m.id === hitId) ? db.select().from(messages).where(eq(messages.id, hitId)).get() : undefined;
-      const recent = [...(hit ? [hit] : []), ...latest]
-        .sort((a, b) => a.date - b.date)
-        .map((m) => {
-          const who = m.direction === 'out' ? "Tu (l'utente)" : m.fromName || m.fromAddress || 'Sconosciuto';
-          const when = new Date(m.date).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
-          const files = m.hasAttachments ? ' (con allegato)' : '';
-          const limit = m.id === hitId ? 900 : 400;
-          return `- il ${when} ${who} ha scritto${files}: ${(m.bodyTextClean || m.bodyText || '').replace(/\s+/g, ' ').slice(0, limit)}`;
+        .where(and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt)))
+        .orderBy(asc(messages.date))
+        .all()
+        .filter((m) => ids.has(m.id));
+      for (const m of rows) {
+        if (sources.length >= MAX_PASSAGES) break;
+        const files = this.attachmentNames(m.id);
+        const who = m.direction === 'out' ? USER_LABEL : m.fromName || m.fromAddress || 'Sconosciuto';
+        const when = new Date(m.date).toLocaleString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        // Solo il testo nuovo: il testo citato confonde chi ha detto cosa.
+        const body = (m.bodyTextClean ?? '').replace(/\s+/g, ' ').trim().slice(0, hitIds.has(m.id) ? 1000 : 500);
+        const n = sources.length + 1;
+        const block = [
+          `[${n}] ${when} · scritto da ${who} · conversazione «${conv.subject ?? '(senza oggetto)'}»`,
+          files.length ? `Allegati: ${files.join(', ')}` : '',
+          body || (files.length ? '(nessun testo nuovo, solo allegati)' : '(nessun testo nuovo)'),
+        ]
+          .filter(Boolean)
+          .join('\n');
+        if (used + block.length > budget) break;
+        used += block.length;
+        blocks.push(block);
+        sources.push({
+          n,
+          messageId: m.id,
+          conversationId,
+          projectId: conv.projectId,
+          isNoise: conv.isNoise,
+          title: conv.subject ?? '(senza oggetto)',
+          from: m.direction === 'out' ? 'Tu' : who,
+          date: m.date,
         });
-      return [`[${n + 1}] Oggetto: ${conv.subject ?? '(nessuno)'}`, conv.summaryDetailed || conv.summary ? `Sintesi: ${conv.summaryDetailed || conv.summary}` : '', ...recent]
-        .filter(Boolean)
-        .join('\n');
-    });
+      }
+    }
+
+    const today = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const system = [
       "Sei l'assistente di posta personale dell'utente. " + WHO,
-      'Rispondi in italiano, in modo conciso, usando SOLO quello che è scritto nelle conversazioni qui sotto: non aggiungere conoscenze tue.',
-      'Ogni frase deve finire con il numero della conversazione da cui viene, tra parentesi quadre.',
-      'Esempio di forma: "La riunione è stata spostata a giovedì [1]. Il budget è approvato [2]."',
-      'Se le conversazioni non contengono la risposta, scrivi: "Nelle conversazioni trovate non c\'è la risposta."',
+      `Oggi è ${today}.`,
+      'Qui sotto ci sono alcuni messaggi della posta dell\'utente scelti da una ricerca: alcuni sono pertinenti alla domanda, altri no.',
+      'Rispondi in italiano, in poche frasi, basandoti su questi messaggi. Spesso bisogna collegare più messaggi (una domanda e la sua risposta) ' +
+        'o leggere la data, il mittente e i nomi degli allegati.',
+      'Dopo ogni informazione scrivi tra parentesi quadre il numero del messaggio da cui viene, ad esempio [2].',
+      'Se nessun messaggio contiene ciò che serve, rispondi soltanto: "Non ho trovato la risposta nella posta." Non inventare nulla che non sia scritto.',
       'Testo semplice: niente titoli né grassetti; per gli elenchi usa righe che iniziano con "-".',
       '',
-      'CONVERSAZIONI',
-      sources.filter(Boolean).join('\n\n---\n\n') || '(nessuna conversazione trovata)',
+      'MESSAGGI',
+      blocks.join('\n\n') || '(la ricerca non ha trovato messaggi)',
     ].join('\n');
-    const user = `${question}\n\n(Rispondi solo dalle conversazioni, citando ogni frase con [n].)`;
-    for await (const piece of this.deps.stream([{ role: 'system', content: system }, { role: 'user', content: user }], signal, { temperature: 0.1 })) yield piece;
+    // Promemoria accanto alla domanda: i modelli piccoli dimenticano le citazioni chieste nel sistema.
+    const user = `${question}\n\n(Dopo ogni informazione indica il messaggio con [n].)`;
+    return { sources, turns: [{ role: 'system', content: system }, { role: 'user', content: user }] };
+  }
+
+  async *ask(turns: ChatTurn[], signal?: AbortSignal): AsyncGenerator<string> {
+    for await (const piece of this.deps.stream(turns, signal, { temperature: 0.1 })) yield piece;
+  }
+
+  /** Nomi degli allegati veri (non le immagini incorporate) di un messaggio. */
+  private attachmentNames(messageId: string): string[] {
+    return this.deps.db
+      .select({ name: attachments.filename })
+      .from(attachments)
+      .where(and(eq(attachments.messageId, messageId), eq(attachments.isInline, false)))
+      .all()
+      .map((a) => a.name)
+      .filter((n): n is string => !!n);
   }
 }

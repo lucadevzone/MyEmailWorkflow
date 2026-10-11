@@ -57,12 +57,16 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }
 
-/** Fonte usata dall'assistente sulla posta (quando l'ha cercata da sé). */
+/** Messaggio citabile nella risposta dell'assistente sulla posta: [n] apre proprio quel messaggio. */
 export interface AskSource {
+  n: number;
+  messageId: string;
   conversationId: string;
   projectId: string | null;
   isNoise: boolean;
   title: string;
+  from: string;
+  date: number;
 }
 
 export interface AssistantScope {

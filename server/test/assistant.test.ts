@@ -145,14 +145,17 @@ describe('contesto del progetto', () => {
 });
 
 describe('assistente sulla posta', () => {
-  it('risponde dalle conversazioni indicate, numerate come fonti', async () => {
-    const a = await incoming('<q1@x>', 21, 'La riunione è spostata a giovedì.');
-    const b = await incoming('<q2@x>', 22, 'Il budget è approvato.');
-    const out = await collect(s.assistant.ask('Quando è la riunione?', [{ conversationId: a.conversationId!, messageId: a.messageId }, { conversationId: b.conversationId! }]));
+  it('cerca i singoli messaggi (anche per nome dell\'allegato), con i vicini, numerati per messaggio', async () => {
+    await incoming('<q1@x>', 21, 'La riunione è spostata a giovedì.', 1);
+    await incoming('<q2@x>', 22, 'Il budget è approvato.', 2);
+    const { sources, turns } = await s.assistant.prepareAsk('Quando è la riunione?');
+    expect(sources.length).toBeGreaterThan(0);
+    expect(sources[0]).toMatchObject({ n: 1 });
+    expect(turns[0]!.content).toMatch(/\[1\] .* · scritto da Mario · conversazione «Riunione»/);
+    expect(turns[0]!.content).toContain('spostata a giovedì');
+    expect(turns[0]!.content).toMatch(/Oggi è /);
+    expect(turns[1]!.content).toMatch(/^Quando è la riunione\?/);
+    const out = await collect(s.assistant.ask(turns));
     expect(out).toBe('Ciao Mario.');
-    expect(lastTurns[0]!.content).toMatch(/\[1\] Oggetto:/);
-    expect(lastTurns[0]!.content).toMatch(/\[2\] Oggetto:/);
-    expect(lastTurns[0]!.content).toContain('spostata a giovedì');
-    expect(lastTurns[1]!.content).toMatch(/^Quando è la riunione\?/);
   });
 });

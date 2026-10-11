@@ -6,6 +6,14 @@ import type { SearchConversationHit, SearchFileHit, SearchItemHit, SearchResults
 import type { Embedder } from '../ai/embed.ts';
 
 const RRF_K = 60;
+/** Parole che in una domanda non distinguono nulla (la ricerca larga le troverebbe ovunque). */
+const STOPWORDS = new Set(
+  ('il lo la i gli le un uno una di da in con su per tra fra a al allo alla ai agli alle del dello della dei degli delle dal dalla dai ' +
+    'nel nella nei nelle sul sulla sui sulle e ed o ma se che chi cosa come quando dove perché perche quale quali quanto quanti ' +
+    'mi ti ci vi si me te lui lei noi voi loro mio mia miei mie tuo tua suo sua è ho hai ha abbiamo hanno sono sei era essere ' +
+    'non più piu anche già gia ancora poi cui questo questa questi quelle quello quella io tu va vado fa fatto detto mandato ' +
+    'messaggio messaggi mail email posta conversazione conversazioni').split(/\s+/),
+);
 const MAX_CONVERSATIONS = 10;
 const MAX_FILES = 8;
 const MAX_ITEMS = 8;
@@ -63,6 +71,75 @@ export class SearchService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Per l'assistente: i singoli messaggi più pertinenti (non le conversazioni), fondendo parole
+   * (testo e nomi degli allegati, basta una parola significativa) e significato.
+   * conversationIds: limita la ricerca a quelle conversazioni (es. quelle trovate dalla barra di ricerca).
+   */
+  async searchMessages(q: string, opts: { limit?: number; conversationIds?: string[] } = {}): Promise<{ messageId: string; conversationId: string }[]> {
+    const limit = opts.limit ?? 8;
+    const terms = searchTerms(q).filter((t) => !STOPWORDS.has(t));
+    const { sqlite } = this.deps;
+    const ids = opts.conversationIds?.length ? opts.conversationIds : null;
+    // News (newsletter, notifiche) escluse, salvo conversazioni indicate esplicitamente.
+    const inConv = ids ? `and m.conversation_id in (${ids.map(() => '?').join(',')})` : 'and c.is_noise = 0';
+    const params = ids ?? [];
+    const lists: { messageId: string; conversationId: string }[][] = [];
+
+    if (terms.length) {
+      const match = terms.map((t) => `"${t}"*`).join(' OR ');
+      lists.push(
+        sqlite
+          .prepare(
+            `select f.message_id as messageId, m.conversation_id as conversationId
+               from message_fts f join messages m on m.id = f.message_id join conversations c on c.id = m.conversation_id
+              where message_fts match ? and m.deleted_at is null and c.deleted_at is null ${inConv}
+              order by bm25(message_fts, 0, 4, 1, 2) limit 40`,
+          )
+          .all(match, ...params) as { messageId: string; conversationId: string }[],
+      );
+      // Nomi degli allegati: "survey_dataset.csv" non sta nel testo del messaggio.
+      const fileCond = terms.map(() => `lower(a.filename) like ?`).join(' or ');
+      lists.push(
+        sqlite
+          .prepare(
+            `select distinct m.id as messageId, m.conversation_id as conversationId
+               from attachments a join messages m on m.id = a.message_id join conversations c on c.id = m.conversation_id
+              where a.is_inline = 0 and a.filename is not null and (${fileCond}) and m.deleted_at is null and c.deleted_at is null ${inConv}
+              order by m.date desc limit 20`,
+          )
+          .all(...terms.map((t) => `%${t}%`), ...params) as { messageId: string; conversationId: string }[],
+      );
+    }
+    const vec = await this.embedQuery(q);
+    if (vec) {
+      const rows = sqlite
+        .prepare(
+          `with knn as (select chunk_id, distance from chunk_vec where embedding match ? and k = 60)
+           select m.id as messageId, m.conversation_id as conversationId, min(knn.distance) as d
+             from knn join chunks ch on ch.id = knn.chunk_id join messages m on m.id = ch.message_id
+             join conversations c on c.id = m.conversation_id
+            where m.deleted_at is null and c.deleted_at is null and knn.distance <= ? ${inConv}
+            group by m.id order by d`,
+        )
+        .all(vec, MAX_VEC_DISTANCE * 1.2, ...params) as { messageId: string; conversationId: string }[];
+      lists.push(rows);
+    }
+
+    const score = new Map<string, { s: number; conversationId: string }>();
+    for (const list of lists) {
+      list.forEach((r, rank) => {
+        const cur = score.get(r.messageId) ?? { s: 0, conversationId: r.conversationId };
+        cur.s += 1 / (RRF_K + rank);
+        score.set(r.messageId, cur);
+      });
+    }
+    return [...score.entries()]
+      .sort((a, b) => b[1].s - a[1].s)
+      .slice(0, limit)
+      .map(([messageId, v]) => ({ messageId, conversationId: v.conversationId }));
   }
 
   /**
