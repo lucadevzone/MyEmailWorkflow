@@ -119,6 +119,7 @@ function Accounts() {
             setAdding(false);
             qc.invalidateQueries({ queryKey: ['accounts'] });
           }}
+          onCancel={() => setAdding(false)}
         />
       )}
       {accounts.length === 0 && !adding && <div className={`${card} pm-muted`}>Nessun account configurato.</div>}
@@ -227,7 +228,8 @@ function TestResult({ result }: { result: ConnectionTestResult }) {
   );
 }
 
-function AccountForm({ onDone }: { onDone: () => void }) {
+/** Nuovo account; usato anche dalla procedura di benvenuto (senza Annulla). */
+export function AccountForm({ onDone, onCancel }: { onDone: () => void; onCancel?: () => void }) {
   const [provider, setProvider] = useState<MailProvider>('gmail');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -288,11 +290,13 @@ function AccountForm({ onDone }: { onDone: () => void }) {
       </p>
       {create.error && <div className="pm-error">{(create.error as Error).message}</div>}
       <div className="pm-inlineform__actions">
-        <button type="button" className={button} onClick={onDone}>
-          Annulla
-        </button>
+        {onCancel && (
+          <button type="button" className={button} onClick={onCancel}>
+            Annulla
+          </button>
+        )}
         <button type="submit" className={primary} disabled={create.isPending}>
-          Salva
+          {create.isPending ? 'Salvataggio…' : 'Salva'}
         </button>
       </div>
     </form>

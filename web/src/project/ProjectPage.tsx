@@ -44,7 +44,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
   const qc = useQueryClient();
   const toast = useToast();
   const isProject = projectKey !== SYSTEM_INBOX && projectKey !== SYSTEM_NEWS;
-  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
+  const { data: projects = [], isSuccess: projectsLoaded } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const { data: counts } = useQuery({ queryKey: ['counts'], queryFn: api.conversationCounts });
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
   const project = isProject ? projects.find((p) => p.id === projectKey) : undefined;
@@ -191,6 +191,15 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
           )}
         </div>
         <div className="pm-convstack">
+          {/* Account collegato ma ancora nessun progetto: lo smistamento non ha dove proporre. */}
+          {projectKey === SYSTEM_INBOX && !archived && projectsLoaded && !projects.some((p) => !p.archived) && (
+            <div className="pm-welcomehint">
+              <span>Crea i tuoi progetti: l'analizzatore potrà proporre subito dove smistare la posta.</span>
+              <button type="button" className="pm-btn pm-btn--primary pm-btn--sm" onClick={() => navigate('/welcome?step=2')}>
+                Procedura guidata
+              </button>
+            </div>
+          )}
           {list.isLoading && <div className="pm-empty">Caricamento…</div>}
           {!list.isLoading && items.length === 0 && (
             <div className="pm-empty">
