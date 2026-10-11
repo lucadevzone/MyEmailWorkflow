@@ -19,6 +19,7 @@ export function SettingsPage() {
       <div className="pm-settings">
       <SystemStatus />
       <Accounts />
+      <AutoSort />
       <Compose />
       <Signatures />
       <AiModel />
@@ -350,6 +351,54 @@ function General() {
 }
 
 // ─── Modello di Ollama ───────────────────────────────────────────────────────
+
+/** Smistamento della posta nuova (RF-E6): modalità e precisione misurata della regola. */
+function AutoSort() {
+  const qc = useQueryClient();
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+  const { data: stats } = useQuery({ queryKey: ['auto-sort-stats'], queryFn: api.autoSortStats });
+  const save = useMutation({
+    mutationFn: (autoSortMode: SettingsDto['autoSortMode']) => api.updateSettings({ autoSortMode }),
+    onSuccess: (s) => qc.setQueryData(['settings'], s),
+  });
+  if (!settings) return null;
+  const pct = stats && stats.total ? Math.round((stats.agree / stats.total) * 100) : null;
+  return (
+    <Section title="Smistamento della posta">
+      <div className={card}>
+        <label className="pm-field">
+          <span className="pm-muted">Conversazioni nuove in Da smistare</span>
+          <select className={input} value={settings.autoSortMode} onChange={(e) => save.mutate(e.target.value as SettingsDto['autoSortMode'])} disabled={save.isPending}>
+            <option value="off">Spento: nessun suggerimento di progetto</option>
+            <option value="suggest">Solo suggerimenti</option>
+            <option value="auto">Automatico quando la regola si è dimostrata affidabile</option>
+          </select>
+        </label>
+        <div className="pm-settings__autosort">
+          {stats && stats.total === 0 && (
+            <span>La regola è in osservazione: non ha ancora visto come smisti tu una conversazione per cui avrebbe deciso.</span>
+          )}
+          {stats && stats.total > 0 && (
+            <span>
+              La regola ha deciso <strong>{stats.total}</strong> {stats.total === 1 ? 'volta' : 'volte'}: <strong>{stats.agree}</strong> come te ({pct}%).{' '}
+              {stats.reliable ? 'È affidabile.' : `Servono almeno 10 casi con il 90% di decisioni giuste.`}
+            </span>
+          )}
+          {stats && stats.pending > 0 && <span className="pm-muted"> {stats.pending} in attesa di un tuo gesto.</span>}
+          {settings.autoSortMode === 'auto' && stats && (
+            <span className={stats.reliable ? 'pm-ok' : 'pm-muted'}>
+              {stats.reliable ? `Lo smistamento automatico è attivo (${stats.autoMoves} spostamenti finora).` : 'Lo smistamento automatico partirà da solo quando la regola sarà affidabile.'}
+            </span>
+          )}
+        </div>
+        <span className="pm-row__sub">
+          La regola sposta una conversazione nuova solo se almeno due segnali su tre (persone, contenuto simile, analizzatore) indicano lo stesso
+          progetto, il progetto ha almeno 5 conversazioni e non l'hai mai rifiutato per quel mittente. Ogni spostamento si può annullare.
+        </span>
+      </div>
+    </Section>
+  );
+}
 
 /** Impostazioni generali di composizione: formato, carattere, citazione. Le firme stanno negli account. */
 function Compose() {

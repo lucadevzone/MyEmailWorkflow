@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, Bookmark, Ellipsis, FolderInput, FolderPlus, Paperclip, Reply, SquareCheck, StickyNote, X } from 'lucide-react';
 import type { ConversationDetail, ConversationListItem, MessageDto, SuggestionDto } from '@mmw/shared';
@@ -58,6 +58,17 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
       navigate(paths.newProject({ name: sug.payload.projectName as string, description: sug.payload.reason as string | undefined, suggestion: sug.id, conversation: c.id })),
   });
   const ctx = useContextMenu(() => actions.menuSpec(focused));
+  // Smistata da sola, aperta e poi lasciata senza annullare: la regola aveva ragione (RF-E6).
+  const wasFocused = useRef(focused);
+  const qcItem = useQueryClient();
+  useEffect(() => {
+    if (wasFocused.current && !focused && c.autoSorted) {
+      void api.keepAutoSort(c.id).then(() => {
+        for (const k of [['conversations'], ['auto-sort-stats']]) qcItem.invalidateQueries({ queryKey: k });
+      });
+    }
+    wasFocused.current = focused;
+  }, [focused]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const suggestions = c.suggestions.filter((s) => actions.suggestionLabel(s) && (s.kind !== 'task' || c.projectId));
   const title = c.summary ?? c.subject ?? '(nessun oggetto)';
@@ -84,7 +95,7 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
       <article ref={ref} className="pm-conv" data-conversation={c.id} {...ctx}>
         <button type="button" onClick={cb.onFocus} style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="pm-conv__head">
-            <span className="pm-conv__title">{title}<NewBadge n={c.unreadCount} /></span>
+            <span className="pm-conv__title">{title}<NewBadge n={c.unreadCount} />{c.autoSorted && <AutoSortedBadge c={c} />}</span>
             <span className="pm-conv__date">
               {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}
               {c.important && <Ic icon={Bookmark} size={14} className="pm-bookmark" label="Contiene messaggi importanti" />}
@@ -151,6 +162,35 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
 }
 
 /** Badge dopo il titolo: messaggi arrivati e non ancora letti. */
+/**
+ * Conversazione smistata da sola (RF-E6): "smistata automaticamente · Annulla". Annulla la riporta in
+ * Da smistare (e la regola impara); aperta e lasciata lì, il segno sparisce e conta come giusta.
+ */
+function AutoSortedBadge({ c }: { c: ConversationListItem }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const refresh = () => {
+    for (const k of [['conversations'], ['counts'], ['projects'], ['auto-sort-stats']]) qc.invalidateQueries({ queryKey: k });
+  };
+  return (
+    <span className="pm-autobadge" title="Spostata qui dallo smistamento automatico">
+      smistata automaticamente
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          void api.undoAutoSort(c.id).then(() => {
+            refresh();
+            toast({ text: 'Riportata in Da smistare: non la sposterò più così per questo mittente' });
+          });
+        }}
+      >
+        Annulla
+      </button>
+    </span>
+  );
+}
+
 function NewBadge({ n }: { n: number }) {
   if (n <= 0) return null;
   return <span className="pm-newbadge" title={`${n} da leggere`}>{n === 1 ? 'nuova' : `${n} nuove`}</span>;
@@ -235,6 +275,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
               {title}
             </button>
             <NewBadge n={c.unreadCount} />
+            {c.autoSorted && <AutoSortedBadge c={c} />}
           </h2>
           <span className="pm-conv__date" style={{ paddingTop: 3 }}>
             {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}

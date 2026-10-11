@@ -276,3 +276,11 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
 .pm-subtabs__sep { width: 1px; height: 16px; background: var(--border-strong); margin: 0 10px; flex: none; }
 .pm-subtabs__sig { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
 .pm-subtabs__sig:hover { background: var(--surface-chip); color: var(--ink-2); }
+
+/* Smistata automaticamente (RF-E6) */
+.pm-autobadge {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; padding: 1px 4px 1px 8px; border-radius: 999px; vertical-align: 2px;
+  background: #F1EEFD; color: #3C3489; border: 1px solid #CFC8F3; font-size: 12px; font-weight: 500; line-height: 18px; white-space: nowrap;
+}
+.pm-autobadge button { border: 0; background: #fff; color: #3C3489; font: inherit; font-weight: 600; padding: 0 8px; border-radius: 999px; cursor: pointer; }
+.pm-autobadge button:hover { background: #3C3489; color: #fff; }
