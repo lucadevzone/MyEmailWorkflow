@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import type { JobRunner } from '../jobs/runner.ts';
+import type { JobQueueStatusDto } from '@mmw/shared';
 import { autoSortStats } from '../ai/auto-sort-log.ts';
 import { SignatureError, SignatureService, signatureInputSchema } from '../signatures/service.ts';
 import { CredentialError } from '../mail/credentials.ts';
@@ -52,6 +54,7 @@ export interface RouteDeps {
   drafts: DraftService;
   assistant: AssistantService;
   search: SearchService;
+  jobs: JobRunner;
 }
 
 function parse<T>(schema: ZodType<T>, body: unknown): T {
@@ -153,7 +156,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues.map((i) => i.message).join('; ') });
     const updated = settingsSvc.update(parsed.data);
     if (parsed.data.activityBatchMinutes !== undefined) deps.runner.schedule();
+    // Analisi ripresa: si riparte subito dai lavori in attesa.
+    if (parsed.data.aiPaused === false) deps.jobs.kick();
     return updated;
+  });
+
+  app.get('/api/jobs/status', async (): Promise<JobQueueStatusDto> => {
+    const st = deps.jobs.status();
+    return { paused: settingsSvc.get().aiPaused, ...st };
   });
 
   // ─── Sync ──────────────────────────────────────────────────────────────────

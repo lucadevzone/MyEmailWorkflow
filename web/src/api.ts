@@ -14,6 +14,7 @@ import type {
   ProjectSuggestion,
   ResourceDto,
   DraftDto,
+  JobQueueStatusDto,
   SignatureDto,
   DraftPatch,
   AssistantMessageDto,
@@ -103,6 +104,7 @@ export const api = {
   settings: () => request<SettingsDto>('GET', '/api/settings'),
   syncStatus: () => request<SyncStatusDto[]>('GET', '/api/sync/status'),
   syncNow: () => request<SyncStatusDto[]>('POST', '/api/sync/now'),
+  jobsStatus: () => request<JobQueueStatusDto>('GET', '/api/jobs/status'),
   conversations: (q: ConversationQuery) => {
     const p = new URLSearchParams({ view: q.view });
     if (q.projectId) p.set('projectId', q.projectId);

@@ -30,3 +30,6 @@
 .pm-activity__status--running { background: var(--accent-soft); color: var(--accent); }
 .pm-activity__status--failed { background: #FBE9EC; color: var(--danger); }
 .pm-activity__status--done { background: var(--task-bg); color: var(--task-heading); }
+
+/* Analisi in background: pausa / ripresa */
+.pm-analysis--paused { border-color: #E8C9A0; background: #FDF6EC; color: #8A5A1A; }

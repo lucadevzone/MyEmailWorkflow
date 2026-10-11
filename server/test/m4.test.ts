@@ -188,6 +188,21 @@ describe('progetto suggerito', () => {
     expect(projectSugs(conv().list({ view: 'inbox' }).find((x) => x.id === e))).toEqual([]);
   });
 
+  it('pausa dell\'analisi: i lavori restano in coda e ripartono alla ripresa', async () => {
+    s.settings.update({ aiPaused: true });
+    const r = await mail({ id: '<p@x>', from: 'mario@x.it', subject: 'Spese', body: 'spese del personale PNRR' });
+    await s.jobs.drain();
+    const summaryOf = () => s.db.select().from(conversations).where(eq(conversations.id, r.conversationId)).get()!.summary;
+    expect(summaryOf()).toBeNull();
+    const st = s.jobs.status();
+    expect(st.pending).toBeGreaterThan(0);
+    expect(st.byKind.summarize).toBe(1);
+    s.settings.update({ aiPaused: false });
+    await s.jobs.drain();
+    expect(summaryOf()).toBe('sintesi');
+    expect(s.jobs.status().pending).toBe(0);
+  });
+
   it('accettare sposta la conversazione; scartare non ripropone quel progetto', async () => {
     await seedPnrr();
     const a = await mail({ id: '<a@x>', from: 'mario@x.it', subject: 'Spese', body: 'spese del personale PNRR' });

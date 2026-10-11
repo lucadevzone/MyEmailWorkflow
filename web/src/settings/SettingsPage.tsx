@@ -574,6 +574,10 @@ function AiModel() {
               {settings.llmModel && !installed.includes(settings.llmModel) && <option value={settings.llmModel}>{settings.llmModel}</option>}
             </select>
           </label>
+          <label className="pm-field pm-field--check">
+            <input type="checkbox" checked={settings.aiPaused} onChange={(e) => save.mutate({ aiPaused: e.target.checked })} />
+            <span>Metti in pausa l'analisi in background (sintesi, classificazione, indicizzazione); l'assistente resta attivo</span>
+          </label>
           <label className="pm-field">
             <span className="pm-muted">Tieni il modello in memoria dopo l'ultimo uso</span>
             <select

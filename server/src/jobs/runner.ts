@@ -15,7 +15,8 @@ export class JobRunner {
   private stopped = true;
   private timer: NodeJS.Timeout | null = null;
 
-  constructor(private db: Db) {}
+  /** paused: quando è vero non si prendono lavori nuovi (quello in corso finisce). */
+  constructor(private db: Db, private paused: () => boolean = () => false) {}
 
   register(kind: string, handler: JobHandler) {
     this.handlers.set(kind, handler);
@@ -60,7 +61,25 @@ export class JobRunner {
     }
   }
 
+  /** Lavori in attesa per tipo, e quello in corso (per la barra di stato). */
+  status(): { pending: number; byKind: Record<string, number>; running: string | null } {
+    const rows = this.db
+      .select({ kind: jobs.kind, status: jobs.status, n: sql<number>`count(*)` })
+      .from(jobs)
+      .where(sql`${jobs.status} in ('pending', 'running')`)
+      .groupBy(jobs.kind, jobs.status)
+      .all();
+    const byKind: Record<string, number> = {};
+    let running: string | null = null;
+    for (const r of rows) {
+      if (r.status === 'running') running = r.kind;
+      else byKind[r.kind] = (byKind[r.kind] ?? 0) + r.n;
+    }
+    return { pending: Object.values(byKind).reduce((a, b) => a + b, 0), byKind, running };
+  }
+
   private async runOne(): Promise<boolean> {
+    if (this.paused()) return false;
     const job = this.db
       .select()
       .from(jobs)

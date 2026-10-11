@@ -18,6 +18,7 @@ export const settingsPatchSchema = z
     llmModel: z.string().trim().min(1).max(120).nullable(),
     ollamaKeepAliveMinutes: z.number().int().min(-1).max(24 * 60),
     autoSortMode: z.enum(['off', 'suggest', 'auto']),
+    aiPaused: z.boolean(),
     composeFormat: z.enum(['text', 'html']),
     composeFont: z.enum(['sans', 'serif', 'mono']),
     composeFontSize: z.enum(['small', 'normal', 'large']),

@@ -80,6 +80,8 @@ export interface SettingsDto {
   llmModel: string | null;
   /** Minuti per cui il modello resta caricato in memoria dopo l'ultima richiesta; -1 = sempre. */
   ollamaKeepAliveMinutes: number;
+  /** Analisi in background in pausa (sintesi, classificazione, task, indicizzazione): l'assistente resta attivo. */
+  aiPaused: boolean;
   /** Smistamento della posta nuova: niente, solo suggerimenti, o automatico quando la regola è affidabile (RF-E6). */
   autoSortMode: 'off' | 'suggest' | 'auto';
   /** Formato con cui nasce una bozza nuova. */
@@ -113,6 +115,7 @@ export const DEFAULT_SETTINGS: SettingsDto = {
   llmModel: null,
   ollamaKeepAliveMinutes: 30,
   autoSortMode: 'suggest',
+  aiPaused: false,
   composeFormat: 'html',
   composeFont: 'sans',
   composeFontSize: 'normal',
@@ -595,4 +598,14 @@ export interface AnnotationMarkDto {
   itemId: string;
   label: string;
   done: boolean;
+}
+
+/** Stato della coda dell'analisi in background (barra di stato). */
+export interface JobQueueStatusDto {
+  paused: boolean;
+  /** Lavori in attesa, in totale e per tipo (summarize, classify, embed, …). */
+  pending: number;
+  byKind: Record<string, number>;
+  /** Tipo del lavoro in corso, se ce n'è uno. */
+  running: string | null;
 }

@@ -56,7 +56,7 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
   const actions = new MailActions({ db, sqlite, activities, runner, getAccount: (id) => accounts.get(id), blobs, getSettings: () => settings.get() });
   const people = new PeopleService(db, sqlite, blobs);
   const notes = new NotesService(db, blobs);
-  const jobs = new JobRunner(db);
+  const jobs = new JobRunner(db, () => settings.get().aiPaused);
   const summarizer = o.summarizer ?? ollamaSummarizer;
   jobs.register('summarize', (p) => summarizeConversation(db, (p as { conversationId: string }).conversationId, summarizer));
   const embedder = o.embedder ?? ollamaEmbedder;

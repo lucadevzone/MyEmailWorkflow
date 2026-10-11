@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Clock, ListTodo } from 'lucide-react';
+import { Clock, ListTodo, Pause, Play } from 'lucide-react';
 import type { SyncStatusDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
@@ -60,6 +60,50 @@ export function StatusBar() {
       >
         Ollama
       </span>
+      <AnalysisToggle />
     </footer>
+  );
+}
+
+const KIND: Record<string, string> = {
+  summarize: 'sintesi',
+  classify: 'classificazione',
+  embed: 'indicizzazione per la ricerca',
+  extract_tasks: 'task suggeriti',
+  suggest_actions: 'azioni suggerite',
+};
+
+/**
+ * Analisi in background (sintesi, classificazione, indicizzazione…): quanti lavori aspettano e un
+ * pulsante per metterla in pausa, ad esempio durante il primo import di una casella grande.
+ * L'assistente resta disponibile anche in pausa.
+ */
+function AnalysisToggle() {
+  const qc = useQueryClient();
+  const { data: st } = useQuery({ queryKey: ['jobs-status'], queryFn: api.jobsStatus, refetchInterval: 5000 });
+  const toggle = useMutation({
+    mutationFn: (aiPaused: boolean) => api.updateSettings({ aiPaused }),
+    onSuccess: (s) => {
+      qc.setQueryData(['settings'], s);
+      qc.invalidateQueries({ queryKey: ['jobs-status'] });
+    },
+  });
+  if (!st || (!st.paused && st.pending === 0 && !st.running)) return null;
+  const detail = Object.entries(st.byKind)
+    .map(([k, n]) => `${n} ${KIND[k] ?? k}`)
+    .join(', ');
+  const count = st.pending.toLocaleString('it-IT');
+  return (
+    <button
+      type="button"
+      className={`pm-btn pm-btn--secondary pm-btn--xs pm-analysis${st.paused ? ' pm-analysis--paused' : ''}`}
+      title={`${st.paused ? 'Analisi in pausa: clic per riprendere' : 'Analisi in corso: clic per metterla in pausa'}${detail ? ` · in coda: ${detail}` : ''}${st.running && !st.paused ? ` · ora: ${KIND[st.running] ?? st.running}` : ''}`}
+      aria-pressed={st.paused}
+      disabled={toggle.isPending}
+      onClick={() => toggle.mutate(!st.paused)}
+    >
+      <Ic icon={st.paused ? Play : Pause} size={14} />
+      {st.paused ? `Analisi in pausa · ${count} in attesa` : `Analisi · ${count} in coda`}
+    </button>
   );
 }
