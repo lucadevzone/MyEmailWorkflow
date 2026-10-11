@@ -6,7 +6,7 @@
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type Database from 'better-sqlite3';
 import type { Db } from '../db/client.ts';
-import { accounts, conversations, messages, projects, suggestions } from '../db/schema.ts';
+import { accounts, activities, conversations, messages, projects, suggestions } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
 import { bus } from '../events/bus.ts';
 import { config } from '../config.ts';
@@ -14,6 +14,7 @@ import { enqueueJob, PRIORITY } from '../jobs/queue.ts';
 import type { PeopleService } from '../people/service.ts';
 import { similarConversations } from './embed.ts';
 import { contentVote, decide, peopleVote, type SignalKind, type Vote } from './auto-sort.ts';
+import { autoSortStats, isBlocked, recordDecision } from './auto-sort-log.ts';
 
 export type Llm = <T>(system: string, user: string) => Promise<T>;
 
@@ -92,11 +93,16 @@ export function clearProjectSuggestions(db: Db, conversationId: string) {
     .run();
 }
 
-export async function classifyConversation(deps: { db: Db; sqlite: Database.Database; people: PeopleService; llm: Llm }, conversationId: string) {
+export async function classifyConversation(
+  deps: { db: Db; sqlite: Database.Database; people: PeopleService; llm: Llm; autoSortMode?: () => 'off' | 'suggest' | 'auto' },
+  conversationId: string,
+) {
   const { db, sqlite } = deps;
+  const mode = deps.autoSortMode?.() ?? 'suggest';
   const conv = db.select().from(conversations).where(eq(conversations.id, conversationId)).get();
   const done = () => db.update(conversations).set({ classifiedAt: now() }).where(eq(conversations.id, conversationId)).run();
-  if (!conv || conv.deletedAt || conv.trashedAt || conv.projectId || conv.isNoise) {
+  // "Spento" nelle impostazioni: nessun suggerimento di progetto.
+  if (!conv || conv.deletedAt || conv.trashedAt || conv.projectId || conv.isNoise || mode === 'off') {
     clearProjectSuggestions(db, conversationId);
     if (conv) done();
     return;
@@ -235,6 +241,17 @@ export async function classifyConversation(deps: { db: Db; sqlite: Database.Data
   });
 
   clearProjectSuggestions(db, conversationId);
+  // Regola soddisfatta: si annota la decisione; se la regola si è dimostrata affidabile e l'utente
+  // ha scelto l'automatico, la conversazione si sposta davvero.
+  if (decision.ruleOk && decision.projectId) {
+    const auto = mode === 'auto' && autoSortStats(db).reliable;
+    recordDecision(db, { conversationId, projectId: decision.projectId, sender: senderOf(msgs, own), mode: auto ? 'auto' : 'shadow' });
+    if (auto) {
+      autoMove(db, conversationId, active.find((x) => x.id === decision.projectId)!, conv.subject, decision.votes.map((v) => v.reason).join(' · '));
+      done();
+      return;
+    }
+  }
   if (decision.projectId) {
     const p = active.find((x) => x.id === decision.projectId)!;
     const s = scored.find((x) => x.p.id === p.id);
@@ -259,14 +276,32 @@ export async function classifyConversation(deps: { db: Db; sqlite: Database.Data
   bus.publish({ type: 'conversations', ids: [conversationId] });
 }
 
+/** Smistamento automatico: sposta, mette il segno sulla conversazione e lascia una voce in Attività. */
+function autoMove(db: Db, conversationId: string, p: { id: string; name: string }, subject: string | null, reason: string) {
+  const t = now();
+  db.transaction((tx) => {
+    tx.update(conversations).set({ projectId: p.id, autoSortedAt: t, isNoise: false, updatedAt: t }).where(eq(conversations.id, conversationId)).run();
+    tx.insert(activities)
+      .values({
+        id: newId(),
+        kind: 'auto_sort',
+        accountId: null,
+        payload: JSON.stringify({ label: `Smistata automaticamente in ${p.name}: «${subject ?? '(senza oggetto)'}» (${reason})`, conversationId, projectId: p.id }),
+        status: 'done',
+        createdAt: t,
+        updatedAt: t,
+        executedAt: t,
+      })
+      .run();
+  });
+  bus.publish({ type: 'conversations', ids: [conversationId] });
+  bus.publish({ type: 'projects' });
+  bus.publish({ type: 'activities' });
+}
+
 /** Mittente della conversazione: chi ha scritto il primo messaggio arrivato (non i propri account). */
 export function senderOf(msgs: { direction: string; fromAddress: string | null }[], own: Set<string>): string | null {
   return msgs.find((m) => m.direction === 'in' && m.fromAddress && !own.has(m.fromAddress))?.fromAddress?.toLowerCase() ?? null;
-}
-
-/** Quel progetto è stato rifiutato per quel mittente (vedi il registro dell'osservazione). */
-function isBlocked(_db: Db, _sender: string | null, _projectId: string): boolean {
-  return false;
 }
 
 function saveSuggestion(db: Db, conversationId: string, kind: 'project' | 'new_project', confidence: number, payload: ProjectSuggestionPayload) {

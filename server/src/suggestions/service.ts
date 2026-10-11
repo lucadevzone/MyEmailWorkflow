@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { resolveByReject } from '../ai/auto-sort-log.ts';
 import type { Db } from '../db/client.ts';
 import { suggestions } from '../db/schema.ts';
 import { now } from '../lib/ids.ts';
@@ -61,6 +62,10 @@ export class SuggestionService {
   reject(id: string): { conversationId: string } {
     const r = this.get(id);
     this.resolve(id, 'rejected');
+    if (r.kind === 'project' && r.subjectType === 'conversation') {
+      const projectId = (JSON.parse(r.payload) as { projectId: string | null }).projectId;
+      if (projectId) resolveByReject(this.db, r.subjectId, projectId);
+    }
     return { conversationId: r.subjectId };
   }
 

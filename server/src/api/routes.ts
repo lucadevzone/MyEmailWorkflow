@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { autoSortStats } from '../ai/auto-sort-log.ts';
 import { SignatureError, SignatureService, signatureInputSchema } from '../signatures/service.ts';
 import { CredentialError } from '../mail/credentials.ts';
 import type { HealthDto } from '@mmw/shared';
@@ -366,6 +367,14 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     deps.actions.detach(req.params.id, req.body && 'projectId' in req.body ? req.body.projectId : undefined, req.body?.withReplies !== false),
   );
   app.post<{ Params: { id: string } }>('/api/conversations/:id/rejoin', async (req) => deps.actions.rejoin(req.params.id));
+
+  // Smistamento automatico (RF-E6): tenere (il segno sparisce) o annullare (torna in Da smistare).
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/auto-sort/keep', async (req) => {
+    deps.actions.keepAutoSort(req.params.id);
+    return { ok: true };
+  });
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/auto-sort/undo', async (req) => deps.actions.move(req.params.id, null));
+  app.get('/api/auto-sort/stats', async () => autoSortStats(deps.db));
 
   app.post<{ Params: { id: string } }>('/api/messages/:id/block-send', async (req) => {
     const row = deps.activities.sendFor(req.params.id);

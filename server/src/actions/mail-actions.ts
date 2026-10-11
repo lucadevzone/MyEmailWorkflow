@@ -1,5 +1,6 @@
 // Azioni dell'utente sulla posta: effetto locale immediato + attività in coda per il server.
 
+import { resolveByKeep, resolveByMove } from '../ai/auto-sort-log.ts';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { ulid } from 'ulid';
@@ -169,8 +170,11 @@ export class MailActions {
   move(conversationId: string, projectId: string | null) {
     const res = this.conv.move(conversationId, projectId);
     if (!res) throw new ActionError('Conversazione non trovata');
-    // Il progetto ora l'ha scelto l'utente: i suggerimenti in attesa non servono più.
+    // Il progetto ora l'ha scelto l'utente: i suggerimenti in attesa non servono più, e la regola
+    // dello smistamento automatico impara se aveva deciso come lui (RF-E6).
     clearProjectSuggestions(this.deps.db, conversationId);
+    resolveByMove(this.deps.db, conversationId, projectId);
+    this.deps.db.update(conversations).set({ autoSortedAt: null }).where(eq(conversations.id, conversationId)).run();
     clearActionSuggestions(this.deps.db, conversationId, ['noise']);
     if (!projectId) enqueueClassification(this.deps.db, conversationId, PRIORITY.background);
     bus.publish({ type: 'conversations', ids: [conversationId] });
@@ -269,6 +273,15 @@ export class MailActions {
     bus.publish({ type: 'conversations', ids: [origin.id, c.id] });
     bus.publish({ type: 'projects' });
     return { conversationId: target };
+  }
+
+  /** Conversazione smistata da sola, vista e tenuta lì: il segno sparisce e la regola aveva ragione. */
+  keepAutoSort(conversationId: string) {
+    const c = this.deps.db.select({ at: conversations.autoSortedAt }).from(conversations).where(eq(conversations.id, conversationId)).get();
+    if (!c?.at) return;
+    resolveByKeep(this.deps.db, conversationId);
+    this.deps.db.update(conversations).set({ autoSortedAt: null }).where(eq(conversations.id, conversationId)).run();
+    bus.publish({ type: 'conversations', ids: [conversationId] });
   }
 
   /** Nuova email o risposta, sempre da un progetto: il mittente è l'account del progetto. */

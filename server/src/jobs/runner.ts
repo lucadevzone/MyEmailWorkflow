@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, lte, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import { jobs } from '../db/schema.ts';
 import { now } from '../lib/ids.ts';
@@ -65,7 +65,9 @@ export class JobRunner {
       .select()
       .from(jobs)
       .where(and(eq(jobs.status, 'pending'), lte(jobs.runAfter, now())))
-      .orderBy(desc(jobs.priority), asc(jobs.createdAt))
+      // A parità di priorità e di momento (stessa email), prima l'indicizzazione: la classificazione
+      // usa la somiglianza, che richiede gli embedding della conversazione.
+      .orderBy(desc(jobs.priority), asc(jobs.createdAt), asc(sql`case ${jobs.kind} when 'embed' then 0 when 'classify' then 2 else 1 end`))
       .get();
     if (!job) return false;
     const handler = this.handlers.get(job.kind);

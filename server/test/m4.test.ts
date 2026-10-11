@@ -135,6 +135,59 @@ describe('progetto suggerito', () => {
     expect((sug!.payload as { reason: string }).reason).toContain('Mario Rossi: 5 conversazioni su 5 in PNRR');
   });
 
+  it('smistamento automatico: prima osserva, si attiva dopo 10 casi giusti, annulla blocca il mittente, tenere conferma', async () => {
+    const { autoSortLog, activities } = await import('../src/db/schema.ts');
+    const { autoSortStats } = await import('../src/ai/auto-sort-log.ts');
+    s.settings.update({ autoSortMode: 'auto' });
+    for (let i = 1; i <= 5; i++) {
+      const r = await mail({ id: `<g${i}@x>`, from: 'Mario Rossi <mario@x.it>', subject: `Rendicontazione PNRR ${i}`, body: 'Rendicontazione trimestrale del progetto PNRR, spese del personale.' });
+      s.actions.move(r.conversationId, pnrr);
+    }
+    await s.jobs.drain();
+    const newMail = async (n: number) => {
+      const r = await mail({ id: `<m${n}@x>`, from: 'Mario Rossi <mario@x.it>', subject: `Spese ${n}`, body: 'Ti mando le spese del personale per la rendicontazione PNRR.' });
+      await s.jobs.drain();
+      return r.conversationId;
+    };
+    const projectOf = (id: string) => s.db.select().from(conversations).where(eq(conversations.id, id)).get()!.projectId;
+
+    // 1. In osservazione: la regola è soddisfatta ma non è ancora affidabile → resta un suggerimento.
+    const a = await newMail(1);
+    expect(projectOf(a)).toBeNull();
+    expect(s.db.select().from(autoSortLog).all()).toMatchObject([{ conversationId: a, projectId: pnrr, mode: 'shadow', outcome: null, sender: 'mario@x.it' }]);
+    s.suggestions.accept(projectSugs(conv().list({ view: 'inbox' }).find((c) => c.id === a))[0]!.id);
+    expect(autoSortStats(s.db)).toMatchObject({ agree: 1, total: 1, reliable: false });
+
+    // 2. Dopo 10 decisioni confermate su 10 la regola è affidabile: la conversazione nuova si sposta da sola.
+    const t = Date.now();
+    for (let i = 0; i < 9; i++) s.db.insert(autoSortLog).values({ id: `ok${i}`, conversationId: `c${i}`, projectId: pnrr, sender: 'x@y.it', mode: 'shadow', outcome: 'agree', createdAt: t, resolvedAt: t }).run();
+    expect(autoSortStats(s.db).reliable).toBe(true);
+    const b = await newMail(2);
+    expect(projectOf(b)).toBe(pnrr);
+    expect(conv().list({ view: 'project', projectId: pnrr }).find((c) => c.id === b)!.autoSorted).toBe(true);
+    expect(s.db.select().from(activities).all().filter((x) => x.kind === 'auto_sort')).toHaveLength(1);
+
+    // 3. Tenerla: il segno sparisce e conta come giusta.
+    s.actions.keepAutoSort(b);
+    expect(conv().list({ view: 'project', projectId: pnrr }).find((c) => c.id === b)!.autoSorted).toBe(false);
+
+    // 4. Annullarne una: torna in Da smistare, conta come errore e blocca Mario → PNRR.
+    const c = await newMail(3);
+    expect(projectOf(c)).toBe(pnrr);
+    s.actions.move(c, null);
+    await s.jobs.drain();
+    expect(projectOf(c)).toBeNull();
+    const sug = projectSugs(conv().list({ view: 'inbox' }).find((x) => x.id === c))[0];
+    expect(sug?.payload).toMatchObject({ projectId: pnrr, ruleOk: false, ruleWhy: 'già rifiutato per questo mittente' });
+    const d = await newMail(4);
+    expect(projectOf(d)).toBeNull(); // niente più automatico per Mario → PNRR
+
+    // 5. Spento: nessun suggerimento di progetto.
+    s.settings.update({ autoSortMode: 'off' });
+    const e = await newMail(5);
+    expect(projectSugs(conv().list({ view: 'inbox' }).find((x) => x.id === e))).toEqual([]);
+  });
+
   it('accettare sposta la conversazione; scartare non ripropone quel progetto', async () => {
     await seedPnrr();
     const a = await mail({ id: '<a@x>', from: 'mario@x.it', subject: 'Spese', body: 'spese del personale PNRR' });

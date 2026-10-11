@@ -182,6 +182,7 @@ export class ConversationService {
         id: r.id,
         subject: r.subject,
         splitFromId: r.splitFromId,
+        autoSorted: r.autoSortedAt != null,
         summary: r.summary,
         summaryDetailed: r.summaryDetailed,
         snippet: snippetById.get(r.id) ?? null,

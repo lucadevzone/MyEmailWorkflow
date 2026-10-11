@@ -80,6 +80,8 @@ export interface SettingsDto {
   llmModel: string | null;
   /** Minuti per cui il modello resta caricato in memoria dopo l'ultima richiesta; -1 = sempre. */
   ollamaKeepAliveMinutes: number;
+  /** Smistamento della posta nuova: niente, solo suggerimenti, o automatico quando la regola è affidabile (RF-E6). */
+  autoSortMode: 'off' | 'suggest' | 'auto';
   /** Formato con cui nasce una bozza nuova. */
   composeFormat: ComposeFormat;
   /** Carattere e dimensione delle mail HTML. */
@@ -110,6 +112,7 @@ export const DEFAULT_SETTINGS: SettingsDto = {
   initialSyncDays: 90,
   llmModel: null,
   ollamaKeepAliveMinutes: 30,
+  autoSortMode: 'suggest',
   composeFormat: 'html',
   composeFont: 'sans',
   composeFontSize: 'normal',
@@ -153,6 +156,8 @@ export interface ConversationListItem {
   subject: string | null;
   /** Staccata a mano da questa conversazione (RF-C5): si può riunire. */
   splitFromId: string | null;
+  /** Smistata da sola nel progetto e non ancora aperta (RF-E6). */
+  autoSorted: boolean;
   /** Chiave d'ordine della lista: ultimo messaggio, o il momento del distacco se più recente. */
   sortAt: number;
   /** Sintesi breve generata dall'LLM (null finché non è pronta). */
@@ -425,7 +430,7 @@ export interface ProjectInput {
 
 // ─── Coda attività ───────────────────────────────────────────────────────────
 
-export type ActivityKind = 'send' | 'trash' | 'archive' | 'set_flags';
+export type ActivityKind = 'send' | 'trash' | 'archive' | 'set_flags' | 'auto_sort';
 export type ActivityStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled';
 
 export interface ActivityDto {

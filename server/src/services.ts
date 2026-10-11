@@ -62,7 +62,9 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
   const embedder = o.embedder ?? ollamaEmbedder;
   jobs.register('embed', (p) => embedMessage(db, sqlite, (p as { messageId: string }).messageId, embedder));
   const llm: Llm = o.llm ?? ollamaJson;
-  jobs.register('classify', (p) => classifyConversation({ db, sqlite, people, llm }, (p as { conversationId: string }).conversationId));
+  jobs.register('classify', (p) =>
+    classifyConversation({ db, sqlite, people, llm, autoSortMode: () => settings.get().autoSortMode }, (p as { conversationId: string }).conversationId),
+  );
   jobs.register('extract_tasks', (p) => extractTasks(db, (p as { messageId: string }).messageId, llm));
   jobs.register('suggest_actions', (p) => suggestActions(db, (p as { messageId: string }).messageId, llm, (sha) => blobs.read(sha)));
   const tasks = new TaskService(db);

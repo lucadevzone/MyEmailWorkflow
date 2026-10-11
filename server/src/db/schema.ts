@@ -121,6 +121,8 @@ export const conversations = sqliteTable(
     splitFromId: text('split_from_id'),
     /** Quando è stata staccata: fino a un messaggio più recente sta in cima alla lista. */
     splitAt: integer('split_at'),
+    /** Smistata da sola (RF-E6): segno "smistata automaticamente · Annulla" finché non la si apre. */
+    autoSortedAt: integer('auto_sorted_at'),
     ...meta(),
   },
   (t) => [
@@ -389,7 +391,8 @@ export const activities = sqliteTable(
   'activities',
   {
     id: text('id').primaryKey(),
-    kind: text('kind', { enum: ['send', 'trash', 'archive', 'set_flags'] }).notNull(),
+    // auto_sort: smistamento automatico (solo locale, nasce già eseguito: è una voce di cronologia).
+    kind: text('kind', { enum: ['send', 'trash', 'archive', 'set_flags', 'auto_sort'] }).notNull(),
     accountId: text('account_id').references(() => accounts.id),
     payload: text('payload').notNull(),
     status: text('status', { enum: ['pending', 'running', 'done', 'failed', 'cancelled'] })
@@ -403,6 +406,28 @@ export const activities = sqliteTable(
     executedAt: integer('executed_at'),
   },
   (t) => [index('activities_status').on(t.status, t.createdAt)],
+);
+
+/**
+ * Registro dello smistamento automatico (RF-E6): cosa avrebbe deciso (o ha deciso) la regola e cosa ha
+ * fatto poi l'utente. Da qui la precisione misurata e i blocchi mittente → progetto.
+ */
+export const autoSortLog = sqliteTable(
+  'auto_sort_log',
+  {
+    id: text('id').primaryKey(),
+    conversationId: text('conversation_id').notNull(),
+    projectId: text('project_id').notNull(),
+    /** Mittente della conversazione (indirizzo), per bloccare la coppia mittente → progetto dopo un rifiuto. */
+    sender: text('sender'),
+    /** shadow = solo osservazione; auto = spostata davvero. */
+    mode: text('mode', { enum: ['shadow', 'auto'] }).notNull(),
+    /** Come ha deciso l'utente rispetto alla regola; null = non ancora. */
+    outcome: text('outcome', { enum: ['agree', 'disagree'] }),
+    createdAt: integer('created_at').notNull(),
+    resolvedAt: integer('resolved_at'),
+  },
+  (t) => [index('auto_sort_conv').on(t.conversationId), index('auto_sort_sender').on(t.sender, t.projectId)],
 );
 
 /** Coda interna di lavori in background (parsing, analisi, embedding, backfill). */
