@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { findAskSources } from '../ai/ask-sources.ts';
 import { SignatureError, SignatureService, signatureInputSchema } from '../signatures/service.ts';
 import { CredentialError } from '../mail/credentials.ts';
 import type { HealthDto } from '@mmw/shared';
@@ -672,9 +673,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     let sources = ids;
     let found: { conversationId: string; projectId: string | null; isNoise: boolean; title: string }[] = [];
     if (!sources.length) {
-      const res = await deps.search.search(question, 'all', { loose: true });
-      found = res.conversations.slice(0, 6).map((c) => ({ conversationId: c.conversationId, projectId: c.projectId, isNoise: c.isNoise, title: c.title }));
-      sources = res.conversations.slice(0, 6).map((c) => ({ conversationId: c.conversationId, messageId: c.messageId }));
+      const all = await findAskSources(deps.search, question);
+      found = all.map(({ conversationId, projectId, isNoise, title }) => ({ conversationId, projectId, isNoise, title }));
+      sources = all.map(({ conversationId, messageId }) => ({ conversationId, messageId }));
     }
     const abort = new AbortController();
     reply.raw.on('close', () => abort.abort());

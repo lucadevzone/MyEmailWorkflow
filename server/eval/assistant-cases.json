@@ -1,0 +1,98 @@
+{
+  "_info": "Banco di prova dell'assistente sulla posta di prova (lucadevzone@gmail.com). expect: ogni gruppo deve comparire (basta una delle alternative, espressioni regolari senza maiuscole/minuscole). forbid: non deve comparire nessuna. kind: ask = domanda su tutta la posta; read = domanda su una conversazione; compose = scrittura/ritocco.",
+  "cases": [
+    {
+      "id": "palestra-orario-luca",
+      "kind": "ask",
+      "question": "A che ora va in palestra Luca Sabatucci?",
+      "expect": [["14[:.]00|alle 14|ore 14"]]
+    },
+    {
+      "id": "palestra-orario-mio",
+      "kind": "ask",
+      "question": "Da che ora riesco ad andare in palestra io?",
+      "expect": [["15"]],
+      "forbid": ["14[:.]00 sei libero"]
+    },
+    {
+      "id": "palestra-conferma",
+      "kind": "ask",
+      "question": "Luca Sabatucci ha confermato che verrà in palestra con me?",
+      "expect": [["\\bno\\b|non ha confermato|non .*conferm|forse|non è sicuro|ti farà sapere|ti fa sapere"]],
+      "forbid": ["^sì|ha confermato che verrà"]
+    },
+    {
+      "id": "survey-mittente",
+      "kind": "ask",
+      "question": "Chi mi ha mandato il file survey_dataset.csv e quando?",
+      "expect": [["Luca Sabatucci"], ["10 ottobre|10/10|10\\.10|sabato"]]
+    },
+    {
+      "id": "allegato-mio",
+      "kind": "ask",
+      "question": "Quale allegato ho mandato io il 10 ottobre?",
+      "expect": [["checklist"]]
+    },
+    {
+      "id": "promessa-allegati",
+      "kind": "ask",
+      "question": "Cosa mi ha detto Luca Sabatucci che mi avrebbe mandato il giorno dopo?",
+      "expect": [["allegat"]]
+    },
+    {
+      "id": "funzioni-programma",
+      "kind": "ask",
+      "question": "Quali funzioni deve avere il programma di posta descritto nella conversazione Informazioni Sviluppo?",
+      "expect": [["account"], ["progett|contatt|grupp"]]
+    },
+    {
+      "id": "operazioni-background",
+      "kind": "ask",
+      "question": "Come vengono gestite le operazioni sulle email nel programma che stiamo progettando?",
+      "expect": [["background|attività|lista"]]
+    },
+    {
+      "id": "senza-nome",
+      "kind": "ask",
+      "question": "Perché in una mail del 7 ottobre mancava il nome del mittente?",
+      "expect": [["sbagliat|errore"]]
+    },
+    {
+      "id": "non-presente",
+      "kind": "ask",
+      "question": "Qual è il numero di telefono di Mario Rossi?",
+      "expect": [["non (lo )?(trovo|ho trovato|risulta|è presente|c'è|compare|sono presenti|ci sono)|nessun|non (è|viene) (indicato|menzionato|riportato)|non ho informazioni"]],
+      "forbid": ["\\d{3}[ .-]?\\d{3,}"]
+    },
+    {
+      "id": "conv-palestra-riassunto",
+      "kind": "read",
+      "conversation": { "subject": "doman in palestra?" },
+      "action": "summarize",
+      "expect": [["14"], ["15"]]
+    },
+    {
+      "id": "conv-file-scambiati",
+      "kind": "read",
+      "conversation": { "subject": "comunicazione del progetto", "contains": "survey_dataset" },
+      "question": "Quali file sono stati scambiati in questa conversazione?",
+      "expect": [["survey"], ["checklist"]]
+    },
+    {
+      "id": "ritocco-correggi",
+      "kind": "compose",
+      "action": "fix",
+      "draftBody": "ciao, ti mando il documeto domani, grazie mille per la pazienza",
+      "expect": [["documento"]],
+      "forbid": ["^\\s*(ecco|certo|ho corretto|testo corretto)", "documeto"]
+    },
+    {
+      "id": "proposta-risposta",
+      "kind": "compose",
+      "conversation": { "subject": "doman in palestra?" },
+      "question": "Proponi una risposta breve per dirgli che va bene, ci vediamo alle 15",
+      "expect": [["15"]],
+      "forbid": ["^\\s*(ecco|certo)", "oggetto:"]
+    }
+  ]
+}

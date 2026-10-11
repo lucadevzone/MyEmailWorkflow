@@ -220,8 +220,9 @@ export class AssistantService {
   }
 
   /** Risposta in streaming; a fine risposta la coppia domanda/risposta resta nella chat. */
-  async *chat(input: ChatInput, signal?: AbortSignal): AsyncGenerator<string> {
-    const thread = threadOf(input);
+  /** opts.persist = false: non salva la chat (banco di prova). */
+  async *chat(input: ChatInput, signal?: AbortSignal, opts: { persist?: boolean } = {}): AsyncGenerator<string> {
+    const thread = opts.persist === false ? null : threadOf(input);
     const action = input.action ? ACTIONS[input.action] : undefined;
     const mode = action?.mode ?? input.mode;
     const conversationId = input.conversationId ?? null;
