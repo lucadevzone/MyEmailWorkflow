@@ -50,6 +50,15 @@ function SenderRuleDialog({ conversationId, kind, onClose }: { conversationId: s
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SenderRuleResultDto | null>(null);
   const [expanded, setExpanded] = useState(false);
+  // Spuntate di default: si toglie la spunta a quelle da lasciare dove sono.
+  const [unchecked, setUnchecked] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setUnchecked((u) => {
+      const n = new Set(u);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -79,8 +88,8 @@ function SenderRuleDialog({ conversationId, kind, onClose }: { conversationId: s
     if (!result) return;
     setBusy(true);
     try {
-      // L'anteprima ne mostra al massimo 200: per applicarla a tutte si chiede di nuovo l'elenco completo.
-      const ids = result.items.map((i) => i.conversationId);
+      const ids = result.items.map((i) => i.conversationId).filter((id) => !unchecked.has(id));
+      if (!ids.length) return onClose();
       const r = await api.applySenderRule(result.ruleId, ids);
       refresh();
       toast({ text: `Regola applicata ad altre ${r.applied} conversazioni` });
@@ -144,23 +153,35 @@ function SenderRuleDialog({ conversationId, kind, onClose }: { conversationId: s
               <Ic icon={expanded ? ChevronDown : ChevronRight} size={15} /> {expanded ? 'Nascondi' : 'Mostra'} l'elenco
             </button>
             {expanded && (
-              <ul className="pm-rule__list">
-                {result.items.map((i) => (
-                  <li key={i.conversationId}>
-                    <span className="pm-truncate">{i.subject || '(senza oggetto)'}</span>
-                    <span className="pm-muted pm-truncate">{i.from} · {shortDate(i.date)}</span>
-                  </li>
-                ))}
-                {result.total > result.items.length && <li className="pm-muted">…e altre {result.total - result.items.length}</li>}
-              </ul>
+              <>
+                <div className="pm-related__bulk">
+                  <button type="button" className="pm-linkbtn" onClick={() => setUnchecked(new Set())}>Seleziona tutte</button>
+                  <button type="button" className="pm-linkbtn" onClick={() => setUnchecked(new Set(result.items.map((i) => i.conversationId)))}>Deseleziona tutte</button>
+                  <span className="pm-muted">{result.items.length - unchecked.size} di {result.items.length} selezionate</span>
+                </div>
+                <ul className="pm-related">
+                  {result.items.map((i) => (
+                    <li key={i.conversationId} className={unchecked.has(i.conversationId) ? 'is-off' : ''}>
+                      <label className="pm-related__row">
+                        <input type="checkbox" checked={!unchecked.has(i.conversationId)} onChange={() => toggle(i.conversationId)} />
+                        <span className="pm-related__main">
+                          <span className="pm-truncate">{i.subject || '(senza oggetto)'}</span>
+                          <span className="pm-muted pm-truncate">{i.from} · {shortDate(i.date)}</span>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                {result.total > result.items.length && <p className="pm-muted">…e altre {result.total - result.items.length}: compariranno la prossima volta.</p>}
+              </>
             )}
             <p className="pm-muted">Vuoi {t.others}{kind === 'spam' ? ' (solo nell\'app: su Gmail restano dove sono)' : ''}?</p>
             {error && <div className="pm-error">{error}</div>}
             <div className="pm-inlineform__actions">
               <span style={{ flex: 1 }} />
-              <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" onClick={onClose}>No</button>
-              <button type="button" className="pm-btn pm-btn--primary pm-btn--sm" disabled={busy} onClick={() => void applyToOthers()}>
-                Sì, applica a {result.items.length === result.total ? 'tutte' : `queste ${result.items.length}`}
+              <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" onClick={onClose}>Cancella</button>
+              <button type="button" className="pm-btn pm-btn--primary pm-btn--sm" disabled={busy || unchecked.size === result.items.length} onClick={() => void applyToOthers()}>
+                Applica alle selezionate ({result.items.length - unchecked.size})
               </button>
             </div>
           </>

@@ -4,10 +4,8 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
 import { api } from '../api.ts';
 import { shortDate } from '../lib/format.ts';
-import { Ic } from '../ui/Ic.tsx';
 import { useToast } from '../ui/toast.tsx';
 
 const EVENT = 'mmw:related-move';
@@ -51,8 +49,8 @@ function RelatedMoveDialog({ conversationId, projectId, onClose }: Req & { onClo
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const project = projects.find((p) => p.id === projectId)?.name ?? 'progetto';
   const verb = archive ? 'Archivia' : 'Sposta';
-  const doneLabel = archive ? 'archiviata' : 'spostata';
-  const [moved, setMoved] = useState<Set<string>>(new Set());
+  // Spuntate di default: si toglie la spunta solo a quelle da lasciare dove sono.
+  const [unchecked, setUnchecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -69,31 +67,35 @@ function RelatedMoveDialog({ conversationId, projectId, onClose }: Req & { onClo
   const refresh = () => {
     for (const k of [['conversations'], ['counts'], ['projects']]) qc.invalidateQueries({ queryKey: k });
   };
-  const move = async (ids: string[]) => {
-    if (!ids.length) return;
+  const selected = data.items.filter((i) => !unchecked.has(i.conversationId)).map((i) => i.conversationId);
+  const toggle = (id: string) =>
+    setUnchecked((u) => {
+      const n = new Set(u);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const run = async () => {
+    if (!selected.length) return;
     setBusy(true);
     try {
       if (archive) {
-        const r = await api.archiveMany(ids);
-        if (ids.length > 1) {
-          toast({
-            text: `${ids.length} conversazioni archiviate`,
-            action: { label: 'Annulla', run: () => void Promise.all(r.activityIds.map(api.cancelActivity)).then(refresh) },
-          });
-        }
+        const r = await api.archiveMany(selected);
+        toast({
+          text: selected.length === 1 ? 'Conversazione archiviata' : `${selected.length} conversazioni archiviate`,
+          action: { label: 'Annulla', run: () => void Promise.all(r.activityIds.map(api.cancelActivity)).then(refresh) },
+        });
       } else {
-        await api.moveMany(ids, projectId);
-        if (ids.length > 1) toast({ text: `${ids.length} conversazioni spostate in ${project}` });
+        await api.moveMany(selected, projectId);
+        toast({ text: selected.length === 1 ? `Spostata in ${project}` : `${selected.length} conversazioni spostate in ${project}` });
       }
-      setMoved((m) => new Set([...m, ...ids]));
       refresh();
+      onClose();
     } catch (e) {
       toast({ text: (e as Error).message });
-    } finally {
       setBusy(false);
     }
   };
-  const remaining = data.items.filter((i) => !moved.has(i.conversationId));
 
   return (
     <div className="pm-modal" onClick={onClose}>
@@ -109,38 +111,32 @@ function RelatedMoveDialog({ conversationId, projectId, onClose }: Req & { onClo
             </>
           )}
         </p>
+        <div className="pm-related__bulk">
+          <button type="button" className="pm-linkbtn" onClick={() => setUnchecked(new Set())}>Seleziona tutte</button>
+          <button type="button" className="pm-linkbtn" onClick={() => setUnchecked(new Set(data.items.map((i) => i.conversationId)))}>Deseleziona tutte</button>
+          <span className="pm-muted">{selected.length} di {data.items.length} selezionate</span>
+        </div>
         <ul className="pm-related">
-          {data.items.map((i) => {
-            const done = moved.has(i.conversationId);
-            return (
-              <li key={i.conversationId} className={done ? 'is-done' : ''}>
-                <div className="pm-related__main">
+          {data.items.map((i) => (
+            <li key={i.conversationId} className={unchecked.has(i.conversationId) ? 'is-off' : ''}>
+              <label className="pm-related__row">
+                <input type="checkbox" checked={!unchecked.has(i.conversationId)} onChange={() => toggle(i.conversationId)} />
+                <span className="pm-related__main">
                   <span className="pm-truncate">{i.subject || '(senza oggetto)'}</span>
                   <span className="pm-muted pm-truncate">
                     {i.from ?? '—'} · {shortDate(i.date)} · {i.reasons.join(', ')}
                   </span>
-                </div>
-                {done ? (
-                  <span className="pm-ok pm-related__done"><Ic icon={Check} size={14} /> {doneLabel}</span>
-                ) : (
-                  <button type="button" className="pm-btn pm-btn--secondary pm-btn--xs" disabled={busy} onClick={() => void move([i.conversationId])}>
-                    {verb}
-                  </button>
-                )}
-              </li>
-            );
-          })}
+                </span>
+              </label>
+            </li>
+          ))}
         </ul>
         <div className="pm-inlineform__actions">
           <span style={{ flex: 1 }} />
-          <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" onClick={onClose}>
-            {moved.size ? 'Fatto' : 'No, grazie'}
+          <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" onClick={onClose}>Cancella</button>
+          <button type="button" className="pm-btn pm-btn--primary pm-btn--sm" disabled={busy || !selected.length} onClick={() => void run()}>
+            {verb} selezionate ({selected.length})
           </button>
-          {remaining.length > 0 && (
-            <button type="button" className="pm-btn pm-btn--primary pm-btn--sm" disabled={busy} onClick={() => void move(remaining.map((i) => i.conversationId))}>
-              {verb} {remaining.length === data.items.length ? 'tutte' : 'le altre'} ({remaining.length})
-            </button>
-          )}
         </div>
       </div>
     </div>
