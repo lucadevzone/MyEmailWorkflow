@@ -161,7 +161,7 @@ export class AccountSync {
   }
 
   private async catchUp(provider: MailProviderClient, mb: MailboxState) {
-    this.setPhase('initial');
+    this.setPhase('catchup');
     await this.fetchNew(provider);
     if (this.row.highestModseq && mb.highestModseq && this.row.highestModseq !== mb.highestModseq) {
       this.applyFlags(await provider.fetchFlagsChangedSince(this.row.highestModseq));

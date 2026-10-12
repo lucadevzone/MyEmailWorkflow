@@ -158,6 +158,7 @@ function SyncProgress() {
     stopped: 'in pausa',
     connecting: 'connessione…',
     initial: 'importazione della posta recente…',
+    catchup: 'aggiornamento con la posta arrivata nel frattempo…',
     backfill: 'importazione dello storico in background…',
     idle: 'posta aggiornata',
     error: 'errore di connessione',

@@ -11,6 +11,7 @@ const PHASE: Record<SyncStatusDto['phase'], string> = {
   stopped: 'fermo',
   connecting: 'connessione…',
   initial: 'importazione posta recente…',
+  catchup: 'aggiornamento…',
   backfill: 'importazione storico…',
   idle: 'aggiornato',
   error: 'errore',
@@ -46,7 +47,7 @@ export function StatusBar() {
       {accounts.map((a) => {
         const s = statuses.find((x) => x.accountId === a.id);
         const online = !!s && s.phase !== 'error' && s.phase !== 'stopped' && s.phase !== 'connecting';
-        const busy = s && (s.phase === 'initial' || s.phase === 'backfill');
+        const busy = s && (s.phase === 'initial' || s.phase === 'catchup' || s.phase === 'backfill');
         return (
           <span key={a.id} className={`pm-status${online ? '' : ' pm-status--off'}`} title={s?.error ?? `${a.email}: ${s ? PHASE[s.phase] : 'non avviato'}`}>
             {a.name}

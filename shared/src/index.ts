@@ -124,7 +124,8 @@ export const DEFAULT_SETTINGS: SettingsDto = {
 
 // ─── Sync ────────────────────────────────────────────────────────────────────
 
-export type SyncPhase = 'stopped' | 'connecting' | 'initial' | 'backfill' | 'idle' | 'error';
+/** initial = primo import della posta recente; catchup = recupero di ciò che è arrivato mentre l'app era ferma. */
+export type SyncPhase = 'stopped' | 'connecting' | 'initial' | 'catchup' | 'backfill' | 'idle' | 'error';
 
 export interface SyncStatusDto {
   accountId: string;
