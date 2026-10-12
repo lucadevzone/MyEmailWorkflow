@@ -8,6 +8,7 @@ import { ProjectsEditor } from './ProjectsEditor.tsx';
 import type { ProjectDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
+import { Icon } from '../ui/Icon.tsx';
 import { useContextMenu, type MenuAction } from '../ui/contextMenu.tsx';
 import { useToast } from '../ui/toast.tsx';
 import { paths, SYSTEM_INBOX, SYSTEM_NEWS, SYSTEM_SPAM } from './paths.ts';
@@ -121,6 +122,16 @@ function Tab({ to, label, icon, unread, total, project, onEditProject, muted }: 
       {icon && <Ic icon={Inbox} size={15} />}
       {label}
       {!!count && <span className={`pm-tab__count${unread && !muted ? ' pm-tab__count--unread' : ''}`}>{count > 99 ? '99+' : count}</span>}
+      {/* Task aperti del progetto; icona "in ritardo" (rossa) se almeno uno è scaduto. */}
+      {!!project?.openTaskCount && (
+        <span
+          className={`pm-tab__tasks${project.overdueTaskCount ? ' pm-tab__tasks--late' : ''}`}
+          title={`${project.openTaskCount} task aperti${project.overdueTaskCount ? `, ${project.overdueTaskCount} scaduti` : ''}`}
+        >
+          <Icon name={project.overdueTaskCount ? 'assignment_late' : 'assignment'} size={15} />
+          {project.openTaskCount}
+        </span>
+      )}
     </NavLink>
   );
 }

@@ -71,6 +71,14 @@ describe('coda dei task', () => {
     expect(titles()).toEqual(['C', 'A', 'B']);
   });
 
+  it('il progetto conta i task aperti e quelli scaduti (per il badge nella barra)', () => {
+    s.tasks.create({ projectId, title: 'Scaduto', dueDate: '2020-01-01' });
+    s.tasks.create({ projectId, title: 'Futuro', dueDate: '2099-01-01' });
+    const done = s.tasks.create({ projectId, title: 'Fatto', dueDate: '2020-01-01' });
+    s.tasks.update(done.id, { status: 'done' });
+    expect(new ProjectService(s.db).get(projectId)).toMatchObject({ openTaskCount: 2, overdueTaskCount: 1 });
+  });
+
   it('completare e riaprire: il riaperto torna in fondo; scadenza facoltativa validata', () => {
     const a = s.tasks.create({ projectId, title: 'A', dueDate: '2026-10-16' });
     s.tasks.create({ projectId, title: 'B' });

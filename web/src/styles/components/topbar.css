@@ -42,3 +42,7 @@
 .pm-spin { animation: pm-spin 0.9s linear infinite; }
 @keyframes pm-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .pm-spin { animation: none; opacity: .5; } }
+
+/* Task aperti del progetto nella tab */
+.pm-tab__tasks { display: inline-flex; align-items: center; gap: 2px; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-muted); }
+.pm-tab__tasks--late { color: var(--danger); }

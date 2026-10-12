@@ -423,6 +423,9 @@ export interface ProjectDto {
   conversationCount: number;
   /** Messaggi non letti nelle conversazioni attive del progetto. */
   unreadCount: number;
+  /** Task aperti, e quanti hanno la scadenza già passata. */
+  openTaskCount: number;
+  overdueTaskCount: number;
   lastMessageAt: number | null;
 }
 

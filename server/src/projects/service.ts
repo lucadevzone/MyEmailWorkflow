@@ -56,6 +56,20 @@ export class ProjectService {
       )
       .groupBy(conversations.projectId)
       .all();
+    // Task aperti del progetto e quanti sono scaduti (scadenza "AAAA-MM-GG" prima di oggi).
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const taskRows = this.db
+      .select({
+        projectId: tasks.projectId,
+        open: sql<number>`count(*)`,
+        overdue: sql<number>`sum(case when ${tasks.dueDate} is not null and ${tasks.dueDate} < ${today} then 1 else 0 end)`,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.status, 'open'), isNull(tasks.deletedAt)))
+      .groupBy(tasks.projectId)
+      .all();
+    const tasksBy = new Map(taskRows.map((t) => [t.projectId, t]));
     const statsBy = new Map(stats.map((s) => [s.projectId, s]));
     const unreadBy = new Map(unread.map((u) => [u.projectId, u.n]));
 
@@ -69,6 +83,8 @@ export class ProjectService {
       archived: r.archived,
       conversationCount: statsBy.get(r.id)?.conversations ?? 0,
       unreadCount: unreadBy.get(r.id) ?? 0,
+      openTaskCount: tasksBy.get(r.id)?.open ?? 0,
+      overdueTaskCount: tasksBy.get(r.id)?.overdue ?? 0,
       lastMessageAt: statsBy.get(r.id)?.lastMessageAt ?? null,
     }));
   }

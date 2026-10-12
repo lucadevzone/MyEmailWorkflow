@@ -35,6 +35,7 @@ export function useServerEvents() {
         qc.invalidateQueries({ queryKey: ['project-members'] });
       } else if (event.type === 'tasks') {
         qc.invalidateQueries({ queryKey: ['tasks'] });
+        qc.invalidateQueries({ queryKey: ['projects'] }); // badge dei task nella barra
       }
     };
     return () => es.close();
