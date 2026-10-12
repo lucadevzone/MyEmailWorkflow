@@ -12,7 +12,8 @@
     "db:reset-mail": "tsx --env-file-if-exists=../.env.local scripts/reset-mail.ts",
     "try:summary": "tsx --env-file-if-exists=../.env.local scripts/try-summary.ts",
     "try:classify": "tsx --env-file-if-exists=../.env.local scripts/try-classify.ts",
-    "eval:assistant": "tsx --env-file-if-exists=../.env.local scripts/eval-assistant.ts"
+    "eval:assistant": "tsx --env-file-if-exists=../.env.local scripts/eval-assistant.ts",
+    "reset:all": "tsx --env-file-if-exists=../.env.local scripts/reset-all.ts"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",

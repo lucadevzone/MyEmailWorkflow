@@ -9,7 +9,8 @@
     "check:imap": "pnpm --filter @mmw/server check:imap",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "db:reset-mail": "pnpm --filter @mmw/server db:reset-mail"
+    "db:reset-mail": "pnpm --filter @mmw/server db:reset-mail",
+    "reset:all": "pnpm --filter @mmw/server reset:all"
   },
   "devDependencies": {
     "typescript": "^7.0.2"
