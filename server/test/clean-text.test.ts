@@ -62,6 +62,13 @@ describe('detectNoise', () => {
     expect(noise({ 'x-mailgun-sid': 'x', 'x-feedback-id': 'y', 'x-mailgun-track-opens': 'yes' }, 'postmaster@updates.itch.io', 'WatcherDM released a new Character Sheet')).toBe(true);
   });
 
+  it('notifiche di servizio senza indizi promozionali restano fuori dalle News', () => {
+    // Ricevuta del veterinario: Amazon SES + Feedback-ID + noreply, ma niente disiscrizione né tracciamento.
+    expect(noise({ 'feedback-id': 'x', 'x-ses-outgoing': 'y' }, 'noreply@smartvet.it', 'Doc.Ref.3422238')).toBe(false);
+    // Documenti firmati in palestra: SendGrid + mittente notifiche.
+    expect(noise({ 'x-sg-eid': 'x' }, 'notifications@notifications.virginactive.com', 'Ecco i documenti che hai firmato!')).toBe(false);
+  });
+
   it('un indizio debole da solo non basta (casi veri dalla casella personale)', () => {
     expect(noise({ 'feedback-id': 'x:y:z' }, 'fatture@vodafone.it', 'Emissione fattura Vodafone')).toBe(false);
     expect(noise({}, 'no-reply@accounts.google.com')).toBe(false);
@@ -73,8 +80,8 @@ describe('detectNoise', () => {
     expect(noise({ 'list-unsubscribe': '<x>', 'feedback-id': 'x' }, 'info@studioliberta.it', 'Condominio Via Arimondi 1/z Avviso di pagamento quota ordinaria Ottobre 2026')).toBe(false);
     // Preply: SendGrid + noreply, ma è un messaggio della tua insegnante.
     expect(noise({ 'x-sg-eid': 'x' }, 'noreply@trans.preply.com', 'Nuovo messaggio da Mariska')).toBe(false);
-    // Senza oggetto transazionale le stesse intestazioni sono rumore.
-    expect(noise({ 'x-sg-eid': 'x' }, 'noreply@trans.preply.com', 'Scopri le nuove offerte')).toBe(true);
+    // Senza oggetto transazionale, con un indizio promozionale (disiscrizione), è rumore.
+    expect(noise({ 'x-sg-eid': 'x', 'list-unsubscribe': '<x>' }, 'noreply@trans.preply.com', 'Scopri le nuove offerte')).toBe(true);
     // Transazionale ma con indizi forti di marketing: resta rumore.
     expect(noise({ precedence: 'bulk' }, 'offerte@shop.it', 'Conferma la tua iscrizione e ricevi lo sconto')).toBe(true);
   });

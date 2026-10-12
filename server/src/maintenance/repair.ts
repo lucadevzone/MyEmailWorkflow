@@ -22,7 +22,7 @@ import { bus } from '../events/bus.ts';
 
 const KEY = 'maintenance.repair-2026-10';
 /** Ricalcolo delle News da ripetere quando il filtro cambia (nuovi indizi): basta cambiare la chiave. */
-const NOISE_KEY = 'maintenance.noise-v2';
+const NOISE_KEY = 'maintenance.noise-v3';
 const MIN = Date.UTC(1995, 0, 1);
 
 /** Solo le intestazioni della mail originale: veloce anche con allegati pesanti. */

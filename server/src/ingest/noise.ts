@@ -38,11 +38,15 @@ const TRANSACTIONAL = new RegExp(
 /**
  * Newsletter e notifiche automatiche: indizi forti (liste di distribuzione, invii "bulk", campagne,
  * mittenti di marketing) e deboli (header delle piattaforme di invio, noreply, List-Unsubscribe da solo).
- * Rumore = almeno un indizio forte, oppure due deboli; ma se l'oggetto è transazionale servono indizi forti.
+ * Rumore = almeno un indizio forte, oppure due deboli di cui almeno uno promozionale; se l'oggetto è
+ * transazionale servono indizi forti.
  */
 export function detectNoise({ headers, fromAddress, subject }: NoiseSignals): { isNoise: boolean; reasons: string[] } {
   const strong: string[] = [];
   const weak: string[] = [];
+  // Tra i deboli, quelli promozionali (disiscrizione, tracciamento, dominio di invio massivo) distinguono una
+  // newsletter da una notifica di servizio (ricevute, documenti, avvisi), che spesso ha solo noreply + piattaforma.
+  const promo: string[] = [];
   const text = (name: string) => {
     const v = headers.get(name);
     if (v == null) return '';
@@ -55,18 +59,18 @@ export function detectNoise({ headers, fromAddress, subject }: NoiseSignals): { 
   const listId = !!list.id || headers.has('list-id');
   // Una mailing list con il link per disiscriversi è un invio a lista; List-ID da solo può essere una lista di discussione.
   if (listId && unsubscribe) strong.push('mailing list');
-  else if (unsubscribe) weak.push('list-unsubscribe');
+  else if (unsubscribe) promo.push('list-unsubscribe');
   if (/^(bulk|list|junk)$/.test(text('precedence'))) strong.push(`precedence:${text('precedence')}`);
   for (const h of CAMPAIGN_HEADERS) if (headers.has(h)) strong.push(h);
   for (const h of BULK_HEADERS) if (headers.has(h)) weak.push(h);
-  if (TRACKING_HEADERS.some((h) => headers.has(h))) weak.push('tracciamento aperture');
-  if (fromAddress && BULK_DOMAIN.test(fromAddress)) weak.push('dominio di invio massivo');
+  if (TRACKING_HEADERS.some((h) => headers.has(h))) promo.push('tracciamento aperture');
+  if (fromAddress && BULK_DOMAIN.test(fromAddress)) promo.push('dominio di invio massivo');
   const auto = text('auto-submitted');
   if (auto && auto !== 'no') weak.push(`auto-submitted:${auto}`);
   if (fromAddress && MARKETING_LOCAL.test(fromAddress)) strong.push('mittente di marketing');
   else if (fromAddress && (NOREPLY.test(fromAddress) || SYSTEM_LOCAL.test(fromAddress))) weak.push('mittente automatico');
 
   const transactional = !!subject && TRANSACTIONAL.test(subject);
-  const isNoise = transactional ? strong.length > 0 : strong.length > 0 || weak.length >= 2;
-  return { isNoise, reasons: [...strong, ...weak, ...(transactional ? ['oggetto transazionale'] : [])] };
+  const isNoise = transactional ? strong.length > 0 : strong.length > 0 || (promo.length > 0 && promo.length + weak.length >= 2);
+  return { isNoise, reasons: [...strong, ...promo, ...weak, ...(transactional ? ['oggetto transazionale'] : [])] };
 }
