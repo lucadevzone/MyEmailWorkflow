@@ -13,6 +13,7 @@ import type { BlobStore } from '../store/blobs.ts';
 import { now } from '../lib/ids.ts';
 import { receivedDate } from '../ingest/dates.ts';
 import { detectNoise } from '../ingest/noise.ts';
+import { ruleFor } from '../rules/sender-rules.ts';
 import { enqueueEmbedding } from '../ai/embed.ts';
 import { enqueueSummary } from '../ai/summarize.ts';
 import { enqueueClassification } from '../ai/classify.ts';
@@ -20,6 +21,8 @@ import { PRIORITY } from '../jobs/queue.ts';
 import { bus } from '../events/bus.ts';
 
 const KEY = 'maintenance.repair-2026-10';
+/** Ricalcolo delle News da ripetere quando il filtro cambia (nuovi indizi): basta cambiare la chiave. */
+const NOISE_KEY = 'maintenance.noise-v2';
 const MIN = Date.UTC(1995, 0, 1);
 
 /** Solo le intestazioni della mail originale: veloce anche con allegati pesanti. */
@@ -38,8 +41,20 @@ async function headersOf(blobs: BlobStore, sha: string): Promise<Map<string, unk
 const breathe = () => new Promise((r) => setImmediate(r));
 
 export async function runRepairs(deps: { db: Db; sqlite: Database.Database; blobs: BlobStore }, log: (msg: string) => void) {
-  const { db, sqlite, blobs } = deps;
-  if (db.select().from(settings).where(eq(settings.key, KEY)).get()) return;
+  const { db } = deps;
+  const done = (key: string) => !!db.select().from(settings).where(eq(settings.key, key)).get();
+  const mark = (key: string, value: unknown) => {
+    const t = now();
+    db.insert(settings).values({ key, value: JSON.stringify({ at: t, ...(value as object) }), updatedAt: t }).run();
+  };
+  if (!done(KEY)) mark(KEY, await repairOnce(deps, log));
+  if (!done(NOISE_KEY)) mark(NOISE_KEY, await recomputeNoise(deps, log));
+  bus.publish({ type: 'conversations', ids: [] });
+  bus.publish({ type: 'projects' });
+}
+
+async function repairOnce(deps: { db: Db; sqlite: Database.Database; blobs: BlobStore }, log: (msg: string) => void) {
+  const { sqlite, blobs } = deps;
   const t = now();
 
   // 1. Date assurde.
@@ -69,7 +84,13 @@ export async function runRepairs(deps: { db: Db; sqlite: Database.Database; blob
     .run(t, t).changes;
   if (archived) log(`Manutenzione: ${archived} conversazioni già archiviate su Gmail archiviate anche qui`);
 
-  // 3. News ricalcolate col filtro nuovo (sul primo messaggio, come all'arrivo), salvo le scelte manuali.
+  return { badDates: badDates.length, archived };
+}
+
+/** News ricalcolate col filtro attuale (sul primo messaggio, come all'arrivo), salvo scelte manuali e regole. */
+async function recomputeNoise(deps: { db: Db; sqlite: Database.Database; blobs: BlobStore }, log: (msg: string) => void) {
+  const { db, sqlite, blobs } = deps;
+  const t = now();
   const convs = sqlite
     .prepare(
       `select c.id, c.is_noise as noise, c.archived_at as archivedAt,
@@ -77,7 +98,7 @@ export async function runRepairs(deps: { db: Db; sqlite: Database.Database; blob
               (select m.from_address from messages m where m.conversation_id = c.id and m.deleted_at is null order by m.date limit 1) as sender,
               (select m.subject from messages m where m.conversation_id = c.id and m.deleted_at is null order by m.date limit 1) as subject
          from conversations c
-        where c.deleted_at is null and c.project_id is null and c.noise_manual = 0`,
+        where c.deleted_at is null and c.project_id is null and c.noise_manual = 0 and c.is_spam = 0`,
     )
     .all() as { id: string; noise: number; archivedAt: number | null; sha: string | null; sender: string | null; subject: string | null }[];
   let toNews = 0;
@@ -87,7 +108,8 @@ export async function runRepairs(deps: { db: Db; sqlite: Database.Database; blob
     if (!c.sha) continue;
     const h = await headersOf(blobs, c.sha);
     if (!h) continue;
-    const isNoise = detectNoise({ headers: h, fromAddress: c.sender, subject: c.subject }).isNoise;
+    const rule = ruleFor(db, c.sender);
+    const isNoise = rule === 'news' ? true : rule === 'not_news' ? false : detectNoise({ headers: h, fromAddress: c.sender, subject: c.subject }).isNoise;
     if (isNoise === !!c.noise) continue;
     sqlite.prepare('update conversations set is_noise = ?, updated_at = ? where id = ?').run(isNoise ? 1 : 0, t, c.id);
     if (isNoise) {
@@ -105,8 +127,5 @@ export async function runRepairs(deps: { db: Db; sqlite: Database.Database; blob
     }
   }
   if (toNews || fromNews) log(`Manutenzione: ${fromNews} conversazioni tolte dalle News, ${toNews} spostate nelle News`);
-
-  db.insert(settings).values({ key: KEY, value: JSON.stringify({ at: t, badDates: badDates.length, archived, fromNews, toNews }), updatedAt: t }).run();
-  bus.publish({ type: 'conversations', ids: [] });
-  bus.publish({ type: 'projects' });
+  return { fromNews, toNews };
 }
