@@ -45,7 +45,11 @@ export class ConversationService {
   list(q: ConversationQuery & { limit?: number; personAddressIds?: string[] }): ConversationListItem[] {
     const limit = Math.min(q.limit ?? 50, 200);
     const where = [isNull(conversations.deletedAt), isNull(conversations.trashedAt)];
-    if (q.view === 'project') {
+    // Lo spam si vede solo nella sua vista.
+    where.push(eq(conversations.isSpam, q.view === 'spam'));
+    if (q.view === 'spam') {
+      // tutte, di qualunque provenienza
+    } else if (q.view === 'project') {
       if (!q.projectId) return [];
       where.push(eq(conversations.projectId, q.projectId));
     } else if (q.view === 'person') {
@@ -183,6 +187,7 @@ export class ConversationService {
         subject: r.subject,
         splitFromId: r.splitFromId,
         autoSorted: r.autoSortedAt != null,
+        isSpam: r.isSpam,
         summary: r.summary,
         summaryDetailed: r.summaryDetailed,
         snippet: snippetById.get(r.id) ?? null,
@@ -231,11 +236,12 @@ export class ConversationService {
       isNull(conversations.projectId),
       isNull(conversations.trashedAt),
       isNull(conversations.archivedAt),
+      eq(conversations.isSpam, false),
     ];
   }
 
   /** Messaggi non letti: Da smistare, Rumore e totale fuori dal rumore (Da smistare + progetti attivi). */
-  counts(): { inbox: number; noise: number; inboxUnread: number; noiseUnread: number; totalUnread: number } {
+  counts(): { inbox: number; noise: number; spam: number; inboxUnread: number; noiseUnread: number; totalUnread: number } {
     const row = this.db
       .select({
         inbox: sql<number>`coalesce(sum(case when ${conversations.isNoise} = 0 then 1 else 0 end), 0)`,
@@ -258,15 +264,22 @@ export class ConversationService {
           isNull(conversations.deletedAt),
           isNull(conversations.trashedAt),
           isNull(conversations.archivedAt),
+          eq(conversations.isSpam, false),
           eq(messages.seen, false),
           eq(messages.direction, 'in'),
           isNull(messages.deletedAt),
         ),
       )
       .get();
+    const spam = this.db
+      .select({ n: sql<number>`count(*)` })
+      .from(conversations)
+      .where(and(isNull(conversations.deletedAt), isNull(conversations.trashedAt), eq(conversations.isSpam, true)))
+      .get();
     return {
       inbox: row?.inbox ?? 0,
       noise: row?.noise ?? 0,
+      spam: spam?.n ?? 0,
       inboxUnread: unread?.inbox ?? 0,
       noiseUnread: unread?.noise ?? 0,
       totalUnread: unread?.total ?? 0,

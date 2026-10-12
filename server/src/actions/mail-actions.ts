@@ -169,7 +169,7 @@ export class MailActions {
 
   /** È spam: sparisce subito dall'app e, al batch, va nella cartella Spam del server (annullabile fino ad allora). */
   markSpam(conversationId: string): string[] {
-    this.conv.setTrashed(conversationId, true);
+    this.deps.db.update(conversations).set({ isSpam: true, updatedAt: now() }).where(eq(conversations.id, conversationId)).run();
     const ids = this.enqueuePerAccount(conversationId, 'spam', 'Segnala come spam');
     bus.publish({ type: 'conversations', ids: [conversationId] });
     return ids;

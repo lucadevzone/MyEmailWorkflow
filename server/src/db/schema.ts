@@ -125,6 +125,8 @@ export const conversations = sqliteTable(
     autoSortedAt: integer('auto_sorted_at'),
     /** News sì/no deciso a mano dall'utente: le rivalutazioni automatiche non lo toccano. */
     noiseManual: integer('noise_manual', { mode: 'boolean' }).notNull().default(false),
+    /** Spam (deciso dall'utente o da una sua regola): visibile solo nella vista Spam. */
+    isSpam: integer('is_spam', { mode: 'boolean' }).notNull().default(false),
     ...meta(),
   },
   (t) => [
@@ -431,6 +433,17 @@ export const autoSortLog = sqliteTable(
   },
   (t) => [index('auto_sort_conv').on(t.conversationId), index('auto_sort_sender').on(t.sender, t.projectId)],
 );
+
+/**
+ * Regole per mittente create dalle azioni "è / non è una News", "è / non è Spam": valgono per la posta
+ * futura. pattern = indirizzo esatto ("x@y.it") oppure dominio ("@y.it", vale anche per i sottodomini).
+ */
+export const senderRules = sqliteTable('sender_rules', {
+  id: text('id').primaryKey(),
+  pattern: text('pattern').notNull().unique(),
+  kind: text('kind', { enum: ['news', 'not_news', 'spam', 'not_spam'] }).notNull(),
+  createdAt: integer('created_at').notNull(),
+});
 
 /** Coda interna di lavori in background (parsing, analisi, embedding, backfill). */
 export const jobs = sqliteTable(

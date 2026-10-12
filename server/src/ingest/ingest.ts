@@ -22,6 +22,8 @@ import type { BlobStore } from '../store/blobs.ts';
 import { cleanBody, makeSnippet, normalizeSubject } from './clean-text.ts';
 import { detectNoise } from './noise.ts';
 import { messageDate } from './dates.ts';
+import { ruleFor } from '../rules/sender-rules.ts';
+import type { SenderRuleKind } from '@mmw/shared';
 import { pendingFlagIntent, pendingSeenIntent } from '../activities/service.ts';
 import { enqueueSummary } from '../ai/summarize.ts';
 import { bus } from '../events/bus.ts';
@@ -128,6 +130,8 @@ export async function ingestMessage(
       subject: parsed.subject ?? null,
       date,
       archived: !inInbox,
+      // Le regole dell'utente sul mittente vincono sul filtro automatico.
+      rule: ruleFor(tx as unknown as Db, from?.email ?? null),
       noise: () => detectNoise({ headers: parsed.headers, fromAddress: from?.email ?? null, subject: parsed.subject ?? null }).isNoise,
     });
 
@@ -218,11 +222,11 @@ export async function ingestMessage(
   // Lavori in background (non per il rumore): sintesi, embedding e, se è in Da smistare, classificazione.
   // La posta vecchia (backfill) va in coda con priorità bassa.
   const conv = ctx.db
-    .select({ isNoise: conversations.isNoise, projectId: conversations.projectId })
+    .select({ isNoise: conversations.isNoise, isSpam: conversations.isSpam, projectId: conversations.projectId })
     .from(conversations)
     .where(eq(conversations.id, result.conversationId))
     .get();
-  if (conv && !conv.isNoise) {
+  if (conv && !conv.isNoise && !conv.isSpam) {
     const priority = date > Date.now() - 30 * 86_400_000 ? PRIORITY.normal : PRIORITY.background;
     enqueueEmbedding(ctx.db, result.messageId, priority);
     enqueueSummary(ctx.db, result.conversationId, priority);
@@ -254,6 +258,7 @@ interface ThreadKeys {
   date: number;
   /** La conversazione, se nasce ora, nasce archiviata (posta già archiviata su Gmail). */
   archived: boolean;
+  rule: SenderRuleKind | null;
   noise: () => boolean;
 }
 
@@ -326,7 +331,8 @@ function resolveConversation(db: Db, k: ThreadKeys): string {
         subject: normalizeSubject(k.subject) || null,
         lastMessageAt: k.date,
         gmThreadId: k.gmThreadId,
-        isNoise: k.noise(),
+        isNoise: k.rule === 'news' ? true : k.rule === 'not_news' ? false : k.noise(),
+        isSpam: k.rule === 'spam',
         archivedAt: k.archived ? t : null,
         createdAt: t,
         updatedAt: t,

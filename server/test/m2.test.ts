@@ -426,6 +426,49 @@ describe('manutenzione retroattiva', () => {
   });
 });
 
+describe('regole per mittente (è / non è News, è / non è Spam)', () => {
+  it('la regola sposta, propone le altre conversazioni dello stesso mittente e vale per la posta futura', async () => {
+    const { saveRule, applyRule, previewRule, patternFor } = await import('../src/rules/sender-rules.ts');
+    const from = (id: string, n: number, sender: string, subject = 'Novità') =>
+      ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
+        uid: n, mailbox: '[Gmail]/Tutti i messaggi', source: eml({ id: `<${id}@x>`, from: sender, subject, body: 'ciao' }),
+        flags: [], labels: ['\\Inbox'], gmMsgid: `gm-${n}`, gmThreadId: `t-${n}`,
+      });
+    const a = await from('a', 800, 'postmaster@updates.shop.it');
+    const b = await from('b', 801, 'info@shop.it');
+    const c = await from('c', 802, 'altro@shop.it');
+    const row = (id: string) => s.db.select().from(conversations).where(eq(conversations.id, id)).get()!;
+
+    // "È una News" sul dominio: questa si sposta, le altre due vengono proposte.
+    const pattern = patternFor('postmaster@updates.shop.it', 'domain');
+    expect(pattern).toBe('@updates.shop.it');
+    const domain = patternFor('info@shop.it', 'domain');
+    saveRule(s.db, domain, 'news');
+    applyRule(s.db, s.sqlite, b.conversationId, 'news');
+    const preview = previewRule(s.sqlite, domain, 'news', b.conversationId);
+    expect(preview.total).toBe(2); // anche il sottodominio updates.shop.it
+    expect(preview.items.map((i) => i.conversationId).sort()).toEqual([a.conversationId, c.conversationId].sort());
+    for (const i of preview.items) applyRule(s.db, s.sqlite, i.conversationId, 'news');
+    expect([a, b, c].every((x) => row(x.conversationId).isNoise)).toBe(true);
+    // Posta futura dello stesso dominio: nelle News da sola.
+    const d = await from('d', 803, 'promo@mail.shop.it');
+    expect(row(d.conversationId).isNoise).toBe(true);
+
+    // "Non è una News" sull'indirizzo esatto vince sul dominio e sul filtro automatico.
+    saveRule(s.db, 'newsletter@shop.it', 'not_news');
+    const e = await from('e', 804, 'newsletter@shop.it');
+    expect(row(e.conversationId).isNoise).toBe(false);
+
+    // Spam: le future vanno nella vista Spam, non in Da smistare.
+    saveRule(s.db, '@truffe.com', 'spam');
+    const f = await from('f', 805, 'kk@truffe.com', 'Hai vinto');
+    expect(row(f.conversationId).isSpam).toBe(true);
+    expect(conv().list({ view: 'inbox' }).some((x) => x.id === f.conversationId)).toBe(false);
+    expect(conv().list({ view: 'spam' }).map((x) => x.id)).toEqual([f.conversationId]);
+    expect(conv().counts().spam).toBe(1);
+  });
+});
+
 describe('posta importata da Gmail', () => {
   it('senza l\'etichetta Posta in arrivo la conversazione nasce archiviata; una risposta archiviata non la riporta in vista', async () => {
     const archived = await ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {

@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import { applyRule, patternFor, previewRule, RuleError, saveRule, senderOfConversation } from '../rules/sender-rules.ts';
+import type { SenderRuleKind, SenderRuleResultDto } from '@mmw/shared';
 import type { JobRunner } from '../jobs/runner.ts';
 import type { JobQueueStatusDto } from '@mmw/shared';
 import { autoSortStats } from '../ai/auto-sort-log.ts';
@@ -13,7 +15,7 @@ import { SettingsService, settingsPatchSchema } from '../settings/service.ts';
 import { hasModel, ollamaStatus } from '../ai/ollama.ts';
 import { ConversationService } from '../conversations/service.ts';
 import { htmlCsp, prepareHtml } from '../conversations/html.ts';
-import { attachments, messages } from '../db/schema.ts';
+import { attachments, messages, senderRules } from '../db/schema.ts';
 import { and, eq, isNull } from 'drizzle-orm';
 import type { BlobStore } from '../store/blobs.ts';
 import type { SyncManager } from '../sync/manager.ts';
@@ -79,6 +81,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
       err instanceof SuggestionError ||
       err instanceof TaskError ||
       err instanceof SignatureError ||
+      err instanceof RuleError ||
       err instanceof CredentialError
     ) {
       return reply.code(400).send({ error: err.message });
@@ -183,7 +186,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     '/api/conversations',
     async (req, reply) => {
       const view = (req.query.view ?? 'inbox') as ConversationView;
-      if (!['inbox', 'noise', 'project', 'person'].includes(view)) return reply.code(400).send({ error: 'view non valida' });
+      if (!['inbox', 'noise', 'spam', 'project', 'person'].includes(view)) return reply.code(400).send({ error: 'view non valida' });
       return conversationsSvc.list({
         view,
         projectId: req.query.projectId,
@@ -280,6 +283,38 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   });
   app.post<{ Params: { id: string } }>('/api/conversations/:id/trash', async (req) => ({ activityIds: deps.actions.trash(req.params.id) }));
   app.post<{ Params: { id: string } }>('/api/conversations/:id/spam', async (req) => ({ activityIds: deps.actions.markSpam(req.params.id) }));
+
+  // "È / non è una News", "è / non è Spam": sposta, crea la regola sul mittente e mostra a quali altre
+  // conversazioni si applicherebbe (l'utente decide poi se applicarla anche a quelle).
+  app.post<{ Params: { id: string }; Body: { kind?: string; scope?: string } }>('/api/conversations/:id/sender-rule', async (req): Promise<SenderRuleResultDto> => {
+    const kind = req.body?.kind as SenderRuleKind;
+    if (!['news', 'not_news', 'spam', 'not_spam'].includes(kind)) throw new RuleError('Regola non valida');
+    const scope = req.body?.scope === 'domain' ? 'domain' : 'address';
+    const id = req.params.id;
+    const sender = senderOfConversation(deps.sqlite, id);
+    if (!sender) throw new RuleError('Questa conversazione non ha un mittente esterno');
+    const pattern = patternFor(sender, scope);
+    const ruleId = saveRule(deps.db, pattern, kind);
+    if (kind === 'spam') {
+      deps.actions.markSpam(id); // questa va anche nella cartella Spam di Gmail
+    } else {
+      if (kind === 'not_spam') {
+        for (const a of deps.activities.list().filter((x) => x.kind === 'spam' && x.status === 'pending' && x.conversationId === id)) deps.activities.cancel(a.id);
+      }
+      applyRule(deps.db, deps.sqlite, id, kind);
+    }
+    bus.publish({ type: 'conversations', ids: [id] });
+    return { ruleId, ...previewRule(deps.sqlite, pattern, kind, id) };
+  });
+  app.post<{ Params: { id: string }; Body: { conversationIds?: string[] } }>('/api/sender-rules/:id/apply', async (req) => {
+    const rule = deps.db.select().from(senderRules).where(eq(senderRules.id, req.params.id)).get();
+    if (!rule) throw new RuleError('Regola non trovata');
+    const ids = (req.body?.conversationIds ?? []).filter((x) => typeof x === 'string').slice(0, 5000);
+    for (const cid of ids) applyRule(deps.db, deps.sqlite, cid, rule.kind);
+    bus.publish({ type: 'conversations', ids: [] });
+    bus.publish({ type: 'projects' });
+    return { applied: ids.length };
+  });
   app.post<{ Params: { id: string }; Body: { projectId?: string | null } }>('/api/conversations/:id/move', async (req) => {
     const projectId = req.body?.projectId ?? null;
     return deps.actions.move(req.params.id, projectId);

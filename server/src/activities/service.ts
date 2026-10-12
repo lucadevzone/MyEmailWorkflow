@@ -211,8 +211,10 @@ export class ActivityService {
         this.conversations.setArchived((p as ConversationOpPayload).conversationId, false);
         break;
       case 'trash':
-      case 'spam':
         this.conversations.setTrashed((p as ConversationOpPayload).conversationId, false);
+        break;
+      case 'spam':
+        this.db.update(conversations).set({ isSpam: false, updatedAt: now() }).where(eq(conversations.id, (p as ConversationOpPayload).conversationId)).run();
         break;
       case 'send': {
         const s = p as SendPayload;

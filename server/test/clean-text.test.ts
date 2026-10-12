@@ -58,6 +58,10 @@ describe('detectNoise', () => {
     expect(noise({ 'list-unsubscribe': '<x>', precedence: 'bulk', 'auto-submitted': 'auto-generated', 'feedback-id': 'x' }, 'preventivo@newsletter.facile.it', 'Il tuo preventivo')).toBe(true);
   });
 
+  it('itch.io: Mailgun + X-Feedback-ID + dominio di invio massivo', () => {
+    expect(noise({ 'x-mailgun-sid': 'x', 'x-feedback-id': 'y', 'x-mailgun-track-opens': 'yes' }, 'postmaster@updates.itch.io', 'WatcherDM released a new Character Sheet')).toBe(true);
+  });
+
   it('un indizio debole da solo non basta (casi veri dalla casella personale)', () => {
     expect(noise({ 'feedback-id': 'x:y:z' }, 'fatture@vodafone.it', 'Emissione fattura Vodafone')).toBe(false);
     expect(noise({}, 'no-reply@accounts.google.com')).toBe(false);

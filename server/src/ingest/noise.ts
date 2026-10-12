@@ -17,7 +17,11 @@ const SYSTEM_LOCAL = /^(notifications?|notifiche|alerts?|updates?|mailer-daemon|
 const MARKETING_LOCAL = /^(newsletter|news|marketing|promo(zioni)?|offerte|deals)([+._-].*)?@/i;
 
 /** Header delle piattaforme di invio massivo: le usano anche fatture e notifiche vere, quindi indizi deboli. */
-const BULK_HEADERS = ['feedback-id', 'x-sg-eid', 'x-mailgun-sid', 'x-ses-outgoing'];
+const BULK_HEADERS = ['feedback-id', 'x-feedback-id', 'x-sg-eid', 'x-mailgun-sid', 'x-ses-outgoing'];
+/** Tracciamento delle aperture o dei clic: tipico delle comunicazioni promozionali (indizio debole). */
+const TRACKING_HEADERS = ['x-mailgun-track-opens', 'x-mailgun-track-clicks', 'x-mailgun-tag', 'x-mc-tracking'];
+/** Domini di invio massivo: newsletter.x.it, updates.x.io, e.x.com… (indizio debole). */
+const BULK_DOMAIN = /@(newsletter|news|updates?|mail(ing)?|e?mail|marketing|promo|em|e|info)\./i;
 /** Header delle campagne di marketing: indizi forti. */
 const CAMPAIGN_HEADERS = ['x-mc-user', 'x-campaign', 'x-campaignid'];
 
@@ -55,6 +59,8 @@ export function detectNoise({ headers, fromAddress, subject }: NoiseSignals): { 
   if (/^(bulk|list|junk)$/.test(text('precedence'))) strong.push(`precedence:${text('precedence')}`);
   for (const h of CAMPAIGN_HEADERS) if (headers.has(h)) strong.push(h);
   for (const h of BULK_HEADERS) if (headers.has(h)) weak.push(h);
+  if (TRACKING_HEADERS.some((h) => headers.has(h))) weak.push('tracciamento aperture');
+  if (fromAddress && BULK_DOMAIN.test(fromAddress)) weak.push('dominio di invio massivo');
   const auto = text('auto-submitted');
   if (auto && auto !== 'no') weak.push(`auto-submitted:${auto}`);
   if (fromAddress && MARKETING_LOCAL.test(fromAddress)) strong.push('mittente di marketing');

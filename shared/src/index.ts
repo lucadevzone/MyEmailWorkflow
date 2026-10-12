@@ -161,6 +161,7 @@ export interface ConversationListItem {
   splitFromId: string | null;
   /** Smistata da sola nel progetto e non ancora aperta (RF-E6). */
   autoSorted: boolean;
+  isSpam: boolean;
   /** Chiave d'ordine della lista: ultimo messaggio, o il momento del distacco se più recente. */
   sortAt: number;
   /** Sintesi breve generata dall'LLM (null finché non è pronta). */
@@ -386,11 +387,12 @@ export interface ProjectSuggestion {
   conversations: number;
 }
 
-export type ConversationView = 'inbox' | 'noise' | 'project' | 'person';
+export type ConversationView = 'inbox' | 'noise' | 'spam' | 'project' | 'person';
 
 export interface UnreadCountsDto {
   inbox: number;
   noise: number;
+  spam: number;
   inboxUnread: number;
   noiseUnread: number;
   /** Messaggi non letti fuori dal rumore (Da smistare + progetti attivi). */
@@ -608,4 +610,17 @@ export interface JobQueueStatusDto {
   byKind: Record<string, number>;
   /** Tipo del lavoro in corso, se ce n'è uno. */
   running: string | null;
+}
+
+export type SenderRuleKind = 'news' | 'not_news' | 'spam' | 'not_spam';
+
+/** Esito di "è / non è una News", "è / non è Spam": la regola creata e le altre conversazioni a cui si applicherebbe. */
+export interface SenderRuleResultDto {
+  ruleId: string;
+  /** "x@y.it" oppure "@y.it". */
+  pattern: string;
+  kind: SenderRuleKind;
+  /** Altre conversazioni dello stesso mittente che oggi stanno dalla parte sbagliata. */
+  total: number;
+  items: { conversationId: string; subject: string | null; from: string; date: number }[];
 }
