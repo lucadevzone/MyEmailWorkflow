@@ -6,7 +6,7 @@ import type { MessageDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
-import { paths, SYSTEM_INBOX, SYSTEM_NEWS } from '../shell/paths.ts';
+import { paths, SYSTEM_INBOX, SYSTEM_NEWS, SYSTEM_SPAM } from '../shell/paths.ts';
 import type { ComposeRequest } from '../workspace/pane.ts';
 import { CompactMessage, MessageCard, PreviewMessage } from './MessageCard.tsx';
 import { DraftCard, type SentInfo } from './DraftCard.tsx';
@@ -140,7 +140,7 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
   const n = messages.length;
   // Posizione nel carosello: un messaggio, oppure la bozza in fondo (indice n).
   const focus = draftId ? n : Math.max(0, messages.findIndex((m) => m.id === messageId));
-  const projectName = projectKey === SYSTEM_INBOX ? 'Da smistare' : projectKey === SYSTEM_NEWS ? 'News' : (projects.find((p) => p.id === projectKey)?.name ?? '');
+  const projectName = projectKey === SYSTEM_INBOX ? 'Da smistare' : projectKey === SYSTEM_NEWS ? 'News' : projectKey === SYSTEM_SPAM ? 'Spam' : (projects.find((p) => p.id === projectKey)?.name ?? '');
 
   // Seme di una bozza nuova: dalla navigazione, altrimenti "Rispondi a tutti" all'ultimo messaggio.
   const last = messages[n - 1];

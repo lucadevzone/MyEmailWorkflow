@@ -10,7 +10,7 @@ import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { useContextMenu, type MenuAction } from '../ui/contextMenu.tsx';
 import { useToast } from '../ui/toast.tsx';
-import { paths, SYSTEM_INBOX, SYSTEM_NEWS } from './paths.ts';
+import { paths, SYSTEM_INBOX, SYSTEM_NEWS, SYSTEM_SPAM } from './paths.ts';
 
 /** Barra superiore (D1/D2): tab dei progetti tra i due progetti di sistema; a destra Contatti e Impostazioni. */
 export function TopBar({ onNewProject, onEditProject }: { onNewProject: () => void; onEditProject: (p: ProjectDto) => void }) {
@@ -61,7 +61,8 @@ export function TopBar({ onNewProject, onEditProject }: { onNewProject: () => vo
           </button>
         )}
         <span className="pm-topbar__tabsep" aria-hidden="true" />
-        <Tab to={paths.project(SYSTEM_NEWS)} label="News" unread={counts?.noiseUnread} />
+        <Tab to={paths.project(SYSTEM_NEWS)} label="News" unread={counts?.noiseUnread} muted />
+        <Tab to={paths.project(SYSTEM_SPAM)} label="Spam" total={counts?.spam} muted />
       </nav>
       <div className="pm-topbar__tools">
         <NavLink to={paths.contacts()} className="pm-iconbtn" aria-label="Contatti e gruppi" title="Contatti e gruppi">
@@ -75,7 +76,7 @@ export function TopBar({ onNewProject, onEditProject }: { onNewProject: () => vo
   );
 }
 
-function Tab({ to, label, icon, unread, total, project, onEditProject }: {
+function Tab({ to, label, icon, unread, total, project, onEditProject, muted }: {
   to: string;
   label: string;
   icon?: boolean;
@@ -84,6 +85,8 @@ function Tab({ to, label, icon, unread, total, project, onEditProject }: {
   total?: number;
   project?: ProjectDto;
   onEditProject?: (p: ProjectDto) => void;
+  /** News e Spam: contatore grigio, meno in evidenza. */
+  muted?: boolean;
 }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -93,8 +96,9 @@ function Tab({ to, label, icon, unread, total, project, onEditProject }: {
   const refresh = () => {
     for (const k of [['conversations'], ['counts'], ['projects'], ['activities']]) qc.invalidateQueries({ queryKey: k });
   };
-  const view = to.endsWith(`/${SYSTEM_INBOX}`) ? 'inbox' : to.endsWith(`/${SYSTEM_NEWS}`) ? 'noise' : 'project';
+  const view = to.endsWith(`/${SYSTEM_INBOX}`) ? 'inbox' : to.endsWith(`/${SYSTEM_NEWS}`) ? 'noise' : to.endsWith(`/${SYSTEM_SPAM}`) ? 'spam' : 'project';
   const markRead = async () => {
+    if (view === 'spam') return;
     const res = view === 'project' ? await api.markViewRead('project', project!.id) : await api.markViewRead(view);
     refresh();
     toast({
@@ -105,7 +109,7 @@ function Tab({ to, label, icon, unread, total, project, onEditProject }: {
   const ctx = useContextMenu(() => {
     const actions: MenuAction[] = [
       { id: 'open', icon: 'open_in_new', label: `Apri ${label}`, run: () => navigate(to) },
-      { id: 'read', icon: 'mark_email_read', label: 'Segna tutto come letto', primary: true, run: markRead },
+      ...(view === 'spam' ? [] : [{ id: 'read', icon: 'mark_email_read', label: 'Segna tutto come letto', primary: true, run: markRead }]),
     ];
     if (project && onEditProject) actions.push({ id: 'edit', icon: 'tune', label: 'Modifica progetto', primary: true, run: () => onEditProject(project) });
     return { title: label, actions };
@@ -116,7 +120,7 @@ function Tab({ to, label, icon, unread, total, project, onEditProject }: {
     <NavLink to={to} className="pm-tab" aria-current={current ? 'page' : undefined} {...ctx}>
       {icon && <Ic icon={Inbox} size={15} />}
       {label}
-      {!!count && <span className={`pm-tab__count${unread ? ' pm-tab__count--unread' : ''}`}>{count > 99 ? '99+' : count}</span>}
+      {!!count && <span className={`pm-tab__count${unread && !muted ? ' pm-tab__count--unread' : ''}`}>{count > 99 ? '99+' : count}</span>}
     </NavLink>
   );
 }

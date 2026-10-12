@@ -9,7 +9,7 @@ import { useToast } from '../ui/toast.tsx';
 import type { PaneAction } from '../workspace/pane.ts';
 import { MailView } from '../mail/MailView.tsx';
 import { composeTarget, seedOf } from '../mail/seed.ts';
-import { paths, SYSTEM_INBOX, SYSTEM_NEWS } from '../shell/paths.ts';
+import { paths, SYSTEM_INBOX, SYSTEM_NEWS, SYSTEM_SPAM } from '../shell/paths.ts';
 import { ConversationItem } from './ConversationItem.tsx';
 import { Rail } from './Rail.tsx';
 import { TasksSidebar } from './TasksSidebar.tsx';
@@ -43,7 +43,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
-  const isProject = projectKey !== SYSTEM_INBOX && projectKey !== SYSTEM_NEWS;
+  const isProject = projectKey !== SYSTEM_INBOX && projectKey !== SYSTEM_NEWS && projectKey !== SYSTEM_SPAM;
   const { data: projects = [], isSuccess: projectsLoaded } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const { data: counts } = useQuery({ queryKey: ['counts'], queryFn: api.conversationCounts });
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
@@ -54,7 +54,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
 
   const query: ConversationQuery = useMemo(
     () => ({
-      view: projectKey === SYSTEM_INBOX ? 'inbox' : projectKey === SYSTEM_NEWS ? 'noise' : 'project',
+      view: projectKey === SYSTEM_INBOX ? 'inbox' : projectKey === SYSTEM_NEWS ? 'noise' : projectKey === SYSTEM_SPAM ? 'spam' : 'project',
       projectId: isProject ? projectKey : undefined,
       person: person && person !== 'all' ? person : undefined,
       archived,
@@ -100,7 +100,13 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
     writeFocus(projectKey, null);
     navigate(paths.project(projectKey));
   };
-  const total = isProject ? (project?.conversationCount ?? items.length) : projectKey === SYSTEM_INBOX ? (counts?.inbox ?? items.length) : (counts?.noise ?? items.length);
+  const total = isProject
+    ? (project?.conversationCount ?? items.length)
+    : projectKey === SYSTEM_INBOX
+      ? (counts?.inbox ?? items.length)
+      : projectKey === SYSTEM_SPAM
+        ? (counts?.spam ?? items.length)
+        : (counts?.noise ?? items.length);
 
   const pane: PaneAction = useMemo(
     () => ({
@@ -117,6 +123,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
     const refresh = () => {
       for (const k of [['conversations'], ['counts'], ['projects'], ['activities']]) qc.invalidateQueries({ queryKey: k });
     };
+    if (projectKey === SYSTEM_SPAM) return;
     const res = isProject ? await api.markViewRead('project', projectKey) : await api.markViewRead(projectKey === SYSTEM_INBOX ? 'inbox' : 'noise');
     refresh();
     toast({

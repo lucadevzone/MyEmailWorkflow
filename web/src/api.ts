@@ -14,6 +14,8 @@ import type {
   ProjectSuggestion,
   ResourceDto,
   DraftDto,
+  SenderRuleKind,
+  SenderRuleResultDto,
   JobQueueStatusDto,
   SignatureDto,
   DraftPatch,
@@ -123,6 +125,9 @@ export const api = {
   unarchive: (id: string) => request<{ ok: true }>('POST', `/api/conversations/${id}/unarchive`),
   trash: (id: string) => request<{ activityIds: string[] }>('POST', `/api/conversations/${id}/trash`),
   markSpam: (id: string) => request<{ activityIds: string[] }>('POST', `/api/conversations/${id}/spam`),
+  senderRule: (id: string, kind: SenderRuleKind, scope: 'address' | 'domain' | 'root') =>
+    request<SenderRuleResultDto>('POST', `/api/conversations/${id}/sender-rule`, { kind, scope }),
+  applySenderRule: (ruleId: string, conversationIds: string[]) => request<{ applied: number }>('POST', `/api/sender-rules/${ruleId}/apply`, { conversationIds }),
   move: (id: string, projectId: string | null) =>
     request<{ previousProjectId: string | null }>('POST', `/api/conversations/${id}/move`, { projectId }),
   markViewRead: (view: 'inbox' | 'noise' | 'project', projectId?: string) =>

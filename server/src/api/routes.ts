@@ -289,7 +289,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   app.post<{ Params: { id: string }; Body: { kind?: string; scope?: string } }>('/api/conversations/:id/sender-rule', async (req): Promise<SenderRuleResultDto> => {
     const kind = req.body?.kind as SenderRuleKind;
     if (!['news', 'not_news', 'spam', 'not_spam'].includes(kind)) throw new RuleError('Regola non valida');
-    const scope = req.body?.scope === 'domain' ? 'domain' : 'address';
+    const scope = req.body?.scope === 'domain' || req.body?.scope === 'root' ? req.body.scope : 'address';
     const id = req.params.id;
     const sender = senderOfConversation(deps.sqlite, id);
     if (!sender) throw new RuleError('Questa conversazione non ha un mittente esterno');

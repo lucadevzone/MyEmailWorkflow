@@ -1,6 +1,7 @@
 // URL dell'app (specifica §2.3). "inbox" e "news" sono i due progetti di sistema.
 export const SYSTEM_INBOX = 'inbox';
 export const SYSTEM_NEWS = 'news';
+export const SYSTEM_SPAM = 'spam';
 
 export const paths = {
   project: (projectId: string) => `/p/${projectId}`,
@@ -21,6 +22,7 @@ export const paths = {
 };
 
 /** Progetto (o vista di sistema) a cui appartiene una conversazione. */
-export function projectKeyOf(c: { projectId: string | null; isNoise: boolean }): string {
+export function projectKeyOf(c: { projectId: string | null; isNoise: boolean; isSpam?: boolean }): string {
+  if (c.isSpam) return SYSTEM_SPAM;
   return c.projectId ?? (c.isNoise ? SYSTEM_NEWS : SYSTEM_INBOX);
 }

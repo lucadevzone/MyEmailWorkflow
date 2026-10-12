@@ -15,12 +15,14 @@ import { PRIORITY } from '../jobs/queue.ts';
 
 export class RuleError extends Error {}
 
-/** Indirizzo esatto o dominio del mittente. */
-export function patternFor(address: string, scope: 'address' | 'domain'): string {
+/** Indirizzo esatto, dominio (@updates.itch.io) o dominio principale (@itch.io) del mittente. */
+export function patternFor(address: string, scope: 'address' | 'domain' | 'root'): string {
   const a = address.trim().toLowerCase();
   const at = a.lastIndexOf('@');
   if (at < 0) throw new RuleError('Indirizzo del mittente non valido');
-  return scope === 'domain' ? a.slice(at) : a;
+  if (scope === 'address') return a;
+  if (scope === 'domain') return a.slice(at);
+  return `@${a.slice(at + 1).split('.').slice(-2).join('.')}`;
 }
 
 /** Candidati dal più specifico: l'indirizzo, poi il dominio e i domini padre (@updates.itch.io, @itch.io). */
@@ -74,7 +76,7 @@ function wrongSide(kind: SenderRuleKind): string {
 }
 
 /** Altre conversazioni a cui la regola si applicherebbe (esclusa quella da cui è nata). */
-export function previewRule(sqlite: Database.Database, pattern: string, kind: SenderRuleKind, exclude: string, limit = 200): Omit<SenderRuleResultDto, 'ruleId'> {
+export function previewRule(sqlite: Database.Database, pattern: string, kind: SenderRuleKind, exclude: string, limit = 1000): Omit<SenderRuleResultDto, 'ruleId'> {
   const match = pattern.startsWith('@') ? `(s.a like ? or s.a like ?)` : `s.a = ?`;
   const params = pattern.startsWith('@') ? [`%${pattern}`, `%.${pattern.slice(1)}`] : [pattern];
   const base = `

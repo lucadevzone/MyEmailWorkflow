@@ -7,7 +7,7 @@ import { api, type AskSource } from '../api.ts';
 import { shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { PersonAvatar } from '../ui/People.tsx';
-import { paths, projectKeyOf, SYSTEM_INBOX, SYSTEM_NEWS } from './paths.ts';
+import { paths, projectKeyOf, SYSTEM_INBOX, SYSTEM_NEWS, SYSTEM_SPAM } from './paths.ts';
 
 const SCOPE_KEY = 'mmw.search.scope';
 const readScopePref = () => {
@@ -41,7 +41,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
   const match = useMatch('/p/:projectId/*');
   const current = match?.params.projectId ?? null;
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
-  const currentName = current === SYSTEM_INBOX ? 'Da smistare' : current === SYSTEM_NEWS ? 'News' : projects.find((p) => p.id === current)?.name;
+  const currentName = current === SYSTEM_INBOX ? 'Da smistare' : current === SYSTEM_NEWS ? 'News' : current === SYSTEM_SPAM ? 'Spam' : projects.find((p) => p.id === current)?.name;
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
   const [onlyCurrent, setOnlyCurrent] = useState(readScopePref);

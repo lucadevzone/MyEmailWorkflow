@@ -7,6 +7,7 @@ import type { MenuAction } from '../ui/contextMenu.tsx';
 import type { ComposeRequest } from '../workspace/pane.ts';
 import { projectKeyOf } from '../shell/paths.ts';
 import { useDetach } from './useDetach.ts';
+import { openSenderRule } from '../rules/SenderRuleDialog.tsx';
 
 export interface ConversationHandlers {
   compose: (r: ComposeRequest) => void;
@@ -50,13 +51,6 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
       toast({ text: 'Spostata nel cestino', action: { label: 'Annulla', run: undoActivities(res.activityIds) } });
     },
   });
-  const spam = useMutation({
-    mutationFn: () => api.markSpam(c.id),
-    onSuccess: (res) => {
-      refresh();
-      toast({ text: 'Segnalata come spam', action: { label: 'Annulla', run: undoActivities(res.activityIds) } });
-    },
-  });
   const move = useMutation({
     mutationFn: (projectId: string | null) => api.move(c.id, projectId),
     onSuccess: (res, projectId) => {
@@ -66,7 +60,6 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
     },
   });
   const unread = useMutation({ mutationFn: () => api.markUnread(c.id), onSuccess: refresh });
-  const noise = useMutation({ mutationFn: () => api.setNoise(c.id, !c.isNoise), onSuccess: refresh });
   const toProject = useMutation({
     mutationFn: () => api.participantsToProject(c.id, c.subject ?? undefined),
     onSuccess: () => {
@@ -137,12 +130,17 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
       { id: 'upload', icon: 'create_new_folder', label: 'Aggiungi risorsa', keywords: 'carica file', run: h.uploadResource },
       { id: 'unread', icon: 'mark_email_unread', label: 'Segna come non letta', run: () => unread.mutate() },
       ...(c.splitFromId ? [{ id: 'rejoin', icon: 'call_merge', label: "Riunisci alla conversazione d'origine", keywords: 'annulla stacca unisci', run: () => detacher.rejoin(c.id, projectKeyOf(c)) }] : []),
-      ...(!c.projectId ? [{ id: 'noise', icon: 'newspaper', label: c.isNoise ? 'Non è una news' : 'Sposta in News', run: () => noise.mutate() }] : []),
+      // News e Spam: ogni scelta diventa una regola sul mittente (con proposta per la posta già arrivata).
+      ...(c.isSpam
+        ? [{ id: 'not-spam', icon: 'mark_email_unread', label: 'Non è spam', primary: true, run: () => openSenderRule(c.id, 'not_spam') }]
+        : !c.projectId
+          ? [{ id: 'news', icon: 'newspaper', label: c.isNoise ? 'Non è una News' : 'È una News', run: () => openSenderRule(c.id, c.isNoise ? 'not_news' : 'news') }]
+          : []),
       ...(c.projectId && c.participants.length
         ? [{ id: 'members', icon: 'group_add', label: c.participants.length > 1 ? 'Aggiungi i destinatari al progetto come gruppo' : `Aggiungi ${personLabel(c.participants[0]!)} al progetto`, run: () => toProject.mutate() }]
         : []),
       { id: 'toggle', icon: focused ? 'unfold_less' : 'unfold_more', label: focused ? 'Chiudi conversazione' : 'Apri conversazione', run: h.toggleFocus },
-      { id: 'spam', icon: 'report', label: 'È spam', tone: 'danger', keywords: 'spam indesiderata', confirm: { message: 'Segnalare come spam? Sparisce dall\'app e va nella cartella Spam di Gmail.', okLabel: 'È spam', danger: true }, run: () => spam.mutate() },
+      ...(!c.isSpam ? [{ id: 'spam', icon: 'report', label: 'È spam', tone: 'danger' as const, keywords: 'spam indesiderata', run: () => openSenderRule(c.id, 'spam') }] : []),
       { id: 'trash', icon: 'delete', label: 'Cestina', tone: 'danger', keywords: 'elimina', confirm: { message: 'Spostare la conversazione nel cestino?', okLabel: 'Cestina', danger: true }, run: () => trash.mutate() },
     ];
     return { title: c.summary ?? c.subject ?? 'Conversazione', actions };
