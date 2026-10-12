@@ -30,10 +30,13 @@ await app.listen({ host: config.host, port: config.port });
 
 services.runner.start();
 services.jobs.start();
-enqueueMissingEmbeddings(db);
-enqueueMissingSummaries(db);
-enqueueMissingTaskExtraction(db);
-enqueueMissingClassifications(db);
+// Lavori mancanti rimessi in coda, in un'unica transazione: con migliaia di conversazioni è molto più veloce.
+sqlite.transaction(() => {
+  enqueueMissingEmbeddings(db);
+  enqueueMissingSummaries(db);
+  enqueueMissingTaskExtraction(db);
+  enqueueMissingClassifications(db);
+})();
 // Password ancora in variabili d'ambiente (env:...): si spostano nel Portachiavi.
 try {
   const moved = services.accounts.migrateEnvCredentials();

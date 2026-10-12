@@ -134,6 +134,13 @@
       "when": 1791799971335,
       "tag": "0018_sender_rules_spam",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1791812312824,
+      "tag": "0019_job_indexes",
+      "breakpoints": true
     }
   ]
 }

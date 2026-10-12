@@ -460,7 +460,13 @@ export const jobs = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (t) => [index('jobs_pick').on(t.status, t.priority, t.runAfter)],
+  (t) => [
+    index('jobs_pick').on(t.status, t.priority, t.runAfter),
+    // Controllo dei doppioni a ogni accodamento: senza indice, con decine di migliaia di lavori, blocca il server.
+    index('jobs_dedupe').on(t.kind, t.status, t.payload),
+    // Scelta del prossimo lavoro (priorità, poi ordine di arrivo).
+    index('jobs_order').on(t.status, t.priority, t.createdAt),
+  ],
 );
 
 /** Chunk di testo pulito per gli embedding; i vettori stanno nella tabella virtuale chunk_vec. */
