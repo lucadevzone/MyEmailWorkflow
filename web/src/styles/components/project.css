@@ -324,3 +324,10 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
 .pm-rule__toggle { border: 0; background: transparent; padding: 0; color: var(--accent); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 8px; }
 .pm-rule__list { list-style: none; margin: 0 0 12px; padding: 8px 10px; max-height: 240px; overflow-y: auto; background: var(--surface-soft); border-radius: var(--r-lg); display: flex; flex-direction: column; gap: 6px; }
 .pm-rule__list li { display: flex; flex-direction: column; min-width: 0; font-size: var(--fs-md); }
+
+/* Conversazioni simili da spostare nello stesso progetto */
+.pm-related { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 360px; overflow-y: auto; }
+.pm-related li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: var(--r-lg); background: var(--surface-soft); }
+.pm-related li.is-done { opacity: .6; }
+.pm-related__main { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: var(--fs-md); }
+.pm-related__done { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-sm); flex: none; }

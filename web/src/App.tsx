@@ -10,6 +10,7 @@ import { SettingsPage } from './settings/SettingsPage.tsx';
 import { ProjectSettingsPage } from './projects/ProjectSettingsPage.tsx';
 import { WelcomePage } from './welcome/WelcomePage.tsx';
 import { SenderRuleHost } from './rules/SenderRuleDialog.tsx';
+import { RelatedMoveHost } from './rules/RelatedMoveDialog.tsx';
 import { useQuery } from '@tanstack/react-query';
 import { api } from './api.ts';
 import { EditingDimmer, useEditing } from './ui/editing.tsx';
@@ -49,6 +50,7 @@ export function App() {
       </main>
       <StatusBar />
       <SenderRuleHost />
+      <RelatedMoveHost />
     </div>
   );
 }

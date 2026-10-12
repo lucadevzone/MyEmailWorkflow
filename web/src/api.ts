@@ -14,6 +14,7 @@ import type {
   ProjectSuggestion,
   ResourceDto,
   DraftDto,
+  RelatedMoveDto,
   SenderRuleDto,
   SenderRuleKind,
   SenderRuleResultDto,
@@ -131,6 +132,8 @@ export const api = {
   applySenderRule: (ruleId: string, conversationIds: string[]) => request<{ applied: number }>('POST', `/api/sender-rules/${ruleId}/apply`, { conversationIds }),
   senderRules: () => request<SenderRuleDto[]>('GET', '/api/sender-rules'),
   deleteSenderRule: (id: string) => request<void>('DELETE', `/api/sender-rules/${id}`),
+  relatedForMove: (id: string, projectId: string) => request<RelatedMoveDto>('GET', `/api/conversations/${id}/related?projectId=${encodeURIComponent(projectId)}`),
+  moveMany: (ids: string[], projectId: string) => request<{ moved: number }>('POST', '/api/conversations/move-many', { ids, projectId }),
   move: (id: string, projectId: string | null) =>
     request<{ previousProjectId: string | null }>('POST', `/api/conversations/${id}/move`, { projectId }),
   markViewRead: (view: 'inbox' | 'noise' | 'project', projectId?: string) =>

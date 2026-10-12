@@ -8,6 +8,7 @@ import type { ComposeRequest } from '../workspace/pane.ts';
 import { projectKeyOf } from '../shell/paths.ts';
 import { useDetach } from './useDetach.ts';
 import { openSenderRule } from '../rules/SenderRuleDialog.tsx';
+import { openRelatedMove } from '../rules/RelatedMoveDialog.tsx';
 
 export interface ConversationHandlers {
   compose: (r: ComposeRequest) => void;
@@ -22,6 +23,8 @@ export interface ConversationHandlers {
 /** Operazioni su una conversazione condivise da scheda compressa, scheda in focus e menu contestuale. */
 export function useConversationActions(c: ConversationListItem, h: ConversationHandlers) {
   const detacher = useDetach();
+  // Conversazione in Da smistare (non News né Spam): dopo uno spostamento si propongono le simili.
+  const fromInbox = !c.projectId && !c.isNoise && !c.isSpam;
   const qc = useQueryClient();
   const toast = useToast();
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
@@ -57,6 +60,8 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
       refresh();
       const name = projectId ? projects.find((p) => p.id === projectId)?.name : 'Da smistare';
       toast({ text: `Spostata in ${name}`, action: { label: 'Annulla', run: () => void api.move(c.id, res.previousProjectId).then(refresh) } });
+      // Da Da smistare a un progetto: si propongono le altre che potrebbero andarci.
+      if (projectId && fromInbox) openRelatedMove(c.id, projectId);
     },
   });
   const unread = useMutation({ mutationFn: () => api.markUnread(c.id), onSuccess: refresh });
@@ -72,7 +77,11 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
     onSuccess: (res, { sug }) => {
       refresh();
       const ids = (res as { activityIds?: string[] }).activityIds;
-      if (sug.kind === 'project') toast({ text: `Spostata in ${sug.payload.projectName}`, action: { label: 'Annulla', run: () => void api.move(c.id, null).then(refresh) } });
+      if (sug.kind === 'project') {
+        toast({ text: `Spostata in ${sug.payload.projectName}`, action: { label: 'Annulla', run: () => void api.move(c.id, null).then(refresh) } });
+        const target = (sug.payload as { projectId?: string | null }).projectId;
+        if (target && fromInbox) openRelatedMove(c.id, target);
+      }
       else if (ids?.length) toast({ text: 'Conversazione archiviata', action: { label: 'Annulla', run: undoActivities(ids) } });
     },
   });

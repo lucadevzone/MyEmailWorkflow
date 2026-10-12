@@ -203,6 +203,25 @@ describe('progetto suggerito', () => {
     expect(s.jobs.status().pending).toBe(0);
   });
 
+  it('dopo uno spostamento propone le altre di Da smistare: stesso mittente e contenuto simile, non quelle estranee', async () => {
+    const { relatedForMove } = await import('../src/conversations/related.ts');
+    llmAnswer = () => ({ scelta: 'nessuno', confidenza: 0 }); // nessun suggerimento: contano solo mittente e contenuto
+    const a = await mail({ id: '<r1@x>', from: 'Mario Rossi <mario@x.it>', subject: 'Spese', body: 'Rendicontazione trimestrale del progetto PNRR, spese del personale.' });
+    const b = await mail({ id: '<r2@x>', from: 'Mario Rossi <mario@x.it>', subject: 'Ciao', body: 'Ci vediamo domani al bar?' });
+    const c = await mail({ id: '<r3@x>', from: 'anna@y.it', subject: 'Spese', body: 'Rendicontazione trimestrale del progetto PNRR, spese del personale.' });
+    const d = await mail({ id: '<r4@x>', from: 'zio@z.it', subject: 'Ricetta', body: 'La torta di mele si fa con tre uova.' });
+    await s.jobs.drain();
+    s.actions.move(a.conversationId, pnrr);
+    const related = relatedForMove(s.sqlite, a.conversationId, pnrr);
+    const ids = related.items.map((i) => i.conversationId);
+    expect(ids).toContain(b.conversationId); // stesso mittente
+    expect(ids).toContain(c.conversationId); // contenuto simile
+    expect(ids).not.toContain(d.conversationId);
+    expect(related.items.find((i) => i.conversationId === b.conversationId)!.reasons).toContain('stesso mittente');
+    expect(related.items.find((i) => i.conversationId === c.conversationId)!.reasons).toContain('contenuto simile');
+    expect(related.items[0]!.conversationId).toBe(b.conversationId); // il mittente conta di più
+  });
+
   it('accettare sposta la conversazione; scartare non ripropone quel progetto', async () => {
     await seedPnrr();
     const a = await mail({ id: '<a@x>', from: 'mario@x.it', subject: 'Spese', body: 'spese del personale PNRR' });

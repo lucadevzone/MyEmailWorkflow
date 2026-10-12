@@ -633,3 +633,16 @@ export interface SenderRuleResultDto {
   total: number;
   items: { conversationId: string; subject: string | null; from: string; date: number }[];
 }
+
+/** Dopo aver spostato una conversazione da Da smistare a un progetto: altre che potrebbero andarci. */
+export interface RelatedMoveDto {
+  projectId: string;
+  items: {
+    conversationId: string;
+    subject: string | null;
+    from: string | null;
+    date: number;
+    /** Perché è proposta: "stesso mittente", "contenuto simile", "suggerita per questo progetto". */
+    reasons: string[];
+  }[];
+}
