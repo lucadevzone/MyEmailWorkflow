@@ -140,6 +140,13 @@ export class ImapProvider implements MailProviderClient {
     await this.withMailbox(mailbox, () => this.client.messageMove(uids, trash, { uid: true }));
   }
 
+  async moveToSpam(mailbox: string, uids: number[]): Promise<void> {
+    if (!uids.length) return;
+    const spam = await this.specialFolder('\\Junk');
+    if (!spam) throw new Error('Cartella Spam non trovata sul server');
+    await this.withMailbox(mailbox, () => this.client.messageMove(uids, spam, { uid: true }));
+  }
+
   async archive(mailbox: string, uids: number[]): Promise<void> {
     if (!uids.length) return;
     if (this.isGmail()) {

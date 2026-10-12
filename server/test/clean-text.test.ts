@@ -47,22 +47,43 @@ describe('normalizeSubject', () => {
 
 describe('detectNoise', () => {
   const h = (o: Record<string, string>) => new Map(Object.entries(o));
-  it('riconosce newsletter e mittenti automatici', () => {
-    expect(detectNoise({ headers: h({ 'list-unsubscribe': '<mailto:x>' }), fromAddress: 'news@shop.it' }).isNoise).toBe(true);
-    expect(detectNoise({ headers: h({}), fromAddress: 'no-reply@accounts.google.com' }).isNoise).toBe(true);
-    expect(detectNoise({ headers: h({ precedence: 'bulk' }), fromAddress: 'a@b.it' }).isNoise).toBe(true);
-    expect(detectNoise({ headers: h({}), fromAddress: 'google-noreply@google.com' }).isNoise).toBe(true);
-    expect(detectNoise({ headers: h({ 'feedback-id': 'x:y:z' }), fromAddress: 'wix-team@emails.wix.com' }).isNoise).toBe(true);
+  const noise = (o: Record<string, string>, from: string, subject?: string) => detectNoise({ headers: h(o), fromAddress: from, subject }).isNoise;
+
+  it('newsletter e invii massivi: un indizio forte o due deboli', () => {
+    expect(noise({ precedence: 'bulk' }, 'a@b.it')).toBe(true);
+    expect(noise({ 'list-unsubscribe': '<mailto:x>' }, 'newsletter@shop.it')).toBe(true); // mittente di marketing
+    expect(noise({ 'list-unsubscribe': '<mailto:x>', 'list-id': '<promo.shop.it>' }, 'info@shop.it')).toBe(true); // invio a lista
+    expect(noise({ 'feedback-id': 'x', 'list-unsubscribe': '<mailto:x>' }, 'no-reply@youtube.com')).toBe(true);
+    // facile.it: List-Unsubscribe, Precedence bulk, Auto-Submitted, Feedback-ID
+    expect(noise({ 'list-unsubscribe': '<x>', precedence: 'bulk', 'auto-submitted': 'auto-generated', 'feedback-id': 'x' }, 'preventivo@newsletter.facile.it', 'Il tuo preventivo')).toBe(true);
+  });
+
+  it('un indizio debole da solo non basta (casi veri dalla casella personale)', () => {
+    expect(noise({ 'feedback-id': 'x:y:z' }, 'fatture@vodafone.it', 'Emissione fattura Vodafone')).toBe(false);
+    expect(noise({}, 'no-reply@accounts.google.com')).toBe(false);
+    expect(noise({ 'list-unsubscribe': '<mailto:x>' }, 'mario@studio.it')).toBe(false);
+  });
+
+  it('oggetto transazionale: servono indizi forti', () => {
+    // Condominio: List-Unsubscribe + Feedback-ID, ma è un avviso di pagamento.
+    expect(noise({ 'list-unsubscribe': '<x>', 'feedback-id': 'x' }, 'info@studioliberta.it', 'Condominio Via Arimondi 1/z Avviso di pagamento quota ordinaria Ottobre 2026')).toBe(false);
+    // Preply: SendGrid + noreply, ma è un messaggio della tua insegnante.
+    expect(noise({ 'x-sg-eid': 'x' }, 'noreply@trans.preply.com', 'Nuovo messaggio da Mariska')).toBe(false);
+    // Senza oggetto transazionale le stesse intestazioni sono rumore.
+    expect(noise({ 'x-sg-eid': 'x' }, 'noreply@trans.preply.com', 'Scopri le nuove offerte')).toBe(true);
+    // Transazionale ma con indizi forti di marketing: resta rumore.
+    expect(noise({ precedence: 'bulk' }, 'offerte@shop.it', 'Conferma la tua iscrizione e ricevi lo sconto')).toBe(true);
   });
 
   it('legge List-Unsubscribe nel formato raggruppato di mailparser', () => {
-    const headers = new Map<string, unknown>([['list', { unsubscribe: { mail: 'u@x' } }]]);
+    const headers = new Map<string, unknown>([['list', { unsubscribe: { mail: 'u@x' }, id: { id: 'promo.musicfy' } }]]);
     expect(detectNoise({ headers, fromAddress: 'team@usemusicfy.com' }).isNoise).toBe(true);
     const discussion = new Map<string, unknown>([['list', { id: { id: 'dev.x.org' } }]]);
     expect(detectNoise({ headers: discussion, fromAddress: 'mario@x.org' }).isNoise).toBe(false);
   });
+
   it('non marca la posta personale né le mailing list di discussione', () => {
-    expect(detectNoise({ headers: h({}), fromAddress: 'mario.rossi@unipa.it' }).isNoise).toBe(false);
-    expect(detectNoise({ headers: h({ 'list-id': '<dev.lists.x.org>' }), fromAddress: 'mario@x.org' }).isNoise).toBe(false);
+    expect(noise({}, 'mario.rossi@unipa.it')).toBe(false);
+    expect(noise({ 'list-id': '<dev.lists.x.org>' }, 'mario@x.org')).toBe(false);
   });
 });

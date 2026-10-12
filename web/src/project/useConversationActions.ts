@@ -50,6 +50,13 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
       toast({ text: 'Spostata nel cestino', action: { label: 'Annulla', run: undoActivities(res.activityIds) } });
     },
   });
+  const spam = useMutation({
+    mutationFn: () => api.markSpam(c.id),
+    onSuccess: (res) => {
+      refresh();
+      toast({ text: 'Segnalata come spam', action: { label: 'Annulla', run: undoActivities(res.activityIds) } });
+    },
+  });
   const move = useMutation({
     mutationFn: (projectId: string | null) => api.move(c.id, projectId),
     onSuccess: (res, projectId) => {
@@ -135,6 +142,7 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
         ? [{ id: 'members', icon: 'group_add', label: c.participants.length > 1 ? 'Aggiungi i destinatari al progetto come gruppo' : `Aggiungi ${personLabel(c.participants[0]!)} al progetto`, run: () => toProject.mutate() }]
         : []),
       { id: 'toggle', icon: focused ? 'unfold_less' : 'unfold_more', label: focused ? 'Chiudi conversazione' : 'Apri conversazione', run: h.toggleFocus },
+      { id: 'spam', icon: 'report', label: 'È spam', tone: 'danger', keywords: 'spam indesiderata', confirm: { message: 'Segnalare come spam? Sparisce dall\'app e va nella cartella Spam di Gmail.', okLabel: 'È spam', danger: true }, run: () => spam.mutate() },
       { id: 'trash', icon: 'delete', label: 'Cestina', tone: 'danger', keywords: 'elimina', confirm: { message: 'Spostare la conversazione nel cestino?', okLabel: 'Cestina', danger: true }, run: () => trash.mutate() },
     ];
     return { title: c.summary ?? c.subject ?? 'Conversazione', actions };

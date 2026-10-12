@@ -123,6 +123,8 @@ export const conversations = sqliteTable(
     splitAt: integer('split_at'),
     /** Smistata da sola (RF-E6): segno "smistata automaticamente · Annulla" finché non la si apre. */
     autoSortedAt: integer('auto_sorted_at'),
+    /** News sì/no deciso a mano dall'utente: le rivalutazioni automatiche non lo toccano. */
+    noiseManual: integer('noise_manual', { mode: 'boolean' }).notNull().default(false),
     ...meta(),
   },
   (t) => [
@@ -392,7 +394,7 @@ export const activities = sqliteTable(
   {
     id: text('id').primaryKey(),
     // auto_sort: smistamento automatico (solo locale, nasce già eseguito: è una voce di cronologia).
-    kind: text('kind', { enum: ['send', 'trash', 'archive', 'set_flags', 'auto_sort'] }).notNull(),
+    kind: text('kind', { enum: ['send', 'trash', 'archive', 'set_flags', 'auto_sort', 'spam'] }).notNull(),
     accountId: text('account_id').references(() => accounts.id),
     payload: text('payload').notNull(),
     status: text('status', { enum: ['pending', 'running', 'done', 'failed', 'cancelled'] })

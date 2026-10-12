@@ -521,10 +521,11 @@ export class ConversationService {
       .get()?.id;
   }
 
-  setNoise(id: string, isNoise: boolean): boolean {
+  /** manual: deciso dall'utente (le rivalutazioni automatiche non lo cambiano più). */
+  setNoise(id: string, isNoise: boolean, manual = true): boolean {
     const res = this.db
       .update(conversations)
-      .set({ isNoise, updatedAt: now() })
+      .set({ isNoise, ...(manual ? { noiseManual: true } : {}), updatedAt: now() })
       .where(and(eq(conversations.id, id), isNull(conversations.deletedAt)))
       .run();
     return res.changes > 0;

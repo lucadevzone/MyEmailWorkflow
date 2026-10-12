@@ -36,6 +36,7 @@ function fakeProvider(calls: Call[]): MailProviderClient {
     addFlags: async (mailbox, uids, flags) => void calls.push({ op: 'addFlags', mailbox, uids, flags }),
     removeFlags: async (mailbox, uids, flags) => void calls.push({ op: 'removeFlags', mailbox, uids, flags }),
     moveToTrash: async (mailbox, uids) => void calls.push({ op: 'trash', mailbox, uids }),
+    moveToSpam: async (mailbox, uids) => void calls.push({ op: 'spam', mailbox, uids }),
     archive: async (mailbox, uids) => void calls.push({ op: 'archive', mailbox, uids }),
     appendToSent: async () => void calls.push({ op: 'appendToSent' }),
   };
@@ -376,6 +377,74 @@ describe('bozze, allegati, inoltro', () => {
   it('bozza senza progetto non si invia', () => {
     const d = s.drafts.create({ to: ['a@b.it'] });
     expect(() => s.drafts.send(d.id, false)).toThrow(/progetto/);
+  });
+});
+
+describe('spam', () => {
+  it('È spam: sparisce subito, al batch va nella cartella Spam; annullabile', async () => {
+    const { conversationId } = await incoming('<sp@x>', 600);
+    const [a] = s.actions.markSpam(conversationId);
+    expect(conv().list({ view: 'inbox' })).toHaveLength(0);
+    s.activities.cancel(a!);
+    expect(conv().list({ view: 'inbox' })).toHaveLength(1);
+    s.actions.markSpam(conversationId);
+    await s.runner.run();
+    expect(calls).toEqual([{ op: 'spam', mailbox: '[Gmail]/Tutti i messaggi', uids: [600] }]);
+  });
+});
+
+describe('manutenzione retroattiva', () => {
+  it('corregge date assurde, archivia ciò che è archiviato su Gmail, ricalcola le News (non quelle decise a mano); una volta sola', async () => {
+    const { runRepairs } = await import('../src/maintenance/repair.ts');
+    const src = (id: string, extra: string, subject = 'Ciao') =>
+      Buffer.from(`Message-ID: <${id}@x>\r\nReceived: from mx by gmail; Wed, 01 Oct 2026 10:00:00 +0000\r\nFrom: fatture@vodafone.it\r\nTo: me@gmail.com\r\nSubject: ${subject}\r\nDate: Wed, 01 Oct 2026 10:00:00 +0000\r\n${extra}\r\nciao`);
+    const ing = (id: string, n: number, extra: string, labels: string[], subject?: string) =>
+      ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, { uid: n, mailbox: '[Gmail]/Tutti i messaggi', source: src(id, extra, subject), flags: [], labels, gmMsgid: `gm-${n}`, gmThreadId: `t-${n}` });
+    const fattura = await ing('f', 700, 'Feedback-ID: x:y:z\r\n', ['\\Inbox'], 'Emissione fattura Vodafone');
+    const manual = await ing('m', 701, 'Feedback-ID: x:y:z\r\n', ['\\Inbox'], 'Emissione fattura');
+    const old = await ing('o', 702, '', ['\\Inbox']);
+    const row = (id: string) => s.db.select().from(conversations).where(eq(conversations.id, id)).get()!;
+    // Stato lasciato dalla versione precedente: fattura nelle News, data falsa, etichetta Inbox tolta.
+    s.sqlite.prepare('update conversations set is_noise = 1 where id in (?, ?)').run(fattura.conversationId, manual.conversationId);
+    s.sqlite.prepare('update conversations set noise_manual = 1 where id = ?').run(manual.conversationId);
+    s.sqlite.prepare('update messages set date = ? where id = ?').run(Date.parse('8496-06-13T03:38:25Z'), old.messageId);
+    s.sqlite.prepare("update messages set labels = '[]' where id = ?").run(old.messageId);
+    s.sqlite.prepare('delete from settings').run();
+
+    await runRepairs(s, () => {});
+    expect(row(fattura.conversationId).isNoise).toBe(false); // il filtro nuovo la tiene fuori dalle News
+    expect(row(manual.conversationId).isNoise).toBe(true); // scelta manuale: non si tocca
+    expect(s.db.select().from(messages).where(eq(messages.id, old.messageId!)).get()!.date).toBe(Date.parse('2026-10-01T10:00:00Z'));
+    expect(row(old.conversationId).lastMessageAt).toBe(Date.parse('2026-10-01T10:00:00Z'));
+    expect(row(old.conversationId).archivedAt).not.toBeNull();
+    expect(row(fattura.conversationId).archivedAt).toBeNull();
+
+    // Seconda volta: non fa nulla.
+    s.sqlite.prepare('update conversations set is_noise = 1 where id = ?').run(fattura.conversationId);
+    await runRepairs(s, () => {});
+    expect(row(fattura.conversationId).isNoise).toBe(true);
+  });
+});
+
+describe('posta importata da Gmail', () => {
+  it('senza l\'etichetta Posta in arrivo la conversazione nasce archiviata; una risposta archiviata non la riporta in vista', async () => {
+    const archived = await ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
+      uid: 500, mailbox: '[Gmail]/Tutti i messaggi', source: eml({ id: '<old@x>', from: 'mario@x.it', subject: 'Vecchia', body: 'già letta' }),
+      flags: ['\\Seen'], labels: [], gmMsgid: 'gm-500', gmThreadId: 'A',
+    });
+    const row = () => s.db.select().from(conversations).where(eq(conversations.id, archived.conversationId)).get()!;
+    expect(row().archivedAt).not.toBeNull();
+    const inbox = await incoming('<new@x>', 501, { gmThreadId: 'B' });
+    expect(s.db.select().from(conversations).where(eq(conversations.id, inbox.conversationId)).get()!.archivedAt).toBeNull();
+  });
+
+  it('una data falsificata (anno 8496) viene sostituita da quella di arrivo', async () => {
+    const r = await ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
+      uid: 502, mailbox: '[Gmail]/Tutti i messaggi',
+      source: Buffer.from('Message-ID: <spam@x>\r\nFrom: kk@hotmail.com\r\nTo: me@gmail.com\r\nSubject: Notifica\r\nDate: Sat, 13 Jun 8496 03:38:25 +0000\r\n\r\nciao'),
+      flags: [], labels: ['\\Inbox'], gmMsgid: 'gm-502', gmThreadId: 'C', internalDate: new Date('2026-10-01T10:00:00Z'),
+    });
+    expect(s.db.select().from(messages).where(eq(messages.id, r.messageId!)).get()!.date).toBe(Date.parse('2026-10-01T10:00:00Z'));
   });
 });
 

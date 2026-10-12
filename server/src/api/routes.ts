@@ -279,6 +279,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return { ok: true };
   });
   app.post<{ Params: { id: string } }>('/api/conversations/:id/trash', async (req) => ({ activityIds: deps.actions.trash(req.params.id) }));
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/spam', async (req) => ({ activityIds: deps.actions.markSpam(req.params.id) }));
   app.post<{ Params: { id: string }; Body: { projectId?: string | null } }>('/api/conversations/:id/move', async (req) => {
     const projectId = req.body?.projectId ?? null;
     return deps.actions.move(req.params.id, projectId);

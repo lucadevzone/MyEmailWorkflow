@@ -60,6 +60,8 @@ export interface MailProviderClient {
   removeFlags(mailbox: string, uids: number[], flags: string[]): Promise<void>;
   /** Gmail: sposta nel Cestino. IMAP generico: nella cartella \\Trash. */
   moveToTrash(mailbox: string, uids: number[]): Promise<void>;
+  /** Sposta nella cartella Spam del server (su Gmail lo segnala anche al filtro antispam). */
+  moveToSpam(mailbox: string, uids: number[]): Promise<void>;
   /** Gmail: toglie l'etichetta \\Inbox. IMAP generico: sposta nella cartella \\Archive. */
   archive(mailbox: string, uids: number[]): Promise<void>;
   /** Copia nella cartella Inviati (non serve su Gmail, che la salva da sé). */

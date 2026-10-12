@@ -122,6 +122,7 @@ export const api = {
   archive: (id: string) => request<{ activityIds: string[] }>('POST', `/api/conversations/${id}/archive`),
   unarchive: (id: string) => request<{ ok: true }>('POST', `/api/conversations/${id}/unarchive`),
   trash: (id: string) => request<{ activityIds: string[] }>('POST', `/api/conversations/${id}/trash`),
+  markSpam: (id: string) => request<{ activityIds: string[] }>('POST', `/api/conversations/${id}/spam`),
   move: (id: string, projectId: string | null) =>
     request<{ previousProjectId: string | null }>('POST', `/api/conversations/${id}/move`, { projectId }),
   markViewRead: (view: 'inbox' | 'noise' | 'project', projectId?: string) =>

@@ -211,6 +211,7 @@ export class ActivityService {
         this.conversations.setArchived((p as ConversationOpPayload).conversationId, false);
         break;
       case 'trash':
+      case 'spam':
         this.conversations.setTrashed((p as ConversationOpPayload).conversationId, false);
         break;
       case 'send': {

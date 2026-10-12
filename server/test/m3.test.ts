@@ -37,7 +37,7 @@ function eml(o: { id: string; from: string; to?: string; subject: string; body: 
 let uid = 1;
 const mail = (o: Parameters<typeof eml>[0]) =>
   ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
-    uid: uid++, mailbox: 'All', source: eml(o), flags: [], labels: [], gmMsgid: `g${uid}`, gmThreadId: null,
+    uid: uid++, mailbox: 'All', source: eml(o), flags: [], labels: ['\\Inbox'], gmMsgid: `g${uid}`, gmThreadId: null,
   });
 
 beforeEach(() => {

@@ -167,6 +167,14 @@ export class MailActions {
     return ids;
   }
 
+  /** È spam: sparisce subito dall'app e, al batch, va nella cartella Spam del server (annullabile fino ad allora). */
+  markSpam(conversationId: string): string[] {
+    this.conv.setTrashed(conversationId, true);
+    const ids = this.enqueuePerAccount(conversationId, 'spam', 'Segnala come spam');
+    bus.publish({ type: 'conversations', ids: [conversationId] });
+    return ids;
+  }
+
   move(conversationId: string, projectId: string | null) {
     const res = this.conv.move(conversationId, projectId);
     if (!res) throw new ActionError('Conversazione non trovata');
@@ -478,7 +486,7 @@ export class MailActions {
     );
   }
 
-  private enqueuePerAccount(conversationId: string, kind: 'archive' | 'trash', verb: string): string[] {
+  private enqueuePerAccount(conversationId: string, kind: 'archive' | 'trash' | 'spam', verb: string): string[] {
     const accountIds = new Set(
       this.deps.db
         .select({ accountId: messages.accountId })

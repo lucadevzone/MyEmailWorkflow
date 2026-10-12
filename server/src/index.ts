@@ -7,6 +7,7 @@ import { enqueueMissingSummaries } from './ai/summarize.ts';
 import { enqueueMissingEmbeddings } from './ai/embed.ts';
 import { enqueueMissingTaskExtraction } from './ai/extract-tasks.ts';
 import { enqueueMissingClassifications } from './ai/classify.ts';
+import { runRepairs } from './maintenance/repair.ts';
 
 const { db, sqlite } = openDb();
 runMigrations(db);
@@ -41,3 +42,5 @@ try {
   app.log.error(`Spostamento delle password nel Portachiavi non riuscito: ${(err as Error).message}`);
 }
 for (const account of services.accounts.list()) services.sync.start(account);
+// Correzioni retroattive sulla posta già importata (una volta sola, in background).
+void runRepairs(services, (m) => app.log.info(m)).catch((err) => app.log.error(`Manutenzione non riuscita: ${(err as Error).message}`));

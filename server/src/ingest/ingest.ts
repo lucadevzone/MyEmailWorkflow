@@ -21,6 +21,7 @@ import { newId, now } from '../lib/ids.ts';
 import type { BlobStore } from '../store/blobs.ts';
 import { cleanBody, makeSnippet, normalizeSubject } from './clean-text.ts';
 import { detectNoise } from './noise.ts';
+import { messageDate } from './dates.ts';
 import { pendingFlagIntent, pendingSeenIntent } from '../activities/service.ts';
 import { enqueueSummary } from '../ai/summarize.ts';
 import { bus } from '../events/bus.ts';
@@ -107,7 +108,12 @@ export async function ingestMessage(
   const bcc = addressesOf(parsed.bcc);
   const direction =
     raw.labels.includes('\\Sent') || (from && from.email === account.email.toLowerCase()) ? 'out' : 'in';
-  const date = (parsed.date ?? raw.internalDate ?? new Date()).getTime();
+  // Data falsificata (es. spam nell'anno 8496): si usa quella di arrivo.
+  const { date } = messageDate(parsed.date, raw.internalDate, parsed.headers);
+  // Su Gmail "Tutti i messaggi" contiene anche la posta già archiviata: senza l'etichetta Posta in arrivo
+  // la conversazione nasce archiviata, e un messaggio archiviato non la riporta in vista.
+  const gmail = !!raw.gmMsgid;
+  const inInbox = !gmail || raw.labels.includes('\\Inbox');
   const inReplyTo = cleanId(parsed.inReplyTo);
   const references = referencesOf(parsed);
   const t = now();
@@ -121,7 +127,8 @@ export async function ingestMessage(
       parentIds: [...new Set([inReplyTo, ...[...references].reverse()].filter((x): x is string => !!x))],
       subject: parsed.subject ?? null,
       date,
-      noise: () => detectNoise({ headers: parsed.headers, fromAddress: from?.email ?? null }).isNoise,
+      archived: !inInbox,
+      noise: () => detectNoise({ headers: parsed.headers, fromAddress: from?.email ?? null, subject: parsed.subject ?? null }).isNoise,
     });
 
     const messageId = newId();
@@ -199,7 +206,7 @@ export async function ingestMessage(
       .set({
         lastMessageAt: sql`max(${conversations.lastMessageAt}, ${date})`,
         // Posta nuova in arrivo riporta in vista una conversazione archiviata o cestinata (come Gmail).
-        ...(direction === 'in' ? { archivedAt: null, trashedAt: null } : {}),
+        ...(direction === 'in' && inInbox ? { archivedAt: null, trashedAt: null } : {}),
         updatedAt: t,
       })
       .where(eq(conversations.id, conversationId))
@@ -245,6 +252,8 @@ interface ThreadKeys {
   parentIds: string[];
   subject: string | null;
   date: number;
+  /** La conversazione, se nasce ora, nasce archiviata (posta già archiviata su Gmail). */
+  archived: boolean;
   noise: () => boolean;
 }
 
@@ -318,6 +327,7 @@ function resolveConversation(db: Db, k: ThreadKeys): string {
         lastMessageAt: k.date,
         gmThreadId: k.gmThreadId,
         isNoise: k.noise(),
+        archivedAt: k.archived ? t : null,
         createdAt: t,
         updatedAt: t,
       })

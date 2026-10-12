@@ -1,0 +1,1 @@
+ALTER TABLE `conversations` ADD `noise_manual` integer DEFAULT false NOT NULL;

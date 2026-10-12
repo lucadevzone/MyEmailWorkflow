@@ -433,7 +433,7 @@ export interface ProjectInput {
 
 // ─── Coda attività ───────────────────────────────────────────────────────────
 
-export type ActivityKind = 'send' | 'trash' | 'archive' | 'set_flags' | 'auto_sort';
+export type ActivityKind = 'send' | 'trash' | 'archive' | 'set_flags' | 'auto_sort' | 'spam';
 export type ActivityStatus = 'pending' | 'running' | 'done' | 'failed' | 'cancelled';
 
 export interface ActivityDto {

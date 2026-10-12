@@ -123,6 +123,7 @@ export class ActivityRunner {
         return;
       }
       case 'archive':
+      case 'spam':
       case 'trash': {
         const p = JSON.parse(a.payload) as ConversationOpPayload;
         // Si risolvono i messaggi al momento dell'esecuzione: include le risposte arrivate nel frattempo.
@@ -135,6 +136,7 @@ export class ActivityRunner {
         for (const [mailbox, uids] of this.uidsByMailbox(ids)) {
           const client = await imap();
           if (a.kind === 'archive') await client.archive(mailbox, uids);
+          else if (a.kind === 'spam') await client.moveToSpam(mailbox, uids);
           else await client.moveToTrash(mailbox, uids);
         }
         return;
