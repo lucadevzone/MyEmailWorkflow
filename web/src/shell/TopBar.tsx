@@ -127,9 +127,9 @@ function Tab({ to, label, icon, unread, total, project, onEditProject, muted }: 
         <span
           className={`pm-tab__tasks${project.overdueTaskCount ? ' pm-tab__tasks--late' : ''}`}
           title={`${project.openTaskCount} task aperti${project.overdueTaskCount ? `, ${project.overdueTaskCount} scaduti` : ''}`}
+          aria-label={`${project.openTaskCount} task aperti${project.overdueTaskCount ? `, ${project.overdueTaskCount} scaduti` : ''}`}
         >
           <Icon name={project.overdueTaskCount ? 'assignment_late' : 'assignment'} size={15} />
-          {project.openTaskCount}
         </span>
       )}
     </NavLink>
