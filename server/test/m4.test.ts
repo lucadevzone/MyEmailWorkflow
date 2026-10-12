@@ -222,6 +222,22 @@ describe('progetto suggerito', () => {
     expect(related.items[0]!.conversationId).toBe(b.conversationId); // il mittente conta di più
   });
 
+  it('dopo un\'archiviazione propone le altre nello stesso posto (stesso mittente o contenuto simile)', async () => {
+    const { relatedFor } = await import('../src/conversations/related.ts');
+    llmAnswer = () => ({ scelta: 'nessuno', confidenza: 0 });
+    const a = await mail({ id: '<q1@x>', from: 'promo@shop.it', subject: 'Offerta', body: 'Sconto del 20% su tutto il catalogo questa settimana.' });
+    const b = await mail({ id: '<q2@x>', from: 'promo@shop.it', subject: 'Altra offerta', body: 'Nuovi arrivi in negozio.' });
+    const c = await mail({ id: '<q3@x>', from: 'zio@z.it', subject: 'Ricetta', body: 'La torta di mele si fa con tre uova.' });
+    const inProject = await mail({ id: '<q4@x>', from: 'promo@shop.it', subject: 'Offerta PNRR', body: 'Sconto.' });
+    await s.jobs.drain();
+    s.actions.move(inProject.conversationId, pnrr); // in un altro posto: non va proposta
+    s.actions.archive(a.conversationId);
+    const ids = relatedFor(s.sqlite, a.conversationId, { mode: 'archive' }).items.map((i) => i.conversationId);
+    expect(ids).toContain(b.conversationId);
+    expect(ids).not.toContain(c.conversationId);
+    expect(ids).not.toContain(inProject.conversationId);
+  });
+
   it('accettare sposta la conversazione; scartare non ripropone quel progetto', async () => {
     await seedPnrr();
     const a = await mail({ id: '<a@x>', from: 'mario@x.it', subject: 'Spese', body: 'spese del personale PNRR' });

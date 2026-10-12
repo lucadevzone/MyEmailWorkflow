@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { relatedForMove } from '../conversations/related.ts';
+import { relatedFor } from '../conversations/related.ts';
 import { clearActionSuggestions } from '../ai/suggest-actions.ts';
 import { applyRule, deleteRule, listRules, patternFor, previewRule, RuleError, saveRule, senderOfConversation } from '../rules/sender-rules.ts';
 import type { SenderRuleKind, SenderRuleResultDto } from '@mmw/shared';
@@ -325,10 +325,17 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return { applied: ids.length };
   });
   // Dopo uno spostamento in un progetto: altre conversazioni di Da smistare che potrebbero andarci.
-  app.get<{ Params: { id: string }; Querystring: { projectId?: string } }>('/api/conversations/:id/related', async (req) => {
+  // ?projectId=… dopo uno spostamento, ?mode=archive dopo un'archiviazione.
+  app.get<{ Params: { id: string }; Querystring: { projectId?: string; mode?: string } }>('/api/conversations/:id/related', async (req) => {
+    if (req.query.mode === 'archive') return relatedFor(deps.sqlite, req.params.id, { mode: 'archive' });
     const projectId = String(req.query.projectId ?? '');
     if (!projectId) throw new ActionError('Serve il progetto');
-    return relatedForMove(deps.sqlite, req.params.id, projectId);
+    return relatedFor(deps.sqlite, req.params.id, { mode: 'move', projectId });
+  });
+  app.post<{ Body: { ids?: string[] } }>('/api/conversations/archive-many', async (req) => {
+    const ids = (req.body?.ids ?? []).filter((x) => typeof x === 'string').slice(0, 500);
+    const activityIds = ids.flatMap((id) => deps.actions.archive(id));
+    return { archived: ids.length, activityIds };
   });
   app.post<{ Body: { ids?: string[]; projectId?: string } }>('/api/conversations/move-many', async (req) => {
     const projectId = String(req.body?.projectId ?? '');

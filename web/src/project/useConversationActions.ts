@@ -8,7 +8,7 @@ import type { ComposeRequest } from '../workspace/pane.ts';
 import { projectKeyOf } from '../shell/paths.ts';
 import { useDetach } from './useDetach.ts';
 import { openSenderRule } from '../rules/SenderRuleDialog.tsx';
-import { openRelatedMove } from '../rules/RelatedMoveDialog.tsx';
+import { openRelatedArchive, openRelatedMove } from '../rules/RelatedMoveDialog.tsx';
 
 export interface ConversationHandlers {
   compose: (r: ComposeRequest) => void;
@@ -44,6 +44,7 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
     onSuccess: (res) => {
       refresh();
       toast({ text: 'Conversazione archiviata', action: { label: 'Annulla', run: undoActivities(res.activityIds) } });
+      openRelatedArchive(c.id);
     },
   });
   const unarchive = useMutation({ mutationFn: () => api.unarchive(c.id), onSuccess: refresh });
@@ -82,7 +83,10 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
         const target = (sug.payload as { projectId?: string | null }).projectId;
         if (target && fromInbox) openRelatedMove(c.id, target);
       }
-      else if (ids?.length) toast({ text: 'Conversazione archiviata', action: { label: 'Annulla', run: undoActivities(ids) } });
+      else if (ids?.length) {
+        toast({ text: 'Conversazione archiviata', action: { label: 'Annulla', run: undoActivities(ids) } });
+        openRelatedArchive(c.id);
+      }
     },
   });
   const rejectSug = useMutation({ mutationFn: (sug: SuggestionDto) => api.rejectSuggestion(sug.id), onSuccess: refresh });
