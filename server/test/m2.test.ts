@@ -466,6 +466,14 @@ describe('regole per mittente (è / non è News, è / non è Spam)', () => {
     expect(conv().list({ view: 'inbox' }).some((x) => x.id === f.conversationId)).toBe(false);
     expect(conv().list({ view: 'spam' }).map((x) => x.id)).toEqual([f.conversationId]);
     expect(conv().counts().spam).toBe(1);
+
+    // Elenco ed eliminazione: eliminata, la regola non vale più per la posta futura.
+    const { listRules, deleteRule } = await import('../src/rules/sender-rules.ts');
+    expect(listRules(s.db).map((r) => [r.pattern, r.kind])).toEqual([['@truffe.com', 'spam'], ['newsletter@shop.it', 'not_news'], ['@shop.it', 'news']]);
+    deleteRule(s.db, listRules(s.db).find((r) => r.pattern === '@truffe.com')!.id);
+    const g = await from('g', 806, 'kk@truffe.com', 'Ancora');
+    expect(row(g.conversationId).isSpam).toBe(false);
+    expect(row(f.conversationId).isSpam).toBe(true); // quelle già spostate restano dove sono
   });
 });
 

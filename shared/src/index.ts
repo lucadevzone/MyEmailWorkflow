@@ -614,6 +614,14 @@ export interface JobQueueStatusDto {
 
 export type SenderRuleKind = 'news' | 'not_news' | 'spam' | 'not_spam';
 
+/** Regola per mittente come appare nelle impostazioni. */
+export interface SenderRuleDto {
+  id: string;
+  pattern: string;
+  kind: SenderRuleKind;
+  createdAt: number;
+}
+
 /** Esito di "è / non è una News", "è / non è Spam": la regola creata e le altre conversazioni a cui si applicherebbe. */
 export interface SenderRuleResultDto {
   ruleId: string;

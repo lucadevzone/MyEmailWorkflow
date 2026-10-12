@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { applyRule, patternFor, previewRule, RuleError, saveRule, senderOfConversation } from '../rules/sender-rules.ts';
+import { clearActionSuggestions } from '../ai/suggest-actions.ts';
+import { applyRule, deleteRule, listRules, patternFor, previewRule, RuleError, saveRule, senderOfConversation } from '../rules/sender-rules.ts';
 import type { SenderRuleKind, SenderRuleResultDto } from '@mmw/shared';
 import type { JobRunner } from '../jobs/runner.ts';
 import type { JobQueueStatusDto } from '@mmw/shared';
@@ -295,6 +296,8 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     if (!sender) throw new RuleError('Questa conversazione non ha un mittente esterno');
     const pattern = patternFor(sender, scope);
     const ruleId = saveRule(deps.db, pattern, kind);
+    // Il suggerimento "È una news" dell'analizzatore, se c'era, ha avuto risposta.
+    clearActionSuggestions(deps.db, id, ['noise']);
     if (kind === 'spam') {
       deps.actions.markSpam(id); // questa va anche nella cartella Spam di Gmail
     } else {
@@ -305,6 +308,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     }
     bus.publish({ type: 'conversations', ids: [id] });
     return { ruleId, ...previewRule(deps.sqlite, pattern, kind, id) };
+  });
+  app.get('/api/sender-rules', async () => listRules(deps.db));
+  app.delete<{ Params: { id: string } }>('/api/sender-rules/:id', async (req, reply) => {
+    deleteRule(deps.db, req.params.id);
+    return reply.code(204).send();
   });
   app.post<{ Params: { id: string }; Body: { conversationIds?: string[] } }>('/api/sender-rules/:id/apply', async (req) => {
     const rule = deps.db.select().from(senderRules).where(eq(senderRules.id, req.params.id)).get();

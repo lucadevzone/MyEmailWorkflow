@@ -88,6 +88,8 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
       if (m) h.compose({ replyTo: m, replyAll: true, projectId: d.projectId, draft: p.draft });
       return;
     }
+    // "È una news" proposto dall'analizzatore: come l'azione manuale, crea la regola sul mittente.
+    if (sug.kind === 'action' && p.action === 'noise') return openSenderRule(c.id, 'news');
     acceptSug.mutate({ sug, projectId });
   };
 

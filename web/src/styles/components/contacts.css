@@ -81,3 +81,13 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .pm-settings__sigpreview { margin-top: 8px; font-size: var(--fs-md); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pm-projectform { display: flex; flex-direction: column; gap: 12px; }
 .pm-settings__autosort { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 6px; font-size: var(--fs-md); }
+
+/* Regole per mittente */
+.pm-rules__filters { display: flex; gap: 8px; margin: 12px 0 8px; flex-wrap: wrap; }
+.pm-rules__filters .pm-input:first-child { flex: 1 1 220px; }
+.pm-rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; }
+.pm-rules li { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: var(--fs-md); padding: 4px 0; }
+.pm-rulekind { flex: none; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--surface-chip); color: var(--ink-2); }
+.pm-rulekind--news { background: var(--surface-track); color: var(--ink-muted); }
+.pm-rulekind--spam { background: #FCEBEA; color: #9B2C2C; }
+.pm-rulekind--keep { background: var(--accent-soft); color: var(--accent); }

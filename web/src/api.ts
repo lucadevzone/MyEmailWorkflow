@@ -14,6 +14,7 @@ import type {
   ProjectSuggestion,
   ResourceDto,
   DraftDto,
+  SenderRuleDto,
   SenderRuleKind,
   SenderRuleResultDto,
   JobQueueStatusDto,
@@ -128,6 +129,8 @@ export const api = {
   senderRule: (id: string, kind: SenderRuleKind, scope: 'address' | 'domain' | 'root') =>
     request<SenderRuleResultDto>('POST', `/api/conversations/${id}/sender-rule`, { kind, scope }),
   applySenderRule: (ruleId: string, conversationIds: string[]) => request<{ applied: number }>('POST', `/api/sender-rules/${ruleId}/apply`, { conversationIds }),
+  senderRules: () => request<SenderRuleDto[]>('GET', '/api/sender-rules'),
+  deleteSenderRule: (id: string) => request<void>('DELETE', `/api/sender-rules/${id}`),
   move: (id: string, projectId: string | null) =>
     request<{ previousProjectId: string | null }>('POST', `/api/conversations/${id}/move`, { projectId }),
   markViewRead: (view: 'inbox' | 'noise' | 'project', projectId?: string) =>

@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useConfirm } from '../ui/confirm.tsx';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type AccountDto, type ComposeFont, type ComposeFontSize, type ConnectionTestResult, type MailProvider, type SettingsDto, type SignatureDto } from '@mmw/shared';
+import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type AccountDto, type ComposeFont, type ComposeFontSize, type ConnectionTestResult, type MailProvider, type SenderRuleKind, type SettingsDto, type SignatureDto } from '@mmw/shared';
 import { RichEditor } from '../ui/RichEditor.tsx';
 import { api } from '../api.ts';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +20,7 @@ export function SettingsPage() {
       <SystemStatus />
       <Accounts />
       <AutoSort />
+      <SenderRules />
       <Compose />
       <Signatures />
       <AiModel />
@@ -355,6 +356,68 @@ function General() {
 }
 
 // ─── Modello di Ollama ───────────────────────────────────────────────────────
+
+const RULE_KIND: Record<SenderRuleKind, { label: string; tone: string }> = {
+  news: { label: 'News', tone: 'pm-rulekind--news' },
+  not_news: { label: 'Non è News', tone: 'pm-rulekind--keep' },
+  spam: { label: 'Spam', tone: 'pm-rulekind--spam' },
+  not_spam: { label: 'Non è spam', tone: 'pm-rulekind--keep' },
+};
+
+/** Regole per mittente create da "è / non è una News", "è / non è Spam": si vedono e si cancellano qui. */
+function SenderRules() {
+  const qc = useQueryClient();
+  const ask = useConfirm();
+  const { data: rules = [] } = useQuery({ queryKey: ['sender-rules'], queryFn: api.senderRules });
+  const [filter, setFilter] = useState('');
+  const [kind, setKind] = useState<SenderRuleKind | ''>('');
+  const remove = useMutation({ mutationFn: api.deleteSenderRule, onSuccess: () => qc.invalidateQueries({ queryKey: ['sender-rules'] }) });
+  const shown = rules.filter((r) => (!kind || r.kind === kind) && r.pattern.includes(filter.trim().toLowerCase()));
+  return (
+    <Section title={`Regole per mittente${rules.length ? ` · ${rules.length}` : ''}`}>
+      <div className={card}>
+        <span className="pm-row__sub">
+          Nascono dalle azioni «È una News», «Non è una News», «È spam», «Non è spam» sulle conversazioni e valgono per la posta futura.
+          Eliminare una regola non sposta le conversazioni già smistate.
+        </span>
+        {rules.length === 0 ? (
+          <p className="pm-muted" style={{ margin: '10px 0 0' }}>Nessuna regola per ora.</p>
+        ) : (
+          <>
+            <div className="pm-rules__filters">
+              <input className={input} placeholder="Cerca un mittente o un dominio" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Cerca tra le regole" />
+              <select className={input} value={kind} onChange={(e) => setKind(e.target.value as SenderRuleKind | '')} aria-label="Tipo di regola">
+                <option value="">Tutte</option>
+                {Object.entries(RULE_KIND).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+            </div>
+            <ul className="pm-rules">
+              {shown.map((r) => (
+                <li key={r.id}>
+                  <span className={`pm-rulekind ${RULE_KIND[r.kind].tone}`}>{RULE_KIND[r.kind].label}</span>
+                  <span className="pm-truncate" style={{ flex: 1 }}>
+                    {r.pattern.startsWith('@') ? <>tutto il dominio <strong>{r.pattern}</strong></> : <strong>{r.pattern}</strong>}
+                  </span>
+                  <span className="pm-muted">{new Date(r.createdAt).toLocaleDateString('it-IT')}</span>
+                  <button
+                    type="button"
+                    className={button}
+                    onClick={async () => (await ask({ message: `Eliminare la regola per ${r.pattern}?`, okLabel: 'Elimina', danger: true })) && remove.mutate(r.id)}
+                  >
+                    Elimina
+                  </button>
+                </li>
+              ))}
+              {shown.length === 0 && <li className="pm-muted">Nessuna regola corrisponde.</li>}
+            </ul>
+          </>
+        )}
+      </div>
+    </Section>
+  );
+}
 
 /** Smistamento della posta nuova (RF-E6): modalità e precisione misurata della regola. */
 function AutoSort() {

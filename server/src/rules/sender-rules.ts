@@ -2,9 +2,9 @@
 // e propongono di applicarla anche a quella già arrivata. Una regola vale per un indirizzo esatto o per
 // un dominio (con i suoi sottodomini); la più specifica vince.
 
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import type Database from 'better-sqlite3';
-import type { SenderRuleKind, SenderRuleResultDto } from '@mmw/shared';
+import type { SenderRuleDto, SenderRuleKind, SenderRuleResultDto } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
 import { senderRules } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
@@ -43,6 +43,15 @@ export function ruleFor(db: Db, address: string | null): SenderRuleKind | null {
     if (r) return r.kind;
   }
   return null;
+}
+
+export function listRules(db: Db): SenderRuleDto[] {
+  return db.select().from(senderRules).orderBy(desc(senderRules.createdAt)).all();
+}
+
+/** Eliminata: smette di valere per la posta futura; le conversazioni restano dove sono. */
+export function deleteRule(db: Db, id: string) {
+  db.delete(senderRules).where(eq(senderRules.id, id)).run();
 }
 
 /** Crea (o sostituisce) la regola per quel pattern. */
