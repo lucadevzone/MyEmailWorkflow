@@ -237,6 +237,8 @@ export const api = {
   deleteResource: (id: string) => request<void>('DELETE', `/api/resources/${id}`),
   projectResources: (projectId: string) => request<ResourceDto[]>('GET', `/api/projects/${projectId}/resources`),
 
+  setConversationImportant: (conversationId: string, important: boolean) =>
+    request<{ activityIds: string[] }>('POST', `/api/conversations/${conversationId}/important`, { important }),
   setImportant: (messageId: string, important: boolean) =>
     request<{ activityIds: string[] }>('POST', `/api/messages/${messageId}/important`, { important }),
 

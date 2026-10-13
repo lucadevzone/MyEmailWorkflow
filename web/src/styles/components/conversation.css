@@ -117,8 +117,15 @@
 .pm-selrow:hover .pm-selbox input, .pm-selbox input:focus-visible, .pm-selbox input:checked, .pm-convstack--selecting .pm-selbox input { opacity: 1; }
 .pm-selrow.is-selected > .pm-crow, .pm-selrow.is-selected > .pm-conv { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .pm-selrow.is-selected > .pm-crow { background: var(--accent-soft); }
+.pm-projheader { position: relative; }
 .pm-bulkbar {
-  display: flex; align-items: center; gap: 6px; flex: none; min-height: 48px; padding: 4px 16px 4px 10px; flex-wrap: wrap;
+  position: absolute; inset: 0; z-index: 6; display: flex; align-items: center; gap: 6px; padding: 0 16px 0 10px; overflow: hidden;
   background: var(--accent-soft); border-bottom: 1px solid var(--border);
 }
 .pm-bulkbar__count { font-weight: 600; margin-right: 6px; }
+
+/* Segnalibro cliccabile (riga compatta e barra della scheda aperta) */
+.pm-crow__markbtn { width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; flex: none; }
+.pm-crow__markbtn:hover { background: var(--surface-chip); }
+.pm-crow__markbtn:hover .pm-crow__mark:not(.pm-crow__mark--on) { color: var(--ink-2); }
+.pm-crow__markbtn--large { width: 36px; height: 36px; }

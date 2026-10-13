@@ -1,7 +1,7 @@
 // Azioni dell'utente sulla posta: effetto locale immediato + attività in coda per il server.
 
 import { resolveByKeep, resolveByMove } from '../ai/auto-sort-log.ts';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { ulid } from 'ulid';
 import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type AccountDto, type SettingsDto } from '@mmw/shared';
@@ -82,6 +82,26 @@ export class MailActions {
     const changed = this.conv.setImportant([messageId], important);
     const ids = this.enqueueFlags(msg.conversationId, changed, important ? { add: ['\\Flagged'] } : { remove: ['\\Flagged'] }, important ? 'Segna come importante' : 'Togli importante');
     if (changed.length) bus.publish({ type: 'conversations', ids: [msg.conversationId] });
+    return ids;
+  }
+
+  /**
+   * Segnalibro della conversazione: "importante" segna l'ultimo messaggio ricevuto (o l'ultimo, se non ne
+   * ha di ricevuti); toglierlo lo toglie da tutti i suoi messaggi. Su Gmail diventa la stella.
+   */
+  setConversationImportant(conversationId: string, important: boolean): string[] {
+    const { db } = this.deps;
+    const all = db
+      .select({ id: messages.id, direction: messages.direction, important: messages.important })
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt)))
+      .orderBy(desc(messages.date))
+      .all();
+    if (!all.length) throw new ActionError('Conversazione non trovata');
+    const targets = important ? [(all.find((m) => m.direction === 'in') ?? all[0]!).id] : all.filter((m) => m.important).map((m) => m.id);
+    const changed = this.conv.setImportant(targets, important);
+    const ids = this.enqueueFlags(conversationId, changed, important ? { add: ['\\Flagged'] } : { remove: ['\\Flagged'] }, important ? 'Segna come importante' : 'Togli importante');
+    if (changed.length) bus.publish({ type: 'conversations', ids: [conversationId] });
     return ids;
   }
 

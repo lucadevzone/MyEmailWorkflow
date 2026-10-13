@@ -105,6 +105,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
   // Maiusc+clic seleziona l'intervallo dall'ultima spuntata. Esc deseleziona. Cambiando vista si azzera.
   const [selected, setSelected] = useState<string[]>([]);
   const lastPicked = useRef<string | null>(null);
+  const shiftPick = useRef(false);
   useEffect(() => setSelected([]), [query]);
   useEffect(() => {
     if (!selected.length) return;
@@ -130,11 +131,12 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
         type="checkbox"
         checked={selected.includes(c.id)}
         aria-label={`Seleziona «${c.summary ?? c.subject ?? 'conversazione'}»`}
-        onClick={(e) => {
-          e.preventDefault();
-          toggleSelect(c.id, e.shiftKey);
+        // Il Maiusc si legge al clic; il cambio vero passa da onChange (bloccare il clic sulla casella la desincronizza).
+        onClick={(e) => (shiftPick.current = e.shiftKey)}
+        onChange={() => {
+          toggleSelect(c.id, shiftPick.current);
+          shiftPick.current = false;
         }}
-        onChange={() => {}}
       />
     </label>
   );
@@ -227,6 +229,18 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
       <div className="pm-project__main">
       <section className="pm-convlist" aria-label="Conversazioni">
         <div className="pm-projheader">
+          {/* Con conversazioni selezionate, la barra delle azioni copre l'intestazione: la lista non si sposta. */}
+          {selected.length > 0 && (
+            <BulkBar
+              ids={selected}
+              projectKey={projectKey}
+              archivedView={archived}
+              total={items.length}
+              onSelectAll={() => setSelected(items.map((c) => c.id))}
+              onClear={() => setSelected([])}
+              onMerged={(id) => focus(id)}
+            />
+          )}
           <div className="pm-projheader__left">
             <span className="pm-seg pm-views" role="radiogroup" aria-label="Vista">
               <button type="button" role="radio" className="pm-seg__opt" aria-checked={view === 'active'} title={`${total} conversazioni attive`} onClick={() => setView('active')}>
@@ -303,17 +317,6 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
             )}
           </div>
         </div>
-        {selected.length > 0 && (
-          <BulkBar
-            ids={selected}
-            projectKey={projectKey}
-            archivedView={archived}
-            total={items.length}
-            onSelectAll={() => setSelected(items.map((c) => c.id))}
-            onClear={() => setSelected([])}
-            onMerged={(id) => focus(id)}
-          />
-        )}
         <div className={`pm-convstack${selected.length ? ' pm-convstack--selecting' : ''}`}>
           {pinned && (
             <div className={`pm-selrow${selected.includes(pinned.id) ? ' is-selected' : ''}`}>

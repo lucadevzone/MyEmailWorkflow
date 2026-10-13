@@ -145,6 +145,21 @@ describe('progetti e spostamenti', () => {
   });
 });
 
+describe('segnalibro della conversazione', () => {
+  it("segna l'ultimo messaggio ricevuto; toglierlo lo toglie da tutti", async () => {
+    const a = await incoming('<s1@x>', 1, { gmThreadId: 'S' });
+    const b = await incoming('<s2@x>', 2, { gmThreadId: 'S' });
+    s.actions.setImportant(a.messageId, true);
+    s.actions.setConversationImportant(a.conversationId, true);
+    const flags = () => conv().get(a.conversationId)!.messages.map((m) => m.important);
+    expect(flags()).toEqual([true, true]);
+    expect(conv().item(a.conversationId)!.important).toBe(true);
+    s.actions.setConversationImportant(a.conversationId, false);
+    expect(flags()).toEqual([false, false]);
+    expect(b.conversationId).toBe(a.conversationId);
+  });
+});
+
 describe('unione di conversazioni scelte', () => {
   it('unisce messaggi e task nella conversazione nata per prima; solo nello stesso progetto', async () => {
     const a = (await incoming('<a@x>', 1, { subject: 'Riunione WP5' })).conversationId;

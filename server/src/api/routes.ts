@@ -301,6 +301,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   // ─── Azioni sulle conversazioni ────────────────────────────────────────────
 
   app.post<{ Params: { id: string } }>('/api/conversations/:id/read', async (req) => ({ activityIds: deps.actions.markRead(req.params.id) }));
+  app.post<{ Params: { id: string }; Body: { important?: boolean } }>('/api/conversations/:id/important', async (req) => ({
+    activityIds: deps.actions.setConversationImportant(req.params.id, req.body?.important !== false),
+  }));
   app.post<{ Params: { id: string }; Body: { important?: boolean } }>('/api/messages/:id/important', async (req) => ({
     activityIds: deps.actions.setImportant(req.params.id, req.body?.important !== false),
   }));

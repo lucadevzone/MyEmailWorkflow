@@ -18,6 +18,41 @@ import { useBlockSend } from '../activities/blockSend.ts';
 import { useDetach } from './useDetach.ts';
 import { useConversationActions } from './useConversationActions.ts';
 
+/**
+ * Segnalibro della conversazione: grigio se nessun messaggio è importante, ocra se almeno uno lo è.
+ * Un clic segna l'ultimo messaggio ricevuto come importante, o toglie il segno da tutti.
+ */
+function ImportantToggle({ c, large }: { c: ConversationListItem; large?: boolean }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [on, setOn] = useState(c.important);
+  useEffect(() => setOn(c.important), [c.important]);
+  const toggle = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const next = !on;
+    setOn(next); // subito, senza aspettare il server
+    try {
+      await api.setConversationImportant(c.id, next);
+      for (const k of [['conversations'], ['conversation', c.id], ['conversation-item', c.id], ['important-counts']]) void qc.invalidateQueries({ queryKey: k });
+    } catch (err) {
+      setOn(!next);
+      toast({ text: (err as Error).message });
+    }
+  };
+  return (
+    <button
+      type="button"
+      className={`pm-important pm-crow__markbtn${large ? ' pm-crow__markbtn--large' : ''}`}
+      aria-pressed={on}
+      aria-label="Importante"
+      title={on ? 'Togli importante' : 'Segna come importante'}
+      onClick={(e) => void toggle(e)}
+    >
+      <Ic icon={Bookmark} size={large ? 18 : 15} className={`pm-crow__mark${on ? ' pm-crow__mark--on' : ''}`} />
+    </button>
+  );
+}
+
 /** Conversazioni (con il loro ultimo messaggio) già mandate in analisi all'apertura, in questa sessione. */
 const focusAnalyzed = new Set<string>();
 
@@ -139,7 +174,7 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
               <Ic icon={Sparkles} size={13} />
             </button>
           )}
-          <Ic icon={Bookmark} size={15} className={`pm-crow__mark${c.important ? ' pm-crow__mark--on' : ''}`} label={c.important ? 'Contiene messaggi importanti' : 'Nessun messaggio importante'} />
+          <ImportantToggle c={c} />
         </span>
         <span className="pm-crow__time">{shortDate(c.lastMessageAt)}</span>
         {extras}
@@ -177,9 +212,12 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
             <Ic icon={Archive} size={15} /> Archivia
           </button>
         )}
+        <span className="pm-conv__more">
+          <ImportantToggle c={c} large />
+        </span>
         <button
           type="button"
-          className="pm-iconbtn pm-iconbtn--sm pm-conv__more"
+          className="pm-iconbtn pm-iconbtn--sm"
           aria-label="Altre azioni"
           onClick={(e) => openMenu(actions.menuSpec(true), e.currentTarget, 'palette')}
         >
@@ -355,7 +393,6 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
           {c.messageCount} {c.messageCount === 1 ? 'messaggio' : 'messaggi'} · {shortDate(c.lastMessageAt)}
         </span>
         {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}
-        {c.important && <Ic icon={Bookmark} size={14} className="pm-bookmark" label="Contiene messaggi importanti" />}
       </div>
       <div className="pm-conv__body">
         <div className="pm-conv__main">
