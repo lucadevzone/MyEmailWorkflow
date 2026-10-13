@@ -13,8 +13,8 @@
 }
 .pm-ctx-bar__item:hover, .pm-ctx-bar__item:focus-visible { background: var(--surface-chip); }
 .pm-ctx--more { color: var(--ink-muted); gap: 4px; }
-.pm-ctx--ai { color: #5B3F99; }
-.pm-ctx-bar__item.pm-ctx--ai { background: #EFEAF9; }
+.pm-ctx--ai { color: var(--sugg-ink); }
+.pm-ctx-bar__item.pm-ctx--ai { background: var(--sugg-bg); }
 .pm-ctx-bar__item.pm-ctx--ai:hover, .pm-ctx-bar__item.pm-ctx--ai:focus-visible { background: #E3DBF5; }
 .pm-ctx--danger { color: var(--danger); }
 .pm-ctx-bar__item.pm-ctx--danger:hover, .pm-ctx-bar__item.pm-ctx--danger:focus-visible { background: #FBE9EC; }

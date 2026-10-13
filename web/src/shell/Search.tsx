@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMatch, useNavigate } from 'react-router-dom';
-import { FolderPlus, Paperclip, Search as SearchIcon, Sparkles, SquareCheck, StickyNote } from 'lucide-react';
+import { FolderPlus, Paperclip, Search as SearchIcon, Sparkles, StickyNote } from 'lucide-react';
 import type { SearchScope } from '@mmw/shared';
 import { api, type AskSource } from '../api.ts';
 import { shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
+import { Icon } from '../ui/Icon.tsx';
 import { GroupBadge, PersonAvatar } from '../ui/People.tsx';
 import { usePeopleSearch } from '../people/usePeopleSearch.ts';
 import { paths, projectKeyOf, SYSTEM_INBOX, SYSTEM_NEWS, SYSTEM_SPAM } from './paths.ts';
@@ -258,7 +259,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
           node: (
             <>
               <span className={`pm-result__icon pm-result__icon--${it.kind}`}>
-                <Ic icon={it.kind === 'task' ? SquareCheck : StickyNote} size={17} />
+                {it.kind === 'task' ? <Icon name="assignment" size={18} /> : <Ic icon={StickyNote} size={17} />}
               </span>
               <span className="pm-result__main">
                 <span className={`pm-result__title${it.done ? ' pm-result__title--done' : ''}`}>{highlight(it.title, t)}</span>

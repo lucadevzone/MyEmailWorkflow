@@ -37,12 +37,8 @@ button.pm-manage__add:hover { color: var(--ink); background: var(--surface-muted
 .pm-tabchip__remove:hover, .pm-tabchip__remove[aria-expanded="true"] { background: #FBE9EC; color: var(--danger); }
 .pm-grip { border: 0; background: transparent; padding: 0; color: var(--ink-faint); cursor: grab; display: flex; border-radius: 4px; }
 .pm-grip:active { cursor: grabbing; }
-/* Riordino come per i task: l'elemento trascinato si attenua, una linea indica dove verrà lasciato */
-.pm-sort--dragging { opacity: .5; }
-.pm-sort--drop-before-x { box-shadow: -4px 0 0 -1px var(--accent); }
-.pm-sort--drop-after-x { box-shadow: 4px 0 0 -1px var(--accent); }
-.pm-sort--drop-before-y { box-shadow: 0 -4px 0 -1px var(--accent); }
-.pm-sort--drop-after-y { box-shadow: 0 4px 0 -1px var(--accent); }
+/* Trascinamento semplificato: l'elemento trascinato è solo leggermente sollevato, gli altri gli fanno posto */
+.pm-dragging { opacity: .9; box-shadow: var(--shadow-lift); }
 .pm-popover.pm-manage__confirm { position: static; width: auto; margin-left: 14px; box-shadow: var(--shadow-lift); }
 .pm-manage__confirm p { margin: 0; font-size: var(--fs-md); line-height: 1.5; color: var(--ink-2); }
 

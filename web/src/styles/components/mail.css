@@ -248,7 +248,7 @@
 /* Domande proposte dall'assistente (viola, come i suggerimenti) e selezione su cui agiscono i ritocchi */
 .pm-quick--ai { height: auto; min-height: 32px; padding: 6px 12px; text-align: left; line-height: 1.3; border: 1px dashed var(--sugg-border); background: var(--sugg-bg); color: var(--sugg-ink); }
 .pm-assistant__selhint {
-  font-size: var(--fs-sm); color: #3C3489; background: #F1EEFD; border-radius: var(--r-lg);
+  font-size: var(--fs-sm); color: var(--sugg-ink); background: var(--sugg-bg); border-radius: var(--r-lg);
   padding: 6px 10px; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 

@@ -83,7 +83,7 @@ export function TaskNotesSection({ c, d, tasks, loading, canRemind, onRemind, on
         menuAt(() => ({
           title: 'Task e note',
           actions: [
-            ...(projectId ? [{ id: 'new', icon: 'add_task', label: 'Nuovo task', primary: true, run: () => edit(undefined, anchor) }] : []),
+            ...(projectId ? [{ id: 'new', icon: 'assignment_add', label: 'Nuovo task', primary: true, run: () => edit(undefined, anchor) }] : []),
             { id: 'note', icon: 'note_add', label: 'Nuova nota', primary: true, run: () => editNote(undefined, anchor) },
             ...(canRemind ? [{ id: 'remind', icon: 'reply', label: 'Ricordami di rispondere', primary: true, run: onRemind }] : []),
           ],

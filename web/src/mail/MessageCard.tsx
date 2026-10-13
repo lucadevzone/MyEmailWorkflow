@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlarmClock, Bookmark, ChevronsDownUp, ChevronsUpDown, Forward, Image, Paperclip, ReplyAll, SquareCheck, StickyNote } from 'lucide-react';
+import { AlarmClock, Bookmark, ChevronsDownUp, ChevronsUpDown, Forward, Image, Paperclip, ReplyAll, StickyNote } from 'lucide-react';
 import type { AnnotationMarkDto, ConversationDetail, MessageDto, QuoteSelector } from '@mmw/shared';
 import { findQuote, quoteOf } from '../lib/annotations.ts';
 import { api } from '../api.ts';
 import { fileSize, longDate, shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
+import { Icon } from '../ui/Icon.tsx';
 import { PersonAvatar, PersonChip, useDisplayName } from '../ui/People.tsx';
 import { useToast } from '../ui/toast.tsx';
 import { HtmlFrame } from '../workspace/HtmlFrame.tsx';
@@ -154,7 +155,7 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
           ...(d.projectId
             ? [
                 {
-                  id: 'task', icon: 'task_alt', label: 'Crea un task', primary: true,
+                  id: 'task', icon: 'assignment', label: 'Crea un task', primary: true,
                   run: () =>
                     setEditor({
                       target: {
@@ -221,7 +222,7 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
           onMouseDown={(e) => e.preventDefault()}
           onClick={(e) => openMark(mk, e.currentTarget.getBoundingClientRect())}
         >
-          <Ic icon={mk.kind === 'task' ? SquareCheck : StickyNote} size={12} />
+          {mk.kind === 'task' ? <Icon name="assignment" size={13} /> : <Ic icon={StickyNote} size={12} />}
         </button>,
       );
       pos = end;

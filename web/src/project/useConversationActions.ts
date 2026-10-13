@@ -140,7 +140,7 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
         ? { id: 'unarchive', icon: 'unarchive', label: 'Ripristina', primary: true, run: () => unarchive.mutate() }
         : { id: 'archive', icon: 'archive', label: 'Archivia', primary: true, run: () => archive.mutate() },
       ...moveTargets(),
-      ...(c.projectId ? [{ id: 'task', icon: 'add_task', label: 'Nuovo task', run: h.newTask }] : []),
+      ...(c.projectId ? [{ id: 'task', icon: 'assignment_add', label: 'Nuovo task', run: h.newTask }] : []),
       { id: 'note', icon: 'sticky_note_2', label: 'Nuova nota', run: h.newNote },
       { id: 'upload', icon: 'create_new_folder', label: 'Aggiungi risorsa', keywords: 'carica file', run: h.uploadResource },
       { id: 'unread', icon: 'mark_email_unread', label: 'Segna come non letta', run: () => unread.mutate() },

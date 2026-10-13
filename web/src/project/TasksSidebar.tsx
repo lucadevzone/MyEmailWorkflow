@@ -20,11 +20,12 @@ export function TasksSidebar({ projectId, onClose }: { projectId: string; onClos
   const [title, setTitle] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
   const [editor, setEditor] = useState<{ target: TagEditorTarget; anchor: DOMRect } | null>(null);
-  const [drag, setDrag] = useState<{ id: string; over: string | null; after: boolean } | null>(null);
+  // Durante il trascinamento la lista mostra già il nuovo ordine (UI v2: niente segnaposto).
+  const [drag, setDrag] = useState<{ id: string; order: string[] } | null>(null);
   const grabbing = useRef<string | null>(null);
   const open = tasks.filter((t) => t.status === 'open');
   const done = tasks.filter((t) => t.status === 'done');
-  const list = tab === 'open' ? open : done;
+  const list = tab === 'open' ? (drag ? drag.order.map((id) => open.find((t) => t.id === id)).filter((t): t is TaskDto => !!t) : open) : done;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -38,10 +39,9 @@ export function TasksSidebar({ projectId, onClose }: { projectId: string; onClos
   };
   const onDrop = (e: DragEvent) => {
     e.preventDefault();
-    if (drag?.over && drag.over !== drag.id) {
-      const rest = open.filter((t) => t.id !== drag.id);
-      const i = rest.findIndex((t) => t.id === drag.over);
-      ops.move.mutate({ id: drag.id, afterId: drag.after ? rest[i]!.id : (rest[i - 1]?.id ?? null) });
+    if (drag) {
+      const i = drag.order.indexOf(drag.id);
+      if (drag.order.join() !== open.map((t) => t.id).join()) ops.move.mutate({ id: drag.id, afterId: i === 0 ? null : drag.order[i - 1]! });
     }
     setDrag(null);
   };
@@ -87,13 +87,18 @@ export function TasksSidebar({ projectId, onClose }: { projectId: string; onClos
                     onStart: (e) => {
                       if (grabbing.current !== t.id) return e.preventDefault();
                       e.dataTransfer.effectAllowed = 'move';
-                      setDrag({ id: t.id, over: null, after: false });
+                      setDrag({ id: t.id, order: open.map((x) => x.id) });
                     },
                     onOver: (e) => {
                       if (!drag) return;
                       e.preventDefault();
+                      if (t.id === drag.id) return;
                       const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                      setDrag({ ...drag, over: t.id, after: e.clientY > r.top + r.height / 2 });
+                      const after = e.clientY > r.top + r.height / 2;
+                      const rest = drag.order.filter((x) => x !== drag.id);
+                      const i = rest.indexOf(t.id);
+                      rest.splice(after ? i + 1 : i, 0, drag.id);
+                      if (rest.join() !== drag.order.join()) setDrag({ ...drag, order: rest });
                     },
                     onDrop,
                     onEnd: () => {
@@ -147,7 +152,7 @@ function SuggestedTasks({ projectId }: { projectId: string }) {
 }
 
 interface DragProps {
-  state: { id: string; over: string | null; after: boolean } | null;
+  state: { id: string; order: string[] } | null;
   onGrab: () => void;
   onStart: (e: DragEvent) => void;
   onOver: (e: DragEvent) => void;
@@ -187,9 +192,7 @@ function TaskItem({ t, open, onToggle, onEdit, onClose, onMove, drag }: {
     ];
     return { title: t.title, actions };
   });
-  const dropCls =
-    drag?.state?.over === t.id && drag.state.id !== t.id ? (drag.state.after ? ' pm-taskitem--drop-after' : ' pm-taskitem--drop-before') : '';
-  const cls = `pm-taskitem${open ? ' pm-taskitem--open' : ''}${t.status === 'done' ? ' pm-taskitem--closed' : ''}${drag?.state?.id === t.id ? ' pm-taskitem--dragging' : ''}${dropCls}`;
+  const cls = `pm-taskitem${open ? ' pm-taskitem--open' : ''}${t.status === 'done' ? ' pm-taskitem--closed' : ''}${drag?.state?.id === t.id ? ' pm-dragging' : ''}`;
 
   return (
     <div

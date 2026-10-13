@@ -1,29 +1,17 @@
 import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 
 /**
- * Riordino per trascinamento dalla maniglia e da tastiera, come per i task: l'elemento trascinato si
- * attenua e una linea sull'elemento sotto il puntatore indica dove verrà lasciato. Sulla maniglia a
- * fuoco Alt+←/→ (asse x) o Alt+↑/↓ (asse y) spostano l'elemento.
+ * Riordino per trascinamento dalla maniglia e da tastiera (UI v2, trascinamento semplificato):
+ * l'elemento trascinato si sposta subito nella nuova posizione e gli altri gli fanno posto, senza
+ * segnaposto. Sulla maniglia a fuoco Alt+←/→ (asse x) o Alt+↑/↓ (asse y) spostano l'elemento.
  */
 export function useSortable(ids: string[], onReorder: (ids: string[], moved: string) => void, axis: 'x' | 'y') {
   const [dragging, setDragging] = useState<string | null>(null);
-  const [over, setOver] = useState<{ id: string; after: boolean } | null>(null);
   const grabbed = useRef<string | null>(null);
 
   const reset = () => {
     grabbed.current = null;
     setDragging(null);
-    setOver(null);
-  };
-
-  const drop = () => {
-    if (dragging && over && over.id !== dragging) {
-      const rest = ids.filter((x) => x !== dragging);
-      const i = rest.indexOf(over.id);
-      rest.splice(over.after ? i + 1 : i, 0, dragging);
-      if (rest.join() !== ids.join()) onReorder(rest, dragging);
-    }
-    reset();
   };
 
   const itemProps = (id: string) => ({
@@ -37,23 +25,24 @@ export function useSortable(ids: string[], onReorder: (ids: string[], moved: str
     onDragOver: (e: DragEvent) => {
       if (!dragging) return;
       e.preventDefault();
+      if (id === dragging) return;
+      // Sposta subito l'elemento trascinato prima o dopo quello sotto il puntatore.
       const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const after = axis === 'x' ? e.clientX > r.left + r.width / 2 : e.clientY > r.top + r.height / 2;
-      if (over?.id !== id || over.after !== after) setOver({ id, after });
+      const rest = ids.filter((x) => x !== dragging);
+      const i = rest.indexOf(id);
+      rest.splice(after ? i + 1 : i, 0, dragging);
+      if (rest.join() !== ids.join()) onReorder(rest, dragging);
     },
     onDrop: (e: DragEvent) => {
       e.preventDefault();
-      drop();
+      reset();
     },
     onDragEnd: reset,
   });
 
-  /** Classi dell'elemento: attenuato se trascinato, linea prima/dopo se è la destinazione. */
-  const itemClass = (id: string) => {
-    if (dragging === id) return ' pm-sort--dragging';
-    if (!dragging || over?.id !== id) return '';
-    return ` pm-sort--drop-${over.after ? 'after' : 'before'}-${axis}`;
-  };
+  /** Classe dell'elemento trascinato (leggermente sollevato). */
+  const itemClass = (id: string) => (dragging === id ? ' pm-dragging' : '');
 
   const gripProps = (id: string) => ({
     'data-sort-grip': id,

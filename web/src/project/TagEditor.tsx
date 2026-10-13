@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Mail, SquareCheck, StickyNote } from 'lucide-react';
+import { Mail, StickyNote } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { personLabel, shortDate } from '../lib/format.ts';
 import { paths, projectKeyOf } from '../shell/paths.ts';
 import type { NoteDto, QuoteSelector, TaskDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
+import { Icon } from '../ui/Icon.tsx';
 import { useConfirm } from '../ui/confirm.tsx';
 
 export type TagEditorTarget =
@@ -104,7 +105,7 @@ export function TagEditor({ target, anchor, onClose }: { target: TagEditorTarget
       <div className="pm-backdrop" onPointerDown={onClose} />
       <form ref={ref} className="pm-popover" style={pos} onSubmit={submit} role="dialog" aria-label={isTask ? 'Modifica task' : 'Modifica nota'}>
         <div className="pm-popover__title" style={{ color: isTask ? 'var(--task-heading)' : 'var(--note-heading)' }}>
-          <Ic icon={isTask ? SquareCheck : StickyNote} size={15} />
+          {isTask ? <Icon name="assignment" size={16} /> : <Ic icon={StickyNote} size={15} />}
           {editing ? (isTask ? 'Task' : 'Nota') : isTask ? 'Nuovo task' : 'Nuova nota'}
         </div>
         {isTask && (

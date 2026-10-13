@@ -124,7 +124,7 @@ button.pm-conv:hover { border-color: var(--border-strong); }
 .pm-tag--add.pm-tag--task { border: 1px dashed var(--task-border-add); color: #2F6148; }
 .pm-tag--add.pm-tag--task::before { display: none; }
 .pm-tag--add.pm-tag--note { border: 1px dashed var(--note-border-add); color: var(--note-heading); }
-.pm-tag--ai { border: 1px solid #CFC8F3; background: #F1EEFD; color: #3C3489; }
+.pm-tag--ai { border: 1px solid var(--sugg-border); background: var(--sugg-bg); color: var(--sugg-ink); }
 .pm-tag--ai button { border: 0; background: transparent; padding: 0; color: inherit; display: flex; }
 
 /* Popover / maschera O1 */
@@ -187,9 +187,6 @@ button.pm-conv:hover { border-color: var(--border-strong); }
 .pm-taskitem__origin { font-size: var(--fs-sm); color: var(--ink-muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pm-taskitem--open { flex-direction: column; gap: 10px; border: 1.5px solid var(--accent); box-shadow: var(--shadow-lift); padding: 12px 12px 12px 4px; cursor: default; }
 .pm-taskitem--open .pm-taskitem__title { font-weight: 600; }
-.pm-taskitem--dragging { opacity: .6; }
-.pm-taskitem--drop-before { box-shadow: 0 -3px 0 var(--accent); }
-.pm-taskitem--drop-after { box-shadow: 0 3px 0 var(--accent); }
 .pm-taskitem__details { padding-left: 8px; display: flex; flex-direction: column; gap: 10px; }
 .pm-taskitem__desc { margin: 0; font-size: var(--fs-md); line-height: 1.5; color: var(--ink-2); }
 .pm-taskitem--closed .pm-taskitem__title { color: var(--ink-muted); text-decoration: line-through; }
@@ -295,10 +292,10 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
 /* Smistata automaticamente (RF-E6) */
 .pm-autobadge {
   display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; padding: 1px 4px 1px 8px; border-radius: 999px; vertical-align: 2px;
-  background: #F1EEFD; color: #3C3489; border: 1px solid #CFC8F3; font-size: 12px; font-weight: 500; line-height: 18px; white-space: nowrap;
+  background: var(--sugg-bg); color: var(--sugg-ink); border: 1px solid var(--sugg-border); font-size: 12px; font-weight: 500; line-height: 18px; white-space: nowrap;
 }
-.pm-autobadge button { border: 0; background: #fff; color: #3C3489; font: inherit; font-weight: 600; padding: 0 8px; border-radius: 999px; cursor: pointer; }
-.pm-autobadge button:hover { background: #3C3489; color: #fff; }
+.pm-autobadge button { border: 0; background: #fff; color: var(--sugg-ink); font: inherit; font-weight: 600; padding: 0 8px; border-radius: 999px; cursor: pointer; }
+.pm-autobadge button:hover { background: var(--sugg-ink); color: #fff; }
 
 /* Procedura di benvenuto */
 .pm-welcome { max-width: 720px; margin: 0 auto; padding: 40px 16px 60px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; height: 100%; box-sizing: border-box; }
