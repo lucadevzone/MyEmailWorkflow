@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, ChevronLeft, ChevronRight, Eraser, Sparkles, StickyNote } from 'lucide-react';
+import { ArrowUp, ChevronLeft, Eraser, Sparkles, StickyNote, X } from 'lucide-react';
 import type { AssistantMessageDto } from '@mmw/shared';
 import { api, type AssistantAction } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { useToast } from '../ui/toast.tsx';
+import { PersonAvatar, useMe } from '../ui/People.tsx';
 
 /** Pezzo di bozza selezionato, fotografato quando si chiede il ritocco. */
 export interface DraftSelection {
@@ -31,12 +32,6 @@ const READ_ACTIONS: { action: AssistantAction; label: string }[] = [
   { action: 'needs_reply', label: 'Cosa richiede risposta?' },
   { action: 'extract_tasks', label: 'Estrai task' },
   { action: 'translate', label: 'Traduci' },
-];
-const RETOUCHES: { action: AssistantAction; label: string }[] = [
-  { action: 'formal', label: 'Più formale' },
-  { action: 'shorter', label: 'Più breve' },
-  { action: 'english', label: 'In inglese' },
-  { action: 'fix', label: 'Correggi' },
 ];
 
 /**
@@ -68,8 +63,10 @@ interface Pending {
 }
 
 /**
- * Colonna Assistente (D12): sempre accanto al carosello. La modalità segue l'elemento in focus;
- * la chat è una per conversazione (o per bozza di nuova mail) e resta tra lettura e scrittura.
+ * Colonna Assistente (D12, UI v2): intestazione grigia, chat bianca, fascia grigia in basso con il campo
+ * e, sotto, i suggerimenti (azioni rapide in lettura, "Come potresti rispondere" in scrittura).
+ * La modalità segue l'elemento in focus; la chat è una per conversazione (o per bozza di nuova mail).
+ * I ritocchi (più formale, più breve…) si chiedono scrivendo: agiscono sulla selezione, se c'è.
  */
 export function Assistant({ conversationId, draftId, mode, messageId, context, draft }: {
   conversationId: string | null;
@@ -82,6 +79,7 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
 }) {
   const qc = useQueryClient();
   const toast = useToast();
+  const me = useMe();
   const scope = { conversationId, draftId: conversationId ? null : draftId };
   const persisted = !!conversationId || (!!draftId && draftId !== 'new');
   const threadKey = ['assistant', conversationId ?? `draft:${draftId}`];
@@ -232,7 +230,7 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
   const busy = !!pending && !pending.error;
   const bubbles = messages.map((m, i) =>
     m.role === 'user' ? (
-      <div key={m.id} className="pm-bubble pm-bubble--user">{m.content}</div>
+      <UserBubble key={m.id} me={me}>{m.content}</UserBubble>
     ) : (
       <AiBubble
         key={m.id}
@@ -247,6 +245,52 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
       />
     ),
   );
+
+  const suggestions =
+    mode === 'read' ? (
+      <>
+        <div className="pm-assistant__section">Azioni rapide</div>
+        <div className="pm-assistant__chips">
+          {READ_ACTIONS.map((a) => (
+            <button key={a.action} type="button" className="pm-quick" disabled={busy} onClick={() => void ask(a.label, { action: a.action })}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+        {conversationId && (questions.isLoading || (questions.data?.length ?? 0) > 0) && (
+          <>
+            <div className="pm-assistant__section pm-assistant__section--sugg">
+              <Ic icon={Sparkles} size={13} /> Domande su questa conversazione
+            </div>
+            {questions.isLoading && <div className="pm-assistant__sub">Sto leggendo la conversazione…</div>}
+            <div className="pm-assistant__chips">
+              {questions.data?.map((q) => (
+                <button key={q} type="button" className="pm-quick pm-quick--ai" disabled={busy} onClick={() => void ask(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </>
+    ) : (
+      conversationId && (
+        <>
+          <div className="pm-assistant__section pm-assistant__section--sugg">
+            <Ic icon={Sparkles} size={13} /> Come potresti rispondere
+          </div>
+          {ideas.isLoading && <div className="pm-assistant__sub">Sto leggendo la conversazione…</div>}
+          {ideas.isError && <div className="pm-assistant__sub">Suggerimenti non disponibili ({(ideas.error as Error).message}).</div>}
+          {ideas.data?.length === 0 && <div className="pm-assistant__sub">Nessun suggerimento.</div>}
+          {ideas.data?.map((idea) => (
+            <button key={idea.title} type="button" className="pm-suggestion" disabled={busy} onClick={() => void ask(`${idea.title}: ${idea.description}`, { mode: 'compose' })}>
+              <span className="pm-suggestion__title">{idea.title}</span>
+              <span className="pm-suggestion__desc">{idea.description}</span>
+            </button>
+          ))}
+        </>
+      )
+    );
 
   return (
     <aside className="pm-assistant" aria-label="Assistente">
@@ -264,72 +308,34 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
           </button>
         )}
         <button type="button" className="pm-iconbtn pm-iconbtn--sm" onClick={toggle} aria-label="Riduci assistente" title="Riduci assistente">
-          <Ic icon={ChevronRight} />
+          <Ic icon={X} size={16} />
         </button>
       </div>
 
-      <div className="pm-assistant__body" ref={body} aria-live="polite">
-        {mode === 'read' ? (
-          <>
-            <div className="pm-assistant__section">Azioni rapide</div>
-            <div className="pm-assistant__chips">
-              {READ_ACTIONS.map((a) => (
-                <button key={a.action} type="button" className="pm-quick" disabled={busy} onClick={() => void ask(a.label, { action: a.action })}>
-                  {a.label}
-                </button>
-              ))}
-            </div>
-            {conversationId && (questions.isLoading || (questions.data?.length ?? 0) > 0) && (
-              <>
-                <div className="pm-assistant__section">Domande su questa conversazione</div>
-                {questions.isLoading && <div className="pm-assistant__sub">Sto leggendo la conversazione…</div>}
-                <div className="pm-assistant__chips">
-                  {questions.data?.map((q) => (
-                    <button key={q} type="button" className="pm-quick pm-quick--ai" disabled={busy} onClick={() => void ask(q)}>
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </>
-        ) : (
-          conversationId && (
-            <>
-              <div className="pm-assistant__section">Come potresti rispondere</div>
-              {ideas.isLoading && <div className="pm-assistant__sub">Sto leggendo la conversazione…</div>}
-              {ideas.isError && <div className="pm-assistant__sub">Suggerimenti non disponibili ({(ideas.error as Error).message}).</div>}
-              {ideas.data?.length === 0 && <div className="pm-assistant__sub">Nessun suggerimento.</div>}
-              {ideas.data?.map((idea) => (
-                <button
-                  key={idea.title}
-                  type="button"
-                  className="pm-suggestion"
-                  disabled={busy}
-                  onClick={() => void ask(`${idea.title}: ${idea.description}`, { mode: 'compose' })}
-                >
-                  <span className="pm-suggestion__title">{idea.title}</span>
-                  <span className="pm-suggestion__desc">{idea.description}</span>
-                </button>
-              ))}
-            </>
-          )
-        )}
-        {(bubbles.length > 0 || pending) && <div className="pm-assistant__sep" />}
+      <div className="pm-assistant__chat" ref={body} role="log" aria-label="Chat con l'assistente" aria-live="polite">
         {thread.isLoading && persisted && <div className="pm-assistant__sub">Caricamento della chat…</div>}
+        {!thread.isLoading && bubbles.length === 0 && !pending && (
+          <div className="pm-assistant__empty">
+            {mode === 'compose' ? 'Chiedi di scrivere, riformulare o correggere: se selezioni un pezzo della bozza, lavoro su quello.' : 'Chiedi qualcosa su questa conversazione, oppure usa un\'azione qui sotto.'}
+          </div>
+        )}
         {bubbles}
         {pending && (
           <>
-            <div className="pm-bubble pm-bubble--user">{pending.question}</div>
+            <UserBubble me={me}>{pending.question}</UserBubble>
             {pending.error ? (
-              <div className="pm-bubble pm-bubble--ai pm-bubble--error" role="alert">{pending.error}</div>
+              <AiRow>
+                <div className="pm-bubble pm-bubble--ai pm-bubble--error" role="alert">{pending.error}</div>
+              </AiRow>
             ) : (
-              <div className={`pm-bubble pm-bubble--ai`}>
-                <div className={pending.mode === 'compose' ? 'pm-bubble__quote' : undefined}>
-                  {pending.answer}
-                  <span className="pm-bubble__cursor" aria-hidden="true" />
+              <AiRow>
+                <div className="pm-bubble pm-bubble--ai">
+                  <div className={pending.mode === 'compose' ? 'pm-bubble__quote' : undefined}>
+                    {pending.answer}
+                    <span className="pm-bubble__cursor" aria-hidden="true" />
+                  </div>
                 </div>
-              </div>
+              </AiRow>
             )}
           </>
         )}
@@ -339,15 +345,6 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
         {mode === 'compose' && draftSel && (
           <div className="pm-assistant__selhint" title={draftSel}>
             Sulla selezione: «{draftSel.length > 60 ? `${draftSel.slice(0, 60)}…` : draftSel}»
-          </div>
-        )}
-        {mode === 'compose' && (
-          <div className="pm-assistant__chips">
-            {RETOUCHES.map((r) => (
-              <button key={r.action} type="button" className="pm-quick" disabled={busy} onClick={() => void ask(r.label, { action: r.action, mode: 'compose' })}>
-                {r.label}
-              </button>
-            ))}
           </div>
         )}
         <div className="pm-assistant__input">
@@ -374,8 +371,31 @@ export function Assistant({ conversationId, draftId, mode, messageId, context, d
             </button>
           )}
         </div>
+        {suggestions && <div className="pm-assistant__sugg">{suggestions}</div>}
       </form>
     </aside>
+  );
+}
+
+/** Messaggio dell'utente: bolla azzurra con la bolla "Io" a destra. */
+function UserBubble({ me, children }: { me: { name: string | null; email: string } | null; children: React.ReactNode }) {
+  return (
+    <div className="pm-chatrow pm-chatrow--user">
+      <div className="pm-bubble pm-bubble--user">{children}</div>
+      {me && <PersonAvatar person={me} size={26} />}
+    </div>
+  );
+}
+
+/** Risposta dell'assistente: icona lilla a sinistra. */
+function AiRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="pm-chatrow">
+      <span className="pm-who--ai" aria-hidden="true">
+        <Ic icon={Sparkles} size={14} />
+      </span>
+      <div className="pm-chatrow__body">{children}</div>
+    </div>
   );
 }
 
@@ -392,15 +412,16 @@ function AiBubble({ m, canRephrase, onSaveNote, onSummary, onInsert, onReplace, 
 }) {
   if (m.mode === 'compose') {
     return (
+      <AiRow>
       <div className="pm-bubble pm-bubble--ai">
         <div className="pm-bubble__quote">{m.content}</div>
         <div className="pm-bubble__actions">
           {onReplace && (
-            <button type="button" className="pm-btn pm-btn--primary pm-btn--xs" onClick={onReplace}>
+            <button type="button" className="pm-btn pm-assistant__primary pm-btn--xs" onClick={onReplace}>
               Sostituisci la selezione
             </button>
           )}
-          <button type="button" className={`pm-btn ${onReplace ? 'pm-btn--secondary' : 'pm-btn--primary'} pm-btn--xs`} onClick={onInsert}>
+          <button type="button" className={`pm-btn ${onReplace ? 'pm-btn--secondary' : 'pm-assistant__primary'} pm-btn--xs`} onClick={onInsert}>
             Inserisci nella bozza
           </button>
           {canRephrase && (
@@ -410,15 +431,16 @@ function AiBubble({ m, canRephrase, onSaveNote, onSummary, onInsert, onReplace, 
           )}
         </div>
       </div>
+      </AiRow>
     );
   }
   return (
-    <div className="pm-bubble pm-bubble--ai">
-      {m.content}
+    <AiRow>
+      <div className="pm-bubble pm-bubble--ai">{m.content}</div>
       {(onSaveNote || onSummary) && (
         <div className="pm-bubble__actions">
           {onSaveNote && (
-            <button type="button" className="pm-btn pm-btn--secondary pm-btn--xs" onClick={onSaveNote}>
+            <button type="button" className="pm-btn pm-assistant__primary pm-btn--xs" onClick={onSaveNote}>
               <Ic icon={StickyNote} size={15} /> Salva come nota
             </button>
           )}
@@ -429,6 +451,6 @@ function AiBubble({ m, canRephrase, onSaveNote, onSummary, onInsert, onReplace, 
           )}
         </div>
       )}
-    </div>
+    </AiRow>
   );
 }
