@@ -121,6 +121,7 @@ export const api = {
     if (q.before) p.set('before', String(q.before));
     return request<ConversationListItem[]>('GET', `/api/conversations?${p}`);
   },
+  conversationItem: (id: string) => request<ConversationListItem>('GET', `/api/conversations/${id}/item`),
   conversationCounts: () => request<UnreadCountsDto>('GET', '/api/conversations/counts'),
   importantCounts: () => request<Record<string, number>>('GET', '/api/conversations/important-counts'),
   conversation: (id: string) => request<ConversationDetail>('GET', `/api/conversations/${id}`),

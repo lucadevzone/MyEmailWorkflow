@@ -43,49 +43,54 @@ export class ConversationService {
   }
 
   /** personAddressIds: indirizzi della persona di q.person, risolti dal chiamante (PeopleService). */
-  list(q: ConversationQuery & { limit?: number; personAddressIds?: string[] }): ConversationListItem[] {
+  list(q: ConversationQuery & { limit?: number; personAddressIds?: string[]; onlyId?: string }): ConversationListItem[] {
     const limit = Math.min(q.limit ?? 50, 200);
     const where = [isNull(conversations.deletedAt), isNull(conversations.trashedAt)];
-    // Lo spam si vede solo nella sua vista.
-    where.push(eq(conversations.isSpam, q.view === 'spam'));
-    if (q.view === 'spam') {
-      // tutte, di qualunque provenienza
-    } else if (q.view === 'project') {
-      if (!q.projectId) return [];
-      where.push(eq(conversations.projectId, q.projectId));
-    } else if (q.view === 'person') {
-      if (!q.person) return [];
+    if (q.onlyId) {
+      // Una conversazione precisa (es. aperta dalla ricerca), ovunque si trovi.
+      where.push(eq(conversations.id, q.onlyId));
     } else {
-      where.push(isNull(conversations.projectId), eq(conversations.isNoise, q.view === 'noise'));
-    }
-    if (q.person) {
-      const ids = q.personAddressIds ?? [];
-      if (!ids.length) return [];
-      where.push(
-        inArray(
-          conversations.id,
-          this.db
-            .select({ id: messages.conversationId })
-            .from(messages)
-            .innerJoin(messageAddresses, eq(messageAddresses.messageId, messages.id))
-            .where(and(inArray(messageAddresses.contactAddressId, ids), isNull(messages.deletedAt))),
-        ),
-      );
-    }
-    if (q.important) {
-      // Importanti: attive e archiviate insieme, sono quelle da ritrovare.
-      where.push(
-        inArray(
-          conversations.id,
-          this.db
-            .select({ id: messages.conversationId })
-            .from(messages)
-            .where(and(eq(messages.important, true), isNull(messages.deletedAt))),
-        ),
-      );
-    } else if (q.view !== 'person') {
-      // Nella vista persona si mostrano anche le archiviate: è uno storico dei rapporti.
-      where.push(q.archived ? isNotNull(conversations.archivedAt) : isNull(conversations.archivedAt));
+      // Lo spam si vede solo nella sua vista.
+      where.push(eq(conversations.isSpam, q.view === 'spam'));
+      if (q.view === 'spam') {
+        // tutte, di qualunque provenienza
+      } else if (q.view === 'project') {
+        if (!q.projectId) return [];
+        where.push(eq(conversations.projectId, q.projectId));
+      } else if (q.view === 'person') {
+        if (!q.person) return [];
+      } else {
+        where.push(isNull(conversations.projectId), eq(conversations.isNoise, q.view === 'noise'));
+      }
+      if (q.person) {
+        const ids = q.personAddressIds ?? [];
+        if (!ids.length) return [];
+        where.push(
+          inArray(
+            conversations.id,
+            this.db
+              .select({ id: messages.conversationId })
+              .from(messages)
+              .innerJoin(messageAddresses, eq(messageAddresses.messageId, messages.id))
+              .where(and(inArray(messageAddresses.contactAddressId, ids), isNull(messages.deletedAt))),
+          ),
+        );
+      }
+      if (q.important) {
+        // Importanti: attive e archiviate insieme, sono quelle da ritrovare.
+        where.push(
+          inArray(
+            conversations.id,
+            this.db
+              .select({ id: messages.conversationId })
+              .from(messages)
+              .where(and(eq(messages.important, true), isNull(messages.deletedAt))),
+          ),
+        );
+      } else if (q.view !== 'person') {
+        // Nella vista persona si mostrano anche le archiviate: è uno storico dei rapporti.
+        where.push(q.archived ? isNotNull(conversations.archivedAt) : isNull(conversations.archivedAt));
+      }
     }
     // Ordine: ultimo messaggio, ma una conversazione appena staccata sta in cima finché non arriva altro.
     const sortAt = sql<number>`max(${conversations.lastMessageAt}, coalesce(${conversations.splitAt}, 0))`;
@@ -314,6 +319,11 @@ export class ConversationService {
       noiseUnread: unread?.noise ?? 0,
       totalUnread: unread?.total ?? 0,
     };
+  }
+
+  /** Una conversazione come riga della lista (anche archiviata), per mostrarla dove non è stata ancora caricata. */
+  item(id: string): ConversationListItem | undefined {
+    return this.list({ view: 'inbox', onlyId: id })[0];
   }
 
   /** Conversazioni importanti per vista: id del progetto, oppure "inbox", "news", "spam". */

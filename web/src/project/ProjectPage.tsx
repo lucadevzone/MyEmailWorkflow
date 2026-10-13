@@ -109,13 +109,16 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
     }
   }, [conversationId, draftId, projectKey, list.isLoading, items, navigate]);
 
-  // Arrivando da un link (ricerca, contatti, task) la conversazione in focus può stare più in basso:
-  // si caricano altre pagine finché non compare, poi la si porta in vista.
-  const found = !!conversationId && items.some((c) => c.id === conversationId);
-  const pagesLoaded = list.data?.pages.length ?? 0;
-  useEffect(() => {
-    if (conversationId && !found && !list.isLoading && list.hasNextPage && !list.isFetchingNextPage && pagesLoaded < 20) void list.fetchNextPage();
-  }, [conversationId, found, list.isLoading, list.hasNextPage, list.isFetchingNextPage, pagesLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Arrivando da un link (ricerca, contatti, task) la conversazione in focus può stare molto più in basso,
+  // o non stare in questa vista (es. archiviata): la si carica da sola e la si mostra in cima.
+  const loaded = !!conversationId && items.some((c) => c.id === conversationId);
+  const pinnedQuery = useQuery({
+    queryKey: ['conversation-item', conversationId],
+    queryFn: () => api.conversationItem(conversationId!),
+    enabled: !!conversationId && !loaded,
+  });
+  const pinned = conversationId && !loaded ? pinnedQuery.data : undefined;
+  const found = loaded || !!pinned;
   const scrolledTo = useRef<string | null>(null);
   useEffect(() => {
     if (!conversationId || !found || scrolledTo.current === conversationId) return;
@@ -259,6 +262,20 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
           </div>
         </div>
         <div className="pm-convstack">
+          {pinned && (
+            <ConversationItem
+              key={`pinned-${pinned.id}`}
+              c={pinned}
+              focused
+              selectedMessageId={messageId}
+              cb={{
+                onFocus: () => focus(pinned.id),
+                onUnfocus: unfocus,
+                onOpenMessage: (mid) => pane.openMessage(pinned.id, mid),
+                onCompose: (r) => pane.compose({ conversationId: r.replyTo ? pinned.id : null, ...r }),
+              }}
+            />
+          )}
           {/* Account collegato ma ancora nessun progetto: lo smistamento non ha dove proporre. */}
           {projectKey === SYSTEM_INBOX && !archived && projectsLoaded && !projects.some((p) => !p.archived) && (
             <div className="pm-welcomehint">
@@ -268,7 +285,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
               </button>
             </div>
           )}
-          {list.isLoading && <div className="pm-empty">Caricamento…</div>}
+          {list.isLoading && !pinned && <div className="pm-empty">Caricamento…</div>}
           {!list.isLoading && items.length === 0 && (
             <div className="pm-empty">
               {view === 'important'

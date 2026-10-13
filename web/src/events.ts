@@ -15,33 +15,50 @@ export function useServerEvents() {
       if (connectedOnce) qc.invalidateQueries();
       connectedOnce = true;
     };
+    // Durante un'importazione arrivano molti eventi di fila: le query da aggiornare si raccolgono e si
+    // ricaricano al massimo una volta al secondo, invece di accodare al server una raffica di richieste.
+    const pending = new Map<string, readonly unknown[]>();
+    let timer: number | null = null;
+    const inv = (key: readonly unknown[]) => {
+      pending.set(JSON.stringify(key), key);
+      timer ??= window.setTimeout(() => {
+        timer = null;
+        const keys = [...pending.values()];
+        pending.clear();
+        for (const k of keys) void qc.invalidateQueries({ queryKey: k });
+      }, 1000);
+    };
     es.onmessage = (msg) => {
       const event = JSON.parse(msg.data) as ServerEvent;
       if (event.type === 'sync') {
         qc.setQueryData<SyncStatusDto[]>(['sync'], (prev = []) => mergeStatuses(prev, [event.status]));
       } else if (event.type === 'conversations') {
-        qc.invalidateQueries({ queryKey: ['conversations'] });
-        qc.invalidateQueries({ queryKey: ['counts'] });
-        qc.invalidateQueries({ queryKey: ['important-counts'] });
-        qc.invalidateQueries({ queryKey: ['task-suggestions'] }); // i suggerimenti nascono con l'analisi della conversazione
-        qc.invalidateQueries({ queryKey: ['projects'] });
-        qc.invalidateQueries({ queryKey: ['people'] });
-        for (const id of event.ids) qc.invalidateQueries({ queryKey: ['conversation', id] });
+        inv(['conversations']);
+        inv(['counts']);
+        inv(['important-counts']);
+        inv(['task-suggestions']); // i suggerimenti nascono con l'analisi della conversazione
+        inv(['conversation-item']);
+        inv(['projects']);
+        inv(['people']);
+        for (const id of event.ids) inv(['conversation', id]);
       } else if (event.type === 'projects') {
-        qc.invalidateQueries({ queryKey: ['projects'] });
-        qc.invalidateQueries({ queryKey: ['categories'] });
+        inv(['projects']);
+        inv(['categories']);
       } else if (event.type === 'activities') {
-        qc.invalidateQueries({ queryKey: ['activities'] });
+        inv(['activities']);
       } else if (event.type === 'people') {
-        qc.invalidateQueries({ queryKey: ['people'] });
-        qc.invalidateQueries({ queryKey: ['directory'] });
-        qc.invalidateQueries({ queryKey: ['project-members'] });
+        inv(['people']);
+        inv(['directory']);
+        inv(['project-members']);
       } else if (event.type === 'tasks') {
-        qc.invalidateQueries({ queryKey: ['tasks'] });
-        qc.invalidateQueries({ queryKey: ['projects'] }); // badge dei task nella barra
+        inv(['tasks']);
+        inv(['projects']); // badge dei task nella barra
       }
     };
-    return () => es.close();
+    return () => {
+      es.close();
+      if (timer) window.clearTimeout(timer);
+    };
   }, [qc]);
 }
 

@@ -205,6 +205,12 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   app.get('/api/conversations/counts', async () => conversationsSvc.counts());
   app.get('/api/conversations/important-counts', async () => conversationsSvc.importantCounts());
 
+  app.get<{ Params: { id: string } }>('/api/conversations/:id/item', async (req, reply) => {
+    const item = conversationsSvc.item(req.params.id);
+    if (!item) return reply.code(404).send({ error: 'Conversazione non trovata' });
+    return item;
+  });
+
   app.get<{ Params: { id: string } }>('/api/conversations/:id', async (req, reply) => {
     return conversationsSvc.get(req.params.id) ?? reply.code(404).send({ error: 'Conversazione non trovata' });
   });
