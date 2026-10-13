@@ -18,6 +18,9 @@ import { useBlockSend } from '../activities/blockSend.ts';
 import { useDetach } from './useDetach.ts';
 import { useConversationActions } from './useConversationActions.ts';
 
+/** Conversazioni (con il loro ultimo messaggio) già mandate in analisi all'apertura, in questa sessione. */
+const focusAnalyzed = new Set<string>();
+
 export interface ItemCallbacks {
   onFocus: () => void;
   onUnfocus: () => void;
@@ -61,6 +64,15 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
       navigate(paths.newProject({ name: sug.payload.projectName as string, description: sug.payload.reason as string | undefined, suggestion: sug.id, conversation: c.id })),
   });
   const ctx = useContextMenu(() => actions.menuSpec(focused));
+  // Aperta: la sua analisi mancante (sintesi, classificazione, task) passa in primo piano, anche con
+  // l'analisi in background in pausa. Una volta per conversazione, e di nuovo se arrivano messaggi.
+  useEffect(() => {
+    if (!focused) return;
+    const key = `${c.id}:${c.lastMessageAt}`;
+    if (focusAnalyzed.has(key)) return;
+    focusAnalyzed.add(key);
+    void api.analyzeConversation(c.id).catch(() => focusAnalyzed.delete(key));
+  }, [focused, c.id, c.lastMessageAt]);
   // Smistata da sola, aperta e poi lasciata senza annullare: la regola aveva ragione (RF-E6).
   const wasFocused = useRef(focused);
   const qcItem = useQueryClient();
@@ -420,12 +432,10 @@ function SummaryBox({ c }: { c: ConversationListItem }) {
               : c.isNoise || c.isSpam
                 ? 'Le News e lo Spam non hanno una sintesi automatica.'
                 : recent
-                  ? settings?.aiPaused
-                    ? "La sintesi arriverà quando riprende l'analisi (ora in pausa)."
-                    : 'La sintesi viene generata in background.'
+                  ? 'Sto preparando la sintesi…'
                   : `Conversazione più vecchia di ${windowLabel}: la sintesi si genera su richiesta.`}
           </p>
-          {!busy && (!recent || c.isNoise || c.isSpam || settings?.aiPaused) && (
+          {!busy && (!recent || c.isNoise || c.isSpam) && (
             <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm pm-summary__gen" onClick={() => void generate()}>
               <Ic icon={Sparkles} size={14} /> Genera sintesi
             </button>

@@ -253,6 +253,8 @@ export const api = {
   clearAssistantThread: (q: AssistantScope) => request<void>('DELETE', `/api/assistant/thread?${scopeQuery(q)}`),
   replyIdeas: (conversationId: string) => request<ReplyIdea[]>('GET', `/api/conversations/${conversationId}/reply-ideas`),
   suggestedQuestions: (conversationId: string) => request<string[]>('GET', `/api/conversations/${conversationId}/questions`),
+  analyzeConversation: (conversationId: string) =>
+    request<{ queued: string[]; skipped?: 'not_found' | 'noise' | 'window' }>('POST', `/api/conversations/${conversationId}/analyze`),
   summarizeNow: (conversationId: string) => request<ConversationListItem>('POST', `/api/conversations/${conversationId}/summarize`),
   setSummary: (conversationId: string, summary: string) => request<{ ok: true }>('PUT', `/api/conversations/${conversationId}/summary`, { summary }),
   /** Risposta dell'assistente in streaming: onPiece riceve i pezzi man mano. */

@@ -12,6 +12,7 @@ import { ProjectService } from '../src/projects/service.ts';
 import { conversations, jobs, messages as messagesTable } from '../src/db/schema.ts';
 import { rankBetween } from '../src/lib/rank.ts';
 import { applyAiWindow } from '../src/ai/window.ts';
+import { analyzeFocused } from '../src/ai/focus.ts';
 import { enqueueMissingAnalysis } from '../src/ai/missing.ts';
 
 describe('indici frazionari', () => {
@@ -147,6 +148,26 @@ describe("finestra dell'analisi", () => {
     applyAiWindow(s.db, s.sqlite, () => enqueueMissingAnalysis(s.db));
     const back = s.db.select().from(jobs).all().filter((j) => j.status === 'pending' && j.kind === 'classify');
     expect(back.map((j) => JSON.parse(j.payload).conversationId)).not.toContain(old.conversationId);
+  });
+});
+
+describe('conversazione aperta', () => {
+  it("con l'analisi in pausa, la conversazione aperta si analizza lo stesso; le altre restano in coda", async () => {
+    s.settings.update({ aiPaused: true });
+    const a = await mail('a', 'Preventivo', 'Mi mandi il preventivo?');
+    const b = await mail('b', 'Altro', 'Ciao');
+    await s.jobs.drain();
+    const conv = new ConversationService(s.db);
+    expect(conv.item(a.conversationId)!.summary).toBeNull(); // in pausa non si muove nulla
+
+    const r = analyzeFocused(s.db, a.conversationId);
+    expect(r.queued).toEqual(expect.arrayContaining(['embed', 'summarize', 'classify', 'extract_tasks']));
+    await s.jobs.drain();
+    expect(conv.item(a.conversationId)!.summary).toBe('x');
+    expect(conv.item(b.conversationId)!.summary).toBeNull();
+
+    const old = await mail('old', 'Vecchia', 'ciao', { date: 'Mon, 01 Jan 2024 10:00:00 +0100' });
+    expect(analyzeFocused(s.db, old.conversationId).skipped).toBe('window');
   });
 });
 

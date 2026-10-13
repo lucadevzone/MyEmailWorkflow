@@ -44,6 +44,7 @@ import { PRIORITY } from '../jobs/queue.ts';
 import { TaskError, taskInputSchema, taskMoveSchema, taskPatchSchema, type TaskService } from '../tasks/service.ts';
 import { applyAiWindow } from '../ai/window.ts';
 import { enqueueMissingAnalysis } from '../ai/missing.ts';
+import { analyzeFocused } from '../ai/focus.ts';
 
 export interface RouteDeps {
   db: Db;
@@ -213,6 +214,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
 
   app.get('/api/conversations/counts', async () => conversationsSvc.counts());
   app.get('/api/conversations/important-counts', async () => conversationsSvc.importantCounts());
+
+  // Conversazione aperta: la sua analisi mancante passa in primo piano, anche con l'analisi in pausa.
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/analyze', async (req) => analyzeFocused(deps.db, req.params.id));
 
   // Sintesi su richiesta (conversazioni fuori dalla finestra dell'analisi): subito, anche con l'analisi in pausa.
   app.post<{ Params: { id: string } }>('/api/conversations/:id/summarize', async (req, reply) => {

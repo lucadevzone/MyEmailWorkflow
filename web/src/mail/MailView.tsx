@@ -126,6 +126,10 @@ export function MailView({ projectKey, conversationId, messageId, draftId }: {
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  // Conversazione aperta: la sua analisi mancante passa in primo piano (anche con l'analisi in pausa).
+  useEffect(() => {
+    if (conversationId) void api.analyzeConversation(conversationId).catch(() => {});
+  }, [conversationId]);
   const stateSeed = (location.state as { seed?: DraftSeed } | null)?.seed;
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const conv = useQuery({ queryKey: ['conversation', conversationId], queryFn: () => api.conversation(conversationId!), enabled: !!conversationId });

@@ -1,8 +1,8 @@
-import { and, asc, desc, eq, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import type { Db } from '../db/client.ts';
 import { jobs } from '../db/schema.ts';
 import { now } from '../lib/ids.ts';
-import { setJobNotifier } from './queue.ts';
+import { PRIORITY, setJobNotifier } from './queue.ts';
 
 export type JobHandler = (payload: unknown) => Promise<void>;
 
@@ -79,11 +79,12 @@ export class JobRunner {
   }
 
   private async runOne(): Promise<boolean> {
-    if (this.paused()) return false;
+    // In pausa girano solo i lavori della conversazione aperta dall'utente.
+    const paused = this.paused();
     const job = this.db
       .select()
       .from(jobs)
-      .where(and(eq(jobs.status, 'pending'), lte(jobs.runAfter, now())))
+      .where(and(eq(jobs.status, 'pending'), lte(jobs.runAfter, now()), paused ? gte(jobs.priority, PRIORITY.focus) : undefined))
       // A parità di priorità e di momento (stessa email), prima l'indicizzazione: la classificazione
       // usa la somiglianza, che richiede gli embedding della conversazione.
       .orderBy(desc(jobs.priority), asc(jobs.createdAt), asc(sql`case ${jobs.kind} when 'embed' then 0 when 'classify' then 2 else 1 end`))
