@@ -1,0 +1,107 @@
+/* Conversazioni (UI v2): righe compatte di una sola riga e scheda in focus */
+
+/* ─── Riga compatta ─────────────────────────────────────────── */
+.pm-crow {
+  display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 16px 0 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl); box-sizing: border-box;
+}
+.pm-crow:hover { border-color: var(--border-strong); }
+.pm-crow__main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 0; align-self: stretch;
+  border: 0; background: transparent; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer;
+}
+.pm-crow__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; margin-right: 10px; }
+.pm-crow--unread .pm-crow__dot { background: var(--accent); }
+.pm-crow__type { color: var(--ink-2); margin-right: 12px; }
+.pm-crow__avatar { width: 44px; flex: none; display: flex; align-items: center; }
+.pm-crow__names { width: 170px; flex: none; padding-right: 16px; color: var(--ink-2); font-weight: 500; box-sizing: border-box; }
+.pm-crow--unread .pm-crow__names { color: var(--ink); font-weight: 600; }
+.pm-crow__title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.pm-crow__ind { width: 92px; flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.pm-crow__clip { color: var(--ink-muted); }
+.pm-crow__mark { color: var(--ink-faint); }
+.pm-crow__mark--on { color: #8A6D12; fill: #B8860B; }
+.pm-crow__time { width: 56px; flex: none; text-align: right; font-size: var(--fs-md); color: var(--ink-muted); white-space: nowrap; }
+.pm-crow--unread .pm-crow__time { color: var(--ink); font-weight: 600; }
+.pm-crow .pm-group--30 .pm-avatar { width: 14px; height: 14px; font-size: 6px; box-shadow: 0 0 0 1.5px #ECE9E2; }
+.pm-crow .pm-group--30 .pm-avatar + .pm-avatar { margin-left: -4px; }
+.pm-crow .pm-autobadge { flex: none; }
+
+/* Segno "suggerimenti da accettare": pillolina lilla con la sola stellina */
+.pm-suggmark {
+  width: 24px; height: 22px; flex: none; padding: 0; border-radius: var(--r-pill); display: inline-flex; align-items: center; justify-content: center;
+  border: 1px dashed var(--sugg-border); background: var(--sugg-bg); color: var(--sugg-ink); cursor: pointer;
+}
+.pm-suggmark:hover { border-style: solid; }
+
+/* ─── Scheda in focus ───────────────────────────────────────── */
+.pm-focus__titlerow { display: flex; align-items: center; gap: 12px; padding: 16px 20px 0; }
+.pm-focus__icon { color: var(--ink-2); }
+.pm-focus__title { margin: 0; flex: 1; min-width: 0; font-size: 19px; font-weight: 600; line-height: 1.3; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pm-focus__meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 20px 16px 50px; border-bottom: 1px solid var(--border-subtle); font-size: var(--fs-md); }
+.pm-conv--focused .pm-conv__main { gap: 18px; }
+.pm-conv--focused .pm-conv__tree { padding: 14px 0 10px; }
+.pm-conv--focused .pm-summary { margin: 0 14px; }
+.pm-tree__label { display: flex; align-items: center; gap: 10px; padding: 16px 14px 2px; }
+.pm-tree__unreadcount { color: var(--accent); letter-spacing: 0; text-transform: none; font-weight: 600; }
+
+/* Sezioni della metà sinistra */
+.pm-section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.pm-section__head { all: unset; display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; cursor: pointer; border-radius: 4px; }
+.pm-section__head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pm-section__chevron { color: var(--ink-muted); opacity: 0; transition: opacity .15s, transform .15s; }
+.pm-section__head:hover .pm-section__chevron, .pm-section__head:focus-visible .pm-section__chevron, .pm-section__chevron--closed { opacity: 1; }
+.pm-section__chevron--closed { transform: rotate(-90deg); }
+.pm-label--sugg { display: inline-flex; align-items: center; gap: 6px; color: var(--sugg-ink); }
+
+/* Suggerimenti: stile lilla uniforme (fondo, bordo tratteggiato, testo) */
+.pm-tag--ai { border: 1px dashed var(--sugg-border); background: var(--sugg-bg); color: var(--sugg-ink); }
+.pm-tag--ai .pm-tag__text { color: var(--sugg-ink); }
+
+/* Pillole di aggiunta: + task, + nota, + carica file */
+.pm-addpill {
+  display: inline-flex; align-items: center; height: 30px; padding: 0 10px; border-radius: var(--r-pill);
+  border: 1px dashed var(--pill-border, var(--border-dashed)); background: transparent; color: var(--pill-ink, var(--ink-2)); font: inherit; font-size: 13px; cursor: pointer;
+}
+.pm-addpill:hover { border-style: solid; }
+.pm-addpill--task { --pill-border: #9CC3AB; --pill-ink: #2F6148; }
+.pm-addpill--note { --pill-border: #D2BC6A; --pill-ink: #6A5413; }
+.pm-addpill--file { --pill-border: #C9C5BB; --pill-ink: #3D3B36; }
+.pm-tag--note svg { color: var(--note-icon); flex: none; }
+
+/* Risorse: pillola delle versioni (blu quando aperta) e storia in linea */
+.pm-res__versions { gap: 4px; font-size: var(--fs-md); font-weight: 600; }
+.pm-res__versions--open { background: var(--accent-soft); }
+.pm-versions { margin: 2px 0 6px 13px; padding-left: 14px; border-left: 2px solid var(--border-subtle); gap: 6px; }
+.pm-version > span strong { color: var(--ink); margin-right: 4px; }
+
+/* Struttura: messaggi non letti */
+.pm-tree__node--unread { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.pm-tree__node--unread .pm-tree__name { color: var(--ink); font-weight: 700; }
+.pm-tree__node--unread .pm-tree__time { color: var(--accent); font-weight: 600; }
+.pm-tree__name--unread::after { display: none; }
+.pm-tree__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+
+/* ─── Pannello Task: schede verdi, suggerimento fisso in fondo ── */
+.pm-tasks__body { flex: 1; }
+.pm-taskitem { background: var(--task-bg); border-color: var(--task-border); }
+.pm-taskitem .pm-taskitem__grip { color: #8DB59C; }
+.pm-taskitem .pm-taskitem__origin { color: #3E6B53; }
+.pm-taskitem .pm-infochip { background: #fff; }
+.pm-taskitem--open { border: 1.5px solid var(--accent); }
+.pm-drawer__foot { flex: none; padding: 12px; border-top: 1px solid #ECE9E2; background: var(--surface-muted); }
+.pm-suggtask { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px dashed var(--sugg-border); border-radius: var(--r-xl); background: var(--sugg-bg); }
+.pm-suggtask__title { color: var(--sugg-strong); font-weight: 500; }
+.pm-suggtask__from { font-size: var(--fs-sm); color: var(--sugg-ink); }
+.pm-suggtask__actions { display: flex; gap: 8px; margin-top: 4px; }
+.pm-btn--sugg { background: var(--sugg-ink); color: #fff; border: 0; }
+.pm-btn--sugg:hover { background: var(--sugg-strong); }
+
+@media (max-width: 900px) {
+  .pm-crow__names { width: 120px; }
+  .pm-crow__type { display: none; }
+}
+@media (max-width: 640px) {
+  .pm-crow__names { display: none; }
+  .pm-crow__ind { width: auto; }
+}

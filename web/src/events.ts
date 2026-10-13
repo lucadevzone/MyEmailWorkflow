@@ -23,6 +23,7 @@ export function useServerEvents() {
         qc.invalidateQueries({ queryKey: ['conversations'] });
         qc.invalidateQueries({ queryKey: ['counts'] });
         qc.invalidateQueries({ queryKey: ['important-counts'] });
+        qc.invalidateQueries({ queryKey: ['task-suggestions'] }); // i suggerimenti nascono con l'analisi della conversazione
         qc.invalidateQueries({ queryKey: ['projects'] });
         qc.invalidateQueries({ queryKey: ['people'] });
         for (const id of event.ids) qc.invalidateQueries({ queryKey: ['conversation', id] });

@@ -22,6 +22,7 @@ import './styles/components/people.css';
 import './styles/components/project.css';
 import './styles/components/manage.css';
 import './styles/components/mail.css';
+import './styles/components/conversation.css';
 import './styles/components/search.css';
 import './styles/components/contacts.css';
 import './styles/components/overlays.css';

@@ -206,6 +206,12 @@ export interface SuggestionDto {
   createdAt: number;
 }
 
+/** Task suggerito dall'assistente in una conversazione del progetto (pannello Task). */
+export interface TaskSuggestionDto extends SuggestionDto {
+  conversationId: string;
+  conversationTitle: string | null;
+}
+
 export interface AttachmentDto {
   id: string;
   filename: string | null;

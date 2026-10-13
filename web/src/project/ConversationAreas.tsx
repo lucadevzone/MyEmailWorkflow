@@ -1,9 +1,10 @@
-// Le due aree della conversazione in focus: Task (verde) e Risorse (grigio: note, allegati, file).
-// Si comprimono ed estendono in modo indipendente; lo stato resta per le prossime aperture.
+// Le due sezioni della conversazione in focus (UI v2): "Task e note" (pillole verdi e gialle) e "Risorse"
+// (allegati con le versioni in linea, file della conversazione e del progetto). Si comprimono con un clic
+// sull'etichetta; lo stato resta per le prossime aperture.
 
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Download, FileText, Mail, Paperclip, Plus, SquareCheck, StickyNote, Trash2, FolderOpen } from 'lucide-react';
+import { ChevronDown, Download, FileText, Mail, Paperclip, StickyNote, Trash2 } from 'lucide-react';
 import type { ConversationDetail, ConversationListItem, FileDto, NoteDto, ResourceDto, TaskDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { fileSize, personLabel, shortDate } from '../lib/format.ts';
@@ -38,27 +39,20 @@ function useCollapsed(key: string): [boolean, () => void] {
   return [collapsed, toggle];
 }
 
-function AreaHead({ icon, label, count, collapsed, onToggle, children }: {
-  icon: typeof SquareCheck;
-  label: string;
-  count: number | string;
-  collapsed: boolean;
-  onToggle: () => void;
-  children?: ReactNode;
-}) {
+function SectionHead({ label, count, collapsed, onToggle }: { label: string; count?: number | string; collapsed: boolean; onToggle: () => void }) {
   return (
-    <div className="pm-area__head">
-      <button type="button" className="pm-area__toggle" onClick={onToggle} aria-expanded={!collapsed} title={collapsed ? 'Espandi' : 'Comprimi'}>
-        <Ic icon={ChevronDown} size={15} className={`pm-area__chevron${collapsed ? ' pm-area__chevron--closed' : ''}`} />
-        <h3><Ic icon={icon} size={15} /> {label} · {count}</h3>
-      </button>
-      <span className="pm-area__tools">{children}</span>
-    </div>
+    <button type="button" className="pm-section__head" onClick={onToggle} aria-expanded={!collapsed} title={collapsed ? 'Espandi' : 'Comprimi'}>
+      <span className="pm-label">{label}{collapsed && count !== undefined ? ` · ${count}` : ''}</span>
+      <Ic icon={ChevronDown} size={13} className={`pm-section__chevron${collapsed ? ' pm-section__chevron--closed' : ''}`} />
+    </button>
   );
 }
 
-export function TaskArea({ c, tasks, loading, canRemind, onRemind, onEditor, onOpenMessage, onChanged }: {
+const noteTitleOf = (n: NoteDto) => n.body.split('\n').find((l) => l.trim() && !l.startsWith('>')) ?? n.body.split('\n')[0] ?? '';
+
+export function TaskNotesSection({ c, d, tasks, loading, canRemind, onRemind, onEditor, onOpenMessage, onChanged }: {
   c: ConversationListItem;
+  d?: ConversationDetail;
   tasks: TaskDto[];
   loading: boolean;
   canRemind: boolean;
@@ -72,31 +66,32 @@ export function TaskArea({ c, tasks, loading, canRemind, onRemind, onEditor, onO
   const [collapsed, toggle] = useCollapsed('tasks');
   const open = tasks.filter((t) => t.status === 'open');
   const done = tasks.filter((t) => t.status === 'done');
-  const projectId = c.projectId!;
-  const edit = (task: TaskDto | undefined, anchor: DOMRect) => onEditor({ target: { kind: 'task', task, projectId, conversationId: c.id }, anchor });
+  const notes = d?.notes ?? [];
+  const projectId = c.projectId;
+  const edit = (task: TaskDto | undefined, anchor: DOMRect) => {
+    if (projectId) onEditor({ target: { kind: 'task', task, projectId, conversationId: c.id }, anchor });
+  };
+  const editNote = (note: NoteDto | undefined, anchor: DOMRect) => onEditor({ target: { kind: 'note', note, conversationId: c.id }, anchor });
   const rectOf = (e: React.MouseEvent) => (e.currentTarget as HTMLElement).getBoundingClientRect();
 
   return (
     <section
-      className={`pm-area pm-area--task${collapsed ? ' pm-area--collapsed' : ''}`}
-      aria-label="Task"
+      className="pm-section"
+      aria-label="Task e note"
       onContextMenu={(e) => {
         const anchor = rectOf(e);
         menuAt(() => ({
-          title: 'Task',
+          title: 'Task e note',
           actions: [
-            { id: 'new', icon: 'add_task', label: 'Nuovo task', primary: true, run: () => edit(undefined, anchor) },
+            ...(projectId ? [{ id: 'new', icon: 'add_task', label: 'Nuovo task', primary: true, run: () => edit(undefined, anchor) }] : []),
+            { id: 'note', icon: 'note_add', label: 'Nuova nota', primary: true, run: () => editNote(undefined, anchor) },
             ...(canRemind ? [{ id: 'remind', icon: 'reply', label: 'Ricordami di rispondere', primary: true, run: onRemind }] : []),
           ],
         }))(e);
       }}
     >
-      <AreaHead icon={SquareCheck} label="Task" count={loading ? c.taskCount : open.length} collapsed={collapsed} onToggle={toggle}>
-        <button type="button" className="pm-area__add" onClick={(e) => edit(undefined, rectOf(e))}>
-          <Ic icon={Plus} size={14} /> task
-        </button>
-      </AreaHead>
-      {!collapsed && (open.length > 0 || done.length > 0) && (
+      <SectionHead label={projectId ? 'Task e note' : 'Note'} count={(loading ? c.taskCount : open.length) + notes.length} collapsed={collapsed} onToggle={toggle} />
+      {!collapsed && (
         <div className="pm-tags">
           {open.map((t) => (
             <button key={t.id} type="button" className="pm-tag pm-tag--task" title={t.details ?? t.title} aria-label={`Modifica task: ${t.title}`}
@@ -131,9 +126,34 @@ export function TaskArea({ c, tasks, loading, canRemind, onRemind, onEditor, onO
               <span className="pm-tag__text">{t.title}</span>
             </button>
           ))}
+          {notes.map((n) => (
+            <button key={n.id} type="button" className="pm-tag pm-tag--note" title={n.body} aria-label={`Modifica nota: ${noteTitleOf(n)}`}
+              onClick={(e) => editNote(n, rectOf(e))}
+              onContextMenu={(e) => {
+                const anchor = rectOf(e);
+                menuAt(() => ({
+                  title: 'Nota',
+                  actions: [
+                    { id: 'edit', icon: 'edit', label: 'Modifica', primary: true, run: () => editNote(n, anchor) },
+                    ...(n.messageId ? [{ id: 'mail', icon: 'mail', label: 'Vai alla mail', primary: true, run: () => onOpenMessage(n.messageId!) }] : []),
+                    { id: 'del', icon: 'delete', label: 'Elimina', tone: 'danger' as const, run: async () => (await ask({ message: 'Eliminare la nota?', okLabel: 'Elimina', danger: true })) && api.deleteNote(n.id).then(onChanged) },
+                  ],
+                }))(e);
+              }}>
+              <Ic icon={StickyNote} size={13} />
+              <span className="pm-tag__text">{noteTitleOf(n)}</span>
+            </button>
+          ))}
+          {projectId && (
+            <button type="button" className="pm-addpill pm-addpill--task" onClick={(e) => edit(undefined, rectOf(e))}>
+              + task
+            </button>
+          )}
+          <button type="button" className="pm-addpill pm-addpill--note" onClick={(e) => editNote(undefined, rectOf(e))}>
+            + nota
+          </button>
         </div>
       )}
-      {!collapsed && open.length === 0 && done.length === 0 && !loading && <span className="pm-area__empty">Nessun task.</span>}
     </section>
   );
 }
@@ -145,15 +165,11 @@ function download(href: string) {
   a.click();
 }
 
-const noteTitle = (n: NoteDto) => n.body.split('\n').find((l) => l.trim() && !l.startsWith('>')) ?? n.body.split('\n')[0] ?? '';
-
-export function ResourcesArea({ c, d, onEditor, onOpenMessage, onUpload, onChanged }: {
+export function ResourcesSection({ c, d, onOpenMessage, onUpload }: {
   c: ConversationListItem;
   d?: ConversationDetail;
-  onEditor: OpenEditor;
   onOpenMessage: (messageId: string) => void;
   onUpload: () => void;
-  onChanged: () => void;
 }) {
   const qc = useQueryClient();
   const menuAt = useMenuAt();
@@ -161,13 +177,12 @@ export function ResourcesArea({ c, d, onEditor, onOpenMessage, onUpload, onChang
   const toast = useToast();
   const [collapsed, toggle] = useCollapsed('resources');
   const [history, setHistory] = useState<string | null>(null);
-  const notes = d?.notes ?? [];
   const files = d?.files ?? [];
   const own = d?.resources ?? [];
   // Comuni a tutto il progetto: si gestiscono da "Modifica progetto".
   const { data: projectRes = [] } = useQuery({ queryKey: ['project-resources', c.projectId], queryFn: () => api.projectResources(c.projectId!), enabled: !!c.projectId });
   const common = projectRes.filter((r) => !r.conversationId);
-  const total = notes.length + files.length + own.length + common.length;
+  const total = files.length + own.length + common.length;
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['conversation', c.id] });
@@ -181,35 +196,6 @@ export function ResourcesArea({ c, d, onEditor, onOpenMessage, onUpload, onChang
       toast({ text: 'Salvato tra i file' });
     },
   });
-  const rectOf = (e: React.MouseEvent) => (e.currentTarget as HTMLElement).getBoundingClientRect();
-  const editNote = (note: NoteDto | undefined, anchor: DOMRect) => onEditor({ target: { kind: 'note', note, conversationId: c.id }, anchor });
-
-  const noteRow = (n: NoteDto) => (
-    <div key={n.id} className="pm-res"
-      onContextMenu={(e) => {
-        const anchor = rectOf(e);
-        menuAt(() => ({
-          title: 'Nota',
-          actions: [
-            { id: 'edit', icon: 'edit', label: 'Modifica', primary: true, run: () => editNote(n, anchor) },
-            ...(n.messageId ? [{ id: 'mail', icon: 'mail', label: 'Vai alla mail', primary: true, run: () => onOpenMessage(n.messageId!) }] : []),
-            { id: 'del', icon: 'delete', label: 'Elimina', tone: 'danger' as const, run: async () => (await ask({ message: 'Eliminare la nota?', okLabel: 'Elimina', danger: true })) && api.deleteNote(n.id).then(onChanged) },
-          ],
-        }))(e);
-      }}>
-      <Ic icon={StickyNote} size={16} className="pm-res__icon pm-res__icon--note" label="Nota" />
-      <button type="button" className="pm-res__main" title={n.body} onClick={(e) => editNote(n, rectOf(e))}>
-        <span className="pm-res__name pm-truncate">{noteTitle(n)}</span>
-        <span className="pm-res__meta">nota · {shortDate(n.updatedAt)}</span>
-      </button>
-      {n.messageId && (
-        <button type="button" className="pm-res__action" title="Vai alla mail da cui è nata" onClick={() => onOpenMessage(n.messageId!)}>
-          <Ic icon={Mail} size={14} />
-        </button>
-      )}
-    </div>
-  );
-
   const attachmentRow = (f: FileDto) => {
     const versioned = f.versions.length > 1;
     // Ricevuto più volte: nuove versioni o lo stesso contenuto rimandato (anche con un altro nome, es. "(1)").
@@ -241,7 +227,7 @@ export function ResourcesArea({ c, d, onEditor, onOpenMessage, onUpload, onChang
             <button type="button" className={`pm-res__versions${openHistory ? ' pm-res__versions--open' : ''}`} aria-expanded={openHistory}
               title={versioned ? `${f.versions.length} versioni: mostra le precedenti` : `Ricevuto ${arrivals} volte, stesso contenuto: mostra gli invii`}
               onClick={() => setHistory(openHistory ? null : f.key)}>
-              <Icon name="file_copy" size={14} /> {versioned ? `v${f.latest.no}` : arrivals}
+              <Icon name="file_copy" size={14} /> {versioned ? f.versions.length : arrivals}
             </button>
           )}
         </div>
@@ -250,8 +236,7 @@ export function ResourcesArea({ c, d, onEditor, onOpenMessage, onUpload, onChang
             {f.versions.map((v) => (
               <li key={v.attachmentId}>
                 <div className="pm-version">
-                  <strong>v{v.no}</strong>
-                  <span className="pm-truncate">{shortDate(v.date)} · {v.from ? personLabel(v.from) : '—'} · {fileSize(v.size)}</span>
+                  <span className="pm-truncate"><strong>v{v.no}</strong> {shortDate(v.date)} · {v.from ? personLabel(v.from) : '—'} · {fileSize(v.size)}</span>
                   <button type="button" className="pm-res__action" title="Apri la mail di questa versione" onClick={() => onOpenMessage(v.messageId)}>
                     <Ic icon={Mail} size={14} />
                   </button>
@@ -297,35 +282,29 @@ export function ResourcesArea({ c, d, onEditor, onOpenMessage, onUpload, onChang
 
   return (
     <section
-      className={`pm-area pm-area--neutral${collapsed ? ' pm-area--collapsed' : ''}`}
+      className="pm-section"
       aria-label="Risorse"
       onContextMenu={(e) => {
-        const anchor = rectOf(e);
         menuAt(() => ({
           title: 'Risorse',
           actions: [
-            { id: 'note', icon: 'note_add', label: 'Nuova nota', primary: true, run: () => editNote(undefined, anchor) },
             { id: 'up', icon: 'upload_file', label: 'Carica file', primary: true, run: onUpload },
             ...(files.length ? [{ id: 'all', icon: 'create_new_folder', label: 'Salva tutti gli allegati tra i file', run: () => files.forEach((f) => toResource.mutate(f.latest.attachmentId)) }] : []),
           ],
         }))(e);
       }}
     >
-      <AreaHead icon={FolderOpen} label="Risorse" count={d ? total : '…'} collapsed={collapsed} onToggle={toggle}>
-        <button type="button" className="pm-area__add" onClick={(e) => editNote(undefined, rectOf(e))}>
-          <Ic icon={Plus} size={14} /> nota
-        </button>
-        <button type="button" className="pm-area__add" onClick={onUpload}>
-          <Ic icon={Plus} size={14} /> carica file
-        </button>
-      </AreaHead>
+      <SectionHead label="Risorse" count={d ? total : '…'} collapsed={collapsed} onToggle={toggle} />
       {!collapsed && (
         <div className="pm-res__list">
-          {notes.map(noteRow)}
           {files.map(attachmentRow)}
           {own.map((r) => fileRow(r, false))}
           {common.map((r) => fileRow(r, true))}
-          {d && total === 0 && <span className="pm-area__empty">Nessuna nota, allegato o file.</span>}
+          <div>
+            <button type="button" className="pm-addpill pm-addpill--file" onClick={onUpload}>
+              + carica file
+            </button>
+          </div>
         </div>
       )}
     </section>

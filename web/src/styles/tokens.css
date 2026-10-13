@@ -84,12 +84,18 @@
   --shadow-pop: 0 16px 40px rgba(27, 26, 23, .14);
   --shadow-lift: 0 6px 18px rgba(27, 26, 23, .08);
 
+  /* Suggerimenti dell'assistente (lilla): tutto ciò che l'LLM propone e l'utente deve accettare */
+  --sugg-bg: #F3F0FB;
+  --sugg-border: #B9AEE0;
+  --sugg-ink: #4B3C8A;
+  --sugg-strong: #2E2560;
+
   /* Layout */
   --topbar-h: 56px;
   --sidebar-w: 250px;
   --sidebar-closed-w: 64px;
   --rail-w: 84px;
-  --tasks-w: 330px;
+  --tasks-w: 380px;
   --assistant-w: 400px;
   --carousel-max: 1240px;
 }

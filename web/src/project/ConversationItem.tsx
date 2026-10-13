@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Bookmark, Ellipsis, FolderInput, FolderPlus, Paperclip, Reply, SquareCheck, StickyNote, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Bookmark, Ellipsis, FolderInput, FolderPlus, Mail, MessagesSquare, Paperclip, Reply, Sparkles, StickyNote, X } from 'lucide-react';
 import type { ConversationDetail, ConversationListItem, MessageDto, SuggestionDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
-import { PeopleLine, PersonAvatar, PersonChip, useDisplayName, useMe } from '../ui/People.tsx';
+import { GroupBadge, PersonAvatar, PersonChip, useDisplayName, useMe } from '../ui/People.tsx';
+import { Icon } from '../ui/Icon.tsx';
 import { useContextMenu, useMenuAt, useOpenMenu } from '../ui/contextMenu.tsx';
 import { useToast } from '../ui/toast.tsx';
 import { useNavigate } from 'react-router-dom';
 import { paths } from '../shell/paths.ts';
 import type { ComposeRequest } from '../workspace/pane.ts';
 import { TagEditor, type TagEditorTarget } from './TagEditor.tsx';
-import { ResourcesArea, TaskArea } from './ConversationAreas.tsx';
+import { ResourcesSection, TaskNotesSection } from './ConversationAreas.tsx';
 import { useBlockSend } from '../activities/blockSend.ts';
 import { useDetach } from './useDetach.ts';
 import { useConversationActions } from './useConversationActions.ts';
@@ -92,25 +93,41 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
 
   if (!focused) {
     return (
-      <article ref={ref} className="pm-conv" data-conversation={c.id} {...ctx}>
-        <button type="button" onClick={cb.onFocus} style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div className="pm-conv__head">
-            <span className="pm-conv__title">{title}<NewBadge n={c.unreadCount} />{c.autoSorted && <AutoSortedBadge c={c} />}</span>
-            <span className="pm-conv__date">
-              {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}
-              {c.important && <Ic icon={Bookmark} size={14} className="pm-bookmark" label="Contiene messaggi importanti" />}
-              {shortDate(c.lastMessageAt)}
-            </span>
-          </div>
-          <PeopleLine people={c.participants.length ? c.participants : []} />
+      <article ref={ref} className={`pm-crow${c.unreadCount ? ' pm-crow--unread' : ''}`} data-conversation={c.id} {...ctx}>
+        <button type="button" className="pm-crow__main" onClick={cb.onFocus} aria-label={`${title}${c.unreadCount ? `, ${c.unreadCount} da leggere` : ''}`}>
+          <span className="pm-crow__dot" aria-hidden="true" />
+          <Ic icon={c.messageCount > 1 ? MessagesSquare : Mail} size={16} className="pm-crow__type" label={c.messageCount > 1 ? `Conversazione di ${c.messageCount} messaggi` : 'Un messaggio'} />
+          <RowPeople c={c} />
+          <span className="pm-crow__title">
+            <span className="pm-truncate">{title}</span>
+            {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}
+          </span>
         </button>
-        {suggestions.length > 0 && (
-          <div className="pm-conv__suggestions">
-            {suggestions.slice(0, 2).map((s) => (
-              <SuggestionTag key={s.id} label={actions.suggestionLabel(s)!} reason={(s.payload as { reason?: string }).reason} onRun={() => actions.runSuggestion(s)} onReject={() => actions.rejectSug.mutate(s)} />
-            ))}
-          </div>
-        )}
+        {c.autoSorted && <AutoSortedBadge c={c} />}
+        <span className="pm-crow__ind">
+          {c.hasAttachments && <Ic icon={Paperclip} size={15} className="pm-crow__clip" label="Con allegati" />}
+          {suggestions.length > 0 && (
+            <button
+              type="button"
+              className="pm-suggmark"
+              aria-label={`${suggestions.length === 1 ? '1 suggerimento' : `${suggestions.length} suggerimenti`} dell'assistente da accettare`}
+              title={suggestions.map((x) => actions.suggestionLabel(x)).join('\n')}
+              onClick={(e) =>
+                openMenu(
+                  {
+                    title: "Suggerimenti dell'assistente",
+                    actions: suggestions.map((x) => ({ id: x.id, tone: 'ai' as const, icon: 'auto_awesome', primary: true, label: actions.suggestionLabel(x)!, run: () => actions.runSuggestion(x) })),
+                  },
+                  e.currentTarget,
+                )
+              }
+            >
+              <Ic icon={Sparkles} size={13} />
+            </button>
+          )}
+          <Ic icon={Bookmark} size={15} className={`pm-crow__mark${c.important ? ' pm-crow__mark--on' : ''}`} label={c.important ? 'Contiene messaggi importanti' : 'Nessun messaggio importante'} />
+        </span>
+        <span className="pm-crow__time">{shortDate(c.lastMessageAt)}</span>
         {extras}
       </article>
     );
@@ -124,7 +141,7 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
         </button>
         {c.projectId && (
           <button type="button" className="pm-btn pm-btn--ghost" onClick={(e) => setEditor({ target: { kind: 'task', projectId: c.projectId!, conversationId: c.id }, anchor: anchorOf(e.currentTarget) })}>
-            <Ic icon={SquareCheck} size={15} /> Task
+            <Icon name="assignment" size={16} /> Task
           </button>
         )}
         <button type="button" className="pm-btn pm-btn--ghost" onClick={(e) => setEditor({ target: { kind: 'note', conversationId: c.id }, anchor: anchorOf(e.currentTarget) })}>
@@ -161,7 +178,49 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
   );
 }
 
-/** Badge dopo il titolo: messaggi arrivati e non ancora letti. */
+/**
+ * Chi ha scritto, nella riga compatta: un avatar (o due sovrapposti) e i nomi. Se i partecipanti sono
+ * i membri di un gruppo, lo squircle del gruppo e il suo nome.
+ */
+function RowPeople({ c }: { c: ConversationListItem }) {
+  const name = useDisplayName();
+  const { data: dir } = useQuery({ queryKey: ['directory'], queryFn: api.peopleDirectory, staleTime: 60_000 });
+  const people = c.participants;
+  const emails = people.map((p) => p.email.toLowerCase());
+  const group =
+    people.length >= 2
+      ? dir?.groups.find((g) => {
+          const members = new Set(g.members.flatMap((m) => m.emails.map((e) => e.toLowerCase())));
+          return members.size >= 2 && emails.every((e) => members.has(e));
+        })
+      : undefined;
+  if (group) {
+    const members = group.members.map((m) => ({ name: m.name, email: m.emails[0] ?? m.key }));
+    return (
+      <>
+        <span className="pm-crow__avatar" aria-label={`Gruppo ${group.name}: ${members.map((m) => m.name ?? m.email).join(', ')}`}>
+          <GroupBadge size={30} members={members} />
+        </span>
+        <span className="pm-crow__names pm-truncate">{group.name}</span>
+      </>
+    );
+  }
+  return (
+    <>
+      <span className="pm-crow__avatar">
+        <span className="pm-stack">
+          {(people.length ? people : [{ name: null, email: '?' }]).slice(0, 2).map((p) => (
+            <PersonAvatar key={p.email} person={p} size={people.length > 1 ? 22 : 26} />
+          ))}
+        </span>
+      </span>
+      <span className="pm-crow__names pm-truncate" title={people.map(name).join(', ')}>
+        {people.length ? people.map(name).join(', ') : '—'}
+      </span>
+    </>
+  );
+}
+
 /**
  * Conversazione smistata da sola (RF-E6): "smistata automaticamente · Annulla". Annulla la riporta in
  * Da smistare (e la regola impara); aperta e lasciata lì, il segno sparisce e conta come giusta.
@@ -191,10 +250,6 @@ function AutoSortedBadge({ c }: { c: ConversationListItem }) {
   );
 }
 
-function NewBadge({ n }: { n: number }) {
-  if (n <= 0) return null;
-  return <span className="pm-newbadge" title={`${n} da leggere`}>{n === 1 ? 'nuova' : `${n} nuove`}</span>;
-}
 
 function SuggestionTag({ label, reason, onRun, onReject }: { label: string; reason?: string; onRun: () => void; onReject: () => void }) {
   return (
@@ -257,69 +312,74 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
       ],
     }));
 
+  const unread = d?.messages.filter((m) => m.direction === 'in' && !m.seen).length ?? 0;
   return (
-    <div className="pm-conv__body">
-      <div className="pm-conv__main">
-        <div className="pm-conv__head" style={{ alignItems: 'flex-start' }}>
-          <h2 className="pm-conv__title" style={{ margin: 0 }}>
-            <button
-              type="button"
-              className="pm-conv__titlelink"
-              disabled={!d?.messages.length}
-              title="Apri il primo messaggio da leggere (o l'ultimo ricevuto)"
-              onClick={() => {
-                const id = d && entryMessage(d.messages);
-                if (id) cb.onOpenMessage(id);
-              }}
-            >
-              {title}
-            </button>
-            <NewBadge n={c.unreadCount} />
-            {c.autoSorted && <AutoSortedBadge c={c} />}
-          </h2>
-          <span className="pm-conv__date" style={{ paddingTop: 3 }}>
-            {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}
-            {c.important && <Ic icon={Bookmark} size={14} className="pm-bookmark" label="Contiene messaggi importanti" />}
-            {shortDate(c.lastMessageAt)}
-          </span>
-        </div>
-        <div className="pm-conv__chips">
-          {people.map((p) => (
-            <PersonChip key={p.email} person={p} onClick={() => cb.onCompose({ to: [p.email], projectId: c.projectId })} onContextMenu={personMenu(p)} />
-          ))}
-          <span className="pm-muted" style={{ fontSize: 'var(--fs-md)' }}>· {c.messageCount} {c.messageCount === 1 ? 'messaggio' : 'messaggi'}</span>
-        </div>
-        {(uniqueSuggestions.length > 0 || canRemind) && (
-          <div className="pm-conv__suggestions">
-            {canRemind && (
-              <span className="pm-tag pm-tag--ai" title="Crea il task «Rispondere a…»: si chiude da solo quando rispondi">
-                <button type="button" onClick={remindReply} className="pm-tag__text">+ Task: Ricordami di rispondere</button>
-              </span>
-            )}
-            {uniqueSuggestions.map((s) => (
-              <SuggestionTag key={s.id} label={actions.suggestionLabel(s)!} reason={(s.payload as { reason?: string }).reason} onRun={() => actions.runSuggestion(s)} onReject={() => actions.rejectSug.mutate(s)} />
-            ))}
-          </div>
-        )}
-
-        <div className="pm-areas pm-areas--stack">
-          {c.projectId && (
-            <TaskArea c={c} tasks={tasks} loading={tasksLoading} canRemind={canRemind} onRemind={remindReply} onEditor={onEditor} onOpenMessage={cb.onOpenMessage} onChanged={refreshItems} />
-          )}
-          <ResourcesArea c={c} d={d} onEditor={onEditor} onOpenMessage={cb.onOpenMessage} onUpload={onUpload} onChanged={refreshItems} />
-        </div>
+    <>
+      <div className="pm-focus__titlerow">
+        <Ic icon={c.messageCount > 1 ? MessagesSquare : Mail} size={18} className="pm-focus__icon" />
+        <h2 className="pm-focus__title">
+          <button
+            type="button"
+            className="pm-conv__titlelink"
+            disabled={!d?.messages.length}
+            title="Apri il primo messaggio da leggere (o l'ultimo ricevuto)"
+            onClick={() => {
+              const id = d && entryMessage(d.messages);
+              if (id) cb.onOpenMessage(id);
+            }}
+          >
+            {title}
+          </button>
+          {c.autoSorted && <AutoSortedBadge c={c} />}
+        </h2>
       </div>
+      <div className="pm-focus__meta">
+        {people.map((p) => (
+          <PersonChip key={p.email} person={p} onClick={() => cb.onCompose({ to: [p.email], projectId: c.projectId })} onContextMenu={personMenu(p)} />
+        ))}
+        <span className="pm-muted">
+          {c.messageCount} {c.messageCount === 1 ? 'messaggio' : 'messaggi'} · {shortDate(c.lastMessageAt)}
+        </span>
+        {c.hasDraft && <span className="pm-msg__draftmark">bozza</span>}
+        {c.important && <Ic icon={Bookmark} size={14} className="pm-bookmark" label="Contiene messaggi importanti" />}
+      </div>
+      <div className="pm-conv__body">
+        <div className="pm-conv__main">
+          {(uniqueSuggestions.length > 0 || canRemind) && (
+            <section className="pm-section" aria-label="Suggerimenti dell'assistente">
+              <span className="pm-label pm-label--sugg">
+                <Ic icon={Sparkles} size={13} /> Suggerimenti dell'assistente
+              </span>
+              <div className="pm-tags">
+                {canRemind && (
+                  <span className="pm-tag pm-tag--ai" title="Crea il task «Rispondere a…»: si chiude da solo quando rispondi">
+                    <button type="button" onClick={remindReply} className="pm-tag__text">+ task: Ricordami di rispondere</button>
+                  </span>
+                )}
+                {uniqueSuggestions.map((s) => (
+                  <SuggestionTag key={s.id} label={actions.suggestionLabel(s)!} reason={(s.payload as { reason?: string }).reason} onRun={() => actions.runSuggestion(s)} onReject={() => actions.rejectSug.mutate(s)} />
+                ))}
+              </div>
+            </section>
+          )}
+          <TaskNotesSection c={c} d={d} tasks={tasks} loading={tasksLoading} canRemind={canRemind} onRemind={remindReply} onEditor={onEditor} onOpenMessage={cb.onOpenMessage} onChanged={refreshItems} />
+          <ResourcesSection c={c} d={d} onOpenMessage={cb.onOpenMessage} onUpload={onUpload} />
+        </div>
 
-      <section className="pm-conv__tree" aria-label="Sintesi e messaggi della conversazione">
-        <div className="pm-tree__head">Messaggi · {d?.messages.length ?? c.messageCount}</div>
-        <section className="pm-summary pm-summary--side" aria-label="Sintesi">
-          <div className="pm-label pm-summary__label">Sintesi</div>
-          <p>{c.summaryDetailed ?? c.summary ?? 'La sintesi viene generata in background.'}</p>
+        <section className="pm-conv__tree" aria-label="Sintesi e struttura della conversazione">
+          <section className="pm-summary" aria-label="Sintesi">
+            <div className="pm-label pm-summary__label">Sintesi</div>
+            <p>{c.summaryDetailed ?? c.summary ?? 'La sintesi viene generata in background.'}</p>
+          </section>
+          <div className="pm-label pm-tree__label">
+            Struttura · {d?.messages.length ?? c.messageCount}
+            {unread > 0 && <span className="pm-tree__unreadcount">{unread === 1 ? '1 da leggere' : `${unread} da leggere`}</span>}
+          </div>
+          {!d && <div className="pm-empty">Caricamento…</div>}
+          {d && <MessageTree d={d} selectedId={selectedMessageId} onOpen={cb.onOpenMessage} onCompose={cb.onCompose} />}
         </section>
-        {!d && <div className="pm-empty">Caricamento…</div>}
-        {d && <MessageTree d={d} selectedId={selectedMessageId} onOpen={cb.onOpenMessage} onCompose={cb.onCompose} />}
-      </section>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -377,7 +437,15 @@ function TreeNode({ m, depth, current, onOpen, onCompose, projectId, conversatio
     ],
   }));
   return (
-    <button type="button" className={`pm-tree__node${unread ? ' pm-tree__node--unread' : ''}`} style={{ ['--depth' as string]: depth }} aria-current={current ? 'true' : undefined} onClick={onOpen} {...ctx}>
+    <button
+      type="button"
+      className={`pm-tree__node${unread ? ' pm-tree__node--unread' : ''}`}
+      style={{ ['--depth' as string]: depth }}
+      aria-current={current ? 'true' : undefined}
+      aria-label={`${name(from)}, ${shortDate(m.date)}${unread ? ', non letto' : ''}`}
+      onClick={onOpen}
+      {...ctx}
+    >
       {depth > 0 && <span className="pm-tree__elbow" aria-hidden="true" />}
       <PersonAvatar person={from} size={26} />
       <span className="pm-tree__text">
@@ -387,6 +455,7 @@ function TreeNode({ m, depth, current, onOpen, onCompose, projectId, conversatio
           {m.outgoingStatus === 'failed' && <span className="pm-tree__time" style={{ color: 'var(--danger)' }}>invio fallito</span>}
           {m.attachments.some((a) => !a.isInline) && <Ic icon={Paperclip} size={15} className="pm-muted" />}
           <span className="pm-tree__time">{new Date(m.date).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}</span>
+          {unread && <span className="pm-tree__dot" aria-hidden="true" />}
         </span>
         <span className="pm-tree__snippet">{m.bodyTextClean || m.bodyText}</span>
       </span>

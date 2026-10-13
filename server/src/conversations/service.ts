@@ -7,6 +7,7 @@ import type {
   MessageDto,
   PersonRef,
   SuggestionDto,
+  TaskSuggestionDto,
 } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
 import {
@@ -241,6 +242,22 @@ export class ConversationService {
       ]);
     }
     return out;
+  }
+
+  /** Task suggeriti e non ancora accettati nelle conversazioni attive del progetto, dal più recente. */
+  projectTaskSuggestions(projectId: string): TaskSuggestionDto[] {
+    const rows = this.db.$client
+      .prepare(
+        `select s.id, s.kind, s.confidence, s.payload, s.created_at as createdAt, c.id as conversationId, coalesce(c.summary, c.subject) as conversationTitle
+           from suggestions s
+           join conversations c on c.id = s.subject_id
+          where s.subject_type = 'conversation' and s.kind = 'task' and s.status = 'pending'
+            and c.project_id = ? and c.deleted_at is null and c.trashed_at is null and c.archived_at is null
+          order by s.created_at desc
+          limit 20`,
+      )
+      .all(projectId) as (Omit<TaskSuggestionDto, 'payload'> & { payload: string })[];
+    return rows.map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
   }
 
   private inboxBase() {

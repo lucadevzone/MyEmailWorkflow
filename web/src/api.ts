@@ -28,6 +28,7 @@ import type {
   SearchScope,
   ReplyIdea,
   TaskDto,
+  TaskSuggestionDto,
   TaskInput,
   UnreadCountsDto,
   ProjectInput,
@@ -193,6 +194,7 @@ export const api = {
   addProjectContact: (projectId: string, input: { contactId?: string; name?: string; email?: string }) =>
     request<PersonDto>('POST', `/api/projects/${projectId}/contacts`, input),
   projectTasks: (projectId: string) => request<TaskDto[]>('GET', `/api/projects/${projectId}/tasks`),
+  projectTaskSuggestions: (projectId: string) => request<TaskSuggestionDto[]>('GET', `/api/projects/${projectId}/task-suggestions`),
   conversationTasks: (conversationId: string) => request<TaskDto[]>('GET', `/api/conversations/${conversationId}/tasks`),
   createTask: (input: TaskInput) => request<TaskDto>('POST', '/api/tasks', input),
   remindReply: (conversationId: string, messageId?: string) => request<TaskDto>('POST', `/api/conversations/${conversationId}/remind-reply`, { messageId }),

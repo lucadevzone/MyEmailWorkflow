@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent, type FormEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, GripVertical, Mail, Plus, X } from 'lucide-react';
+import { Calendar, GripVertical, Mail, Plus, Sparkles, X } from 'lucide-react';
 import type { TaskDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
@@ -106,8 +106,43 @@ export function TasksSidebar({ projectId, onClose }: { projectId: string; onClos
           />
         ))}
       </div>
+      <SuggestedTasks projectId={projectId} />
       {editor && <TagEditor target={editor.target} anchor={editor.anchor} onClose={() => setEditor(null)} />}
     </aside>
+  );
+}
+
+/** Task suggeriti dall'assistente nelle conversazioni del progetto: fissi in fondo, uno alla volta. */
+function SuggestedTasks({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const { data: suggestions = [] } = useQuery({ queryKey: ['task-suggestions', projectId], queryFn: () => api.projectTaskSuggestions(projectId) });
+  const [busy, setBusy] = useState(false);
+  const s = suggestions[0];
+  if (!s) return null;
+  const p = s.payload as { title?: string; dueDate?: string | null };
+  const run = async (accept: boolean) => {
+    setBusy(true);
+    try {
+      await (accept ? api.acceptSuggestion(s.id) : api.rejectSuggestion(s.id));
+      for (const k of [['task-suggestions', projectId], ['tasks'], ['conversations'], ['projects']]) await qc.invalidateQueries({ queryKey: k });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="pm-drawer__foot">
+      <div className="pm-suggtask">
+        <div className="pm-label pm-label--sugg">
+          <Ic icon={Sparkles} size={13} /> Suggerito dall'assistente{suggestions.length > 1 ? ` · 1 di ${suggestions.length}` : ''}
+        </div>
+        <div className="pm-suggtask__title">{p.title}</div>
+        {s.conversationTitle && <div className="pm-suggtask__from pm-truncate">da: {s.conversationTitle}</div>}
+        <div className="pm-suggtask__actions">
+          <button type="button" className="pm-btn pm-btn--sugg pm-btn--sm" disabled={busy} onClick={() => void run(true)}>Accetta</button>
+          <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" disabled={busy} onClick={() => void run(false)}>Ignora</button>
+        </div>
+      </div>
+    </div>
   );
 }
 

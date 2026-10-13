@@ -851,6 +851,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   };
 
   app.get<{ Params: { id: string } }>('/api/projects/:id/tasks', async (req) => deps.tasks.forProject(req.params.id));
+  app.get<{ Params: { id: string } }>('/api/projects/:id/task-suggestions', async (req) => conversationsSvc.projectTaskSuggestions(req.params.id));
   app.get<{ Params: { id: string } }>('/api/conversations/:id/tasks', async (req) => deps.tasks.forConversation(req.params.id));
 
   app.post('/api/tasks', async (req, reply) => {
