@@ -15,6 +15,7 @@ import type { PeopleService } from '../people/service.ts';
 import { similarConversations } from './embed.ts';
 import { contentVote, decide, peopleVote, type SignalKind, type Vote } from './auto-sort.ts';
 import { autoSortStats, isBlocked, recordDecision } from './auto-sort-log.ts';
+import { conversationInWindow, inWindowSql } from './window.ts';
 
 export type Llm = <T>(system: string, user: string) => Promise<T>;
 
@@ -48,6 +49,7 @@ export interface ProjectSuggestionPayload {
 }
 
 export function enqueueClassification(db: Db, conversationId: string, priority: number = PRIORITY.normal) {
+  if (!conversationInWindow(db, conversationId)) return;
   db.update(conversations).set({ classifiedAt: null }).where(eq(conversations.id, conversationId)).run();
   enqueueJob(db, 'classify', { conversationId }, priority);
 }
@@ -63,7 +65,10 @@ export function enqueueMissingClassifications(db: Db) {
         isNull(conversations.trashedAt),
         isNull(conversations.projectId),
         isNull(conversations.classifiedAt),
+        isNull(conversations.archivedAt),
         eq(conversations.isNoise, false),
+        eq(conversations.isSpam, false),
+        inWindowSql(db),
       ),
     )
     .orderBy(desc(conversations.lastMessageAt))
@@ -71,11 +76,20 @@ export function enqueueMissingClassifications(db: Db) {
   for (const r of rows) enqueueJob(db, 'classify', { conversationId: r.id }, PRIORITY.background);
 }
 
-/** Dopo la creazione o la modifica di un progetto: tutta Da smistare va rivalutata. */
+/** Dopo la creazione o la modifica di un progetto: Da smistare va rivalutata (solo le aperte e recenti). */
 export function reclassifyInbox(db: Db) {
   db.update(conversations)
     .set({ classifiedAt: null })
-    .where(and(isNull(conversations.projectId), isNull(conversations.deletedAt), eq(conversations.isNoise, false)))
+    .where(
+      and(
+        isNull(conversations.projectId),
+        isNull(conversations.deletedAt),
+        isNull(conversations.archivedAt),
+        eq(conversations.isNoise, false),
+        eq(conversations.isSpam, false),
+        inWindowSql(db),
+      ),
+    )
     .run();
   enqueueMissingClassifications(db);
 }

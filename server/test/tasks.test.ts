@@ -11,6 +11,8 @@ import { ConversationService } from '../src/conversations/service.ts';
 import { ProjectService } from '../src/projects/service.ts';
 import { conversations, jobs, messages as messagesTable } from '../src/db/schema.ts';
 import { rankBetween } from '../src/lib/rank.ts';
+import { applyAiWindow } from '../src/ai/window.ts';
+import { enqueueMissingAnalysis } from '../src/ai/missing.ts';
 
 describe('indici frazionari', () => {
   it('trova sempre una chiave intermedia, anche dopo molti inserimenti nello stesso punto', () => {
@@ -120,6 +122,31 @@ describe('task di Da smistare', () => {
 
     const n = await mail('promo', 'Saldi', 'sconti', { noise: true });
     expect(() => s.tasks.remindReply(n.conversationId)).toThrow('News');
+  });
+});
+
+describe("finestra dell'analisi", () => {
+  it('la posta vecchia non entra nella coda del modello; la sintesi si fa su richiesta; allargando la finestra rientra', async () => {
+    const pending = (kind: string) => s.db.select().from(jobs).all().filter((j) => j.kind === kind && j.status === 'pending').length;
+    const old = await mail('old', 'Vecchia', 'Mi mandi il preventivo?', { date: 'Mon, 01 Jan 2024 10:00:00 +0100' });
+    const recent = await mail('new', 'Recente', 'Mi mandi il preventivo?');
+    const queued = s.db.select().from(jobs).all().filter((j) => j.status === 'pending' && ['summarize', 'classify'].includes(j.kind));
+    expect(queued.map((j) => JSON.parse(j.payload).conversationId)).not.toContain(old.conversationId);
+    expect(queued.map((j) => JSON.parse(j.payload).conversationId)).toContain(recent.conversationId);
+    expect(pending('embed')).toBe(2); // l'indicizzazione vale per tutto lo storico
+
+    await s.summarizeNow(old.conversationId);
+    expect(new ConversationService(s.db).item(old.conversationId)!.summary).toBe('x');
+
+    s.settings.update({ aiWindowDays: 0 });
+    applyAiWindow(s.db, s.sqlite, () => enqueueMissingAnalysis(s.db));
+    const all = s.db.select().from(jobs).all().filter((j) => j.status === 'pending' && j.kind === 'classify');
+    expect(all.map((j) => JSON.parse(j.payload).conversationId)).toContain(old.conversationId);
+
+    s.settings.update({ aiWindowDays: 90 });
+    applyAiWindow(s.db, s.sqlite, () => enqueueMissingAnalysis(s.db));
+    const back = s.db.select().from(jobs).all().filter((j) => j.status === 'pending' && j.kind === 'classify');
+    expect(back.map((j) => JSON.parse(j.payload).conversationId)).not.toContain(old.conversationId);
   });
 });
 

@@ -72,5 +72,7 @@ export function buildServices(db: Db, sqlite: Database.Database, blobDir: string
   const search = new SearchService({ sqlite, embedder });
   const assistant = new AssistantService({ db, stream: o.chatStream ?? ollamaStream, llm, readBlob: (sha) => blobs.read(sha), search });
   const drafts = new DraftService({ db, blobs, actions, activities, assistant });
-  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions, tasks, drafts, assistant, search };
+  /** Sintesi su richiesta, fuori dalla coda (anche con l'analisi in pausa). */
+  const summarizeNow = (conversationId: string) => summarizeConversation(db, conversationId, summarizer);
+  return { db, sqlite, blobs, settings, accounts, sync, activities, runner, actions, people, notes, jobs, suggestions, tasks, drafts, assistant, search, summarizeNow };
 }

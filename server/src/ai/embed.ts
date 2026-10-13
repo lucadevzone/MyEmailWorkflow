@@ -6,7 +6,7 @@ import { and, eq, inArray, isNull, notExists } from 'drizzle-orm';
 import type Database from 'better-sqlite3';
 import { config } from '../config.ts';
 import type { Db } from '../db/client.ts';
-import { chunks, conversations, messages } from '../db/schema.ts';
+import { chunks, conversations, jobs, messages } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
 import { enqueueJob, PRIORITY } from '../jobs/queue.ts';
 
@@ -52,6 +52,8 @@ export function enqueueEmbedding(db: Db, messageId: string, priority: number = P
 
 /** Messaggi non rumore ancora senza embedding (più recenti prima). */
 export function enqueueMissingEmbeddings(db: Db) {
+  // L'indicizzazione dello storico viene dopo l'analisi della posta recente (e dopo la posta nuova).
+  db.update(jobs).set({ priority: PRIORITY.idle }).where(and(eq(jobs.kind, 'embed'), eq(jobs.status, 'pending'), eq(jobs.priority, PRIORITY.background))).run();
   const rows = db
     .select({ id: messages.id })
     .from(messages)
@@ -67,7 +69,7 @@ export function enqueueMissingEmbeddings(db: Db) {
     .orderBy(messages.date)
     .all()
     .reverse();
-  for (const r of rows) enqueueEmbedding(db, r.id, PRIORITY.background);
+  for (const r of rows) enqueueEmbedding(db, r.id, PRIORITY.idle);
 }
 
 export async function embedMessage(db: Db, sqlite: Database.Database, messageId: string, embedder: Embedder) {

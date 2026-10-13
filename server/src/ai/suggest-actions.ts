@@ -10,6 +10,7 @@ import { config } from '../config.ts';
 import { enqueueJob, PRIORITY } from '../jobs/queue.ts';
 import type { Llm } from './classify.ts';
 import { projectContext, type BlobReader } from './project-context.ts';
+import { messageInWindow } from './window.ts';
 
 export type QuickAction = 'reply' | 'archive' | 'noise';
 
@@ -26,6 +27,7 @@ const SYSTEM =
   'scrivi una bozza breve e cordiale in italiano, in prima persona, senza firma e senza inventare fatti. Rispondi solo con un oggetto JSON.';
 
 export function enqueueActionSuggestion(db: Db, messageId: string) {
+  if (!messageInWindow(db, messageId)) return;
   enqueueJob(db, 'suggest_actions', { messageId }, PRIORITY.normal);
 }
 

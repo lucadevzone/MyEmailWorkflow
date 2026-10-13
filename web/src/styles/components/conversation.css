@@ -105,3 +105,6 @@
   .pm-crow__names { display: none; }
   .pm-crow__ind { width: auto; }
 }
+
+/* Sintesi su richiesta */
+.pm-summary__gen { margin-top: 8px; align-self: flex-start; }

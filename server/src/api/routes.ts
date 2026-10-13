@@ -42,6 +42,8 @@ import { SuggestionError, type SuggestionService } from '../suggestions/service.
 import { enqueueClassification, reclassifyInbox } from '../ai/classify.ts';
 import { PRIORITY } from '../jobs/queue.ts';
 import { TaskError, taskInputSchema, taskMoveSchema, taskPatchSchema, type TaskService } from '../tasks/service.ts';
+import { applyAiWindow } from '../ai/window.ts';
+import { enqueueMissingAnalysis } from '../ai/missing.ts';
 
 export interface RouteDeps {
   db: Db;
@@ -59,6 +61,8 @@ export interface RouteDeps {
   assistant: AssistantService;
   search: SearchService;
   jobs: JobRunner;
+  /** Sintesi su richiesta, fuori dalla coda. */
+  summarizeNow: (conversationId: string) => Promise<void>;
 }
 
 function parse<T>(schema: ZodType<T>, body: unknown): T {
@@ -161,6 +165,11 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues.map((i) => i.message).join('; ') });
     const updated = settingsSvc.update(parsed.data);
     if (parsed.data.activityBatchMinutes !== undefined) deps.runner.schedule();
+    // Finestra dell'analisi cambiata: via i lavori sulla posta ora esclusa, dentro quelli ora inclusa.
+    if (parsed.data.aiWindowDays !== undefined) {
+      applyAiWindow(deps.db, deps.sqlite, () => enqueueMissingAnalysis(deps.db));
+      deps.jobs.kick();
+    }
     // Analisi ripresa: si riparte subito dai lavori in attesa.
     if (parsed.data.aiPaused === false) deps.jobs.kick();
     return updated;
@@ -204,6 +213,13 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
 
   app.get('/api/conversations/counts', async () => conversationsSvc.counts());
   app.get('/api/conversations/important-counts', async () => conversationsSvc.importantCounts());
+
+  // Sintesi su richiesta (conversazioni fuori dalla finestra dell'analisi): subito, anche con l'analisi in pausa.
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/summarize', async (req, reply) => {
+    if (!conversationsSvc.item(req.params.id)) return reply.code(404).send({ error: 'Conversazione non trovata' });
+    await deps.summarizeNow(req.params.id);
+    return conversationsSvc.item(req.params.id);
+  });
 
   app.get<{ Params: { id: string } }>('/api/conversations/:id/item', async (req, reply) => {
     const item = conversationsSvc.item(req.params.id);

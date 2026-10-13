@@ -82,6 +82,11 @@ export interface SettingsDto {
   ollamaKeepAliveMinutes: number;
   /** Analisi in background in pausa (sintesi, classificazione, task, indicizzazione): l'assistente resta attivo. */
   aiPaused: boolean;
+  /**
+   * Sintesi, classificazione, task e azioni suggerite solo sulla posta degli ultimi N giorni (0 = tutta).
+   * La posta più vecchia resta cercabile; la sua sintesi si genera su richiesta.
+   */
+  aiWindowDays: number;
   /** Smistamento della posta nuova: niente, solo suggerimenti, o automatico quando la regola è affidabile (RF-E6). */
   autoSortMode: 'off' | 'suggest' | 'auto';
   /** Formato con cui nasce una bozza nuova. */
@@ -116,6 +121,7 @@ export const DEFAULT_SETTINGS: SettingsDto = {
   ollamaKeepAliveMinutes: 30,
   autoSortMode: 'suggest',
   aiPaused: false,
+  aiWindowDays: 90,
   composeFormat: 'html',
   composeFont: 'sans',
   composeFontSize: 'normal',

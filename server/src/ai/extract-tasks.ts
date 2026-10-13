@@ -8,6 +8,7 @@ import { bus } from '../events/bus.ts';
 import { config } from '../config.ts';
 import { enqueueJob, PRIORITY } from '../jobs/queue.ts';
 import type { Llm } from './classify.ts';
+import { inWindowSql, messageInWindow } from './window.ts';
 
 const SYSTEM =
   'Individui le richieste esplicite che il mittente di un messaggio email rivolge al destinatario ' +
@@ -134,6 +135,7 @@ function saveTask(db: Db, conversationId: string, payload: TaskSuggestionPayload
 }
 
 export function enqueueTaskExtraction(db: Db, messageId: string) {
+  if (!messageInWindow(db, messageId)) return;
   enqueueJob(db, 'extract_tasks', { messageId }, PRIORITY.normal);
 }
 
@@ -208,7 +210,7 @@ export function enqueueMissingTaskExtraction(db: Db) {
   const convs = db
     .select({ id: conversations.id })
     .from(conversations)
-    .where(and(isNull(conversations.deletedAt), isNull(conversations.archivedAt), eq(conversations.isNoise, false)))
+    .where(and(isNull(conversations.deletedAt), isNull(conversations.archivedAt), eq(conversations.isNoise, false), inWindowSql(db)))
     .all();
   for (const c of convs) {
     const lastMsg = db

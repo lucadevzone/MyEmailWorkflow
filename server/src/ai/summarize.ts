@@ -7,6 +7,7 @@ import { now } from '../lib/ids.ts';
 import { bus } from '../events/bus.ts';
 import { ollamaJson } from './ollama-chat.ts';
 import { enqueueJob, PRIORITY } from '../jobs/queue.ts';
+import { conversationInWindow, inWindowSql } from './window.ts';
 
 const MAX_MESSAGES = 10;
 const MAX_CHARS_PER_MESSAGE = 1500;
@@ -20,6 +21,8 @@ export type Summarizer = (input: string) => Promise<{ breve?: string; dettagliat
 export const ollamaSummarizer: Summarizer = (input) => ollamaJson(SYSTEM, input);
 
 export function enqueueSummary(db: Db, conversationId: string, priority: number = PRIORITY.normal) {
+  // Fuori dalla finestra dell'analisi la sintesi si genera solo su richiesta.
+  if (!conversationInWindow(db, conversationId)) return;
   enqueueJob(db, 'summarize', { conversationId }, priority);
 }
 
@@ -28,7 +31,7 @@ export function enqueueMissingSummaries(db: Db) {
   const rows = db
     .select({ id: conversations.id })
     .from(conversations)
-    .where(and(isNull(conversations.deletedAt), isNull(conversations.summary), eq(conversations.isNoise, false)))
+    .where(and(isNull(conversations.deletedAt), isNull(conversations.summary), eq(conversations.isNoise, false), inWindowSql(db)))
     .orderBy(desc(conversations.lastMessageAt))
     .all();
   for (const r of rows) enqueueSummary(db, r.id, PRIORITY.background);

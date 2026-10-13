@@ -7,6 +7,15 @@ import { api } from '../api.ts';
 import { useNavigate } from 'react-router-dom';
 import { useEscBack } from '../ui/useEscBack.ts';
 
+/** Finestra dell'analisi con l'IA (0 = tutta la posta). */
+const AI_WINDOWS = [
+  { days: 90, label: '90 giorni' },
+  { days: 182, label: '6 mesi' },
+  { days: 365, label: '1 anno' },
+  { days: 730, label: '2 anni' },
+  { days: 0, label: 'Tutta la posta' },
+];
+
 export function SettingsPage() {
   const navigate = useNavigate();
   useEscBack(() => navigate(-1));
@@ -636,6 +645,17 @@ function AiModel() {
               ))}
               {settings.llmModel && !installed.includes(settings.llmModel) && <option value={settings.llmModel}>{settings.llmModel}</option>}
             </select>
+          </label>
+          <label className="pm-field">
+            <span className="pm-muted">Sintesi, classificazione e task suggeriti sulla posta degli ultimi</span>
+            <select className={input} value={settings.aiWindowDays} onChange={(e) => save.mutate({ aiWindowDays: Number(e.target.value) })} disabled={save.isPending}>
+              {AI_WINDOWS.map((w) => (
+                <option key={w.days} value={w.days}>{w.label}</option>
+              ))}
+            </select>
+            <span className="pm-row__sub">
+              La posta più vecchia resta cercabile; la sua sintesi si genera su richiesta. «Tutta» è adatta a un computer veloce: con molti anni di posta l'analisi dura giorni.
+            </span>
           </label>
           <label className="pm-field pm-field--check">
             <input type="checkbox" checked={settings.aiPaused} onChange={(e) => save.mutate({ aiPaused: e.target.checked })} />

@@ -3,11 +3,9 @@ import { openDb } from './db/client.ts';
 import { runMigrations } from './db/migrate.ts';
 import { buildApp } from './app.ts';
 import { buildServices } from './services.ts';
-import { enqueueMissingSummaries } from './ai/summarize.ts';
-import { enqueueMissingEmbeddings } from './ai/embed.ts';
-import { enqueueMissingTaskExtraction } from './ai/extract-tasks.ts';
-import { enqueueMissingClassifications } from './ai/classify.ts';
 import { runRepairs } from './maintenance/repair.ts';
+import { applyAiWindow } from './ai/window.ts';
+import { enqueueMissingAnalysis } from './ai/missing.ts';
 
 const { db, sqlite } = openDb();
 runMigrations(db);
@@ -30,13 +28,10 @@ await app.listen({ host: config.host, port: config.port });
 
 services.runner.start();
 services.jobs.start();
-// Lavori mancanti rimessi in coda, in un'unica transazione: con migliaia di conversazioni è molto più veloce.
-sqlite.transaction(() => {
-  enqueueMissingEmbeddings(db);
-  enqueueMissingSummaries(db);
-  enqueueMissingTaskExtraction(db);
-  enqueueMissingClassifications(db);
-})();
+// Coda allineata alla finestra dell'analisi (solo posta recente) e lavori mancanti rimessi in coda, in
+// un'unica transazione: con migliaia di conversazioni è molto più veloce.
+const pruned = applyAiWindow(db, sqlite, () => enqueueMissingAnalysis(db));
+if (pruned) console.log(`Analisi: ${pruned} lavori sulla posta fuori dalla finestra tolti dalla coda`);
 // Password ancora in variabili d'ambiente (env:...): si spostano nel Portachiavi.
 try {
   const moved = services.accounts.migrateEnvCredentials();

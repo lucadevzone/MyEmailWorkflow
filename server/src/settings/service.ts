@@ -19,6 +19,7 @@ export const settingsPatchSchema = z
     ollamaKeepAliveMinutes: z.number().int().min(-1).max(24 * 60),
     autoSortMode: z.enum(['off', 'suggest', 'auto']),
     aiPaused: z.boolean(),
+    aiWindowDays: z.union([z.literal(0), z.literal(90), z.literal(182), z.literal(365), z.literal(730)]),
     composeFormat: z.enum(['text', 'html']),
     composeFont: z.enum(['sans', 'serif', 'mono']),
     composeFontSize: z.enum(['small', 'normal', 'large']),

@@ -369,10 +369,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
         </div>
 
         <section className="pm-conv__tree" aria-label="Sintesi e struttura della conversazione">
-          <section className="pm-summary" aria-label="Sintesi">
-            <div className="pm-label pm-summary__label">Sintesi</div>
-            <p>{c.summaryDetailed ?? c.summary ?? 'La sintesi viene generata in background.'}</p>
-          </section>
+          <SummaryBox c={c} />
           <div className="pm-label pm-tree__label">
             Struttura · {d?.messages.length ?? c.messageCount}
             {unread > 0 && <span className="pm-tree__unreadcount">{unread === 1 ? '1 da leggere' : `${unread} da leggere`}</span>}
@@ -385,6 +382,59 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
   );
 }
 
+
+/**
+ * Sintesi della conversazione. Se manca: per la posta recente arriva dall'analisi in background; per quella
+ * più vecchia della finestra dell'analisi (Impostazioni) si genera su richiesta, con il pulsante.
+ */
+function SummaryBox({ c }: { c: ConversationListItem }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: api.settings, staleTime: 60_000 });
+  const [busy, setBusy] = useState(false);
+  const text = c.summaryDetailed ?? c.summary;
+  const days = settings?.aiWindowDays ?? 90;
+  const recent = days === 0 || c.lastMessageAt >= Date.now() - days * 86_400_000;
+  const generate = async () => {
+    setBusy(true);
+    try {
+      await api.summarizeNow(c.id);
+      for (const k of [['conversations'], ['conversation-item', c.id], ['conversation', c.id]]) await qc.invalidateQueries({ queryKey: k });
+    } catch (e) {
+      toast({ text: `Sintesi non riuscita: ${(e as Error).message}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const windowLabel = days >= 730 ? '2 anni' : days >= 365 ? '1 anno' : days >= 182 ? '6 mesi' : `${days} giorni`;
+  return (
+    <section className="pm-summary" aria-label="Sintesi" aria-busy={busy}>
+      <div className="pm-label pm-summary__label">Sintesi</div>
+      {text ? (
+        <p>{text}</p>
+      ) : (
+        <>
+          <p className="pm-muted">
+            {busy
+              ? "Sto leggendo la conversazione…"
+              : c.isNoise || c.isSpam
+                ? 'Le News e lo Spam non hanno una sintesi automatica.'
+                : recent
+                  ? settings?.aiPaused
+                    ? "La sintesi arriverà quando riprende l'analisi (ora in pausa)."
+                    : 'La sintesi viene generata in background.'
+                  : `Conversazione più vecchia di ${windowLabel}: la sintesi si genera su richiesta.`}
+          </p>
+          {!busy && (!recent || c.isNoise || c.isSpam || settings?.aiPaused) && (
+            <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm pm-summary__gen" onClick={() => void generate()}>
+              <Ic icon={Sparkles} size={14} /> Genera sintesi
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
 
 const MAX_DEPTH = 5;
 
