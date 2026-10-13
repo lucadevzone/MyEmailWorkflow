@@ -406,6 +406,8 @@ export interface ConversationQuery {
   /** Filtra le conversazioni in cui compare questa persona (PersonDto.key). */
   person?: string;
   archived?: boolean;
+  /** Solo le conversazioni con almeno un messaggio importante (attive e archiviate). */
+  important?: boolean;
   before?: number;
 }
 

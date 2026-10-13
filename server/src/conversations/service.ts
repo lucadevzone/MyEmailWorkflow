@@ -71,8 +71,21 @@ export class ConversationService {
         ),
       );
     }
-    // Nella vista persona si mostrano anche le archiviate: è uno storico dei rapporti.
-    if (q.view !== 'person') where.push(q.archived ? isNotNull(conversations.archivedAt) : isNull(conversations.archivedAt));
+    if (q.important) {
+      // Importanti: attive e archiviate insieme, sono quelle da ritrovare.
+      where.push(
+        inArray(
+          conversations.id,
+          this.db
+            .select({ id: messages.conversationId })
+            .from(messages)
+            .where(and(eq(messages.important, true), isNull(messages.deletedAt))),
+        ),
+      );
+    } else if (q.view !== 'person') {
+      // Nella vista persona si mostrano anche le archiviate: è uno storico dei rapporti.
+      where.push(q.archived ? isNotNull(conversations.archivedAt) : isNull(conversations.archivedAt));
+    }
     // Ordine: ultimo messaggio, ma una conversazione appena staccata sta in cima finché non arriva altro.
     const sortAt = sql<number>`max(${conversations.lastMessageAt}, coalesce(${conversations.splitAt}, 0))`;
     if (q.before) where.push(sql`${sortAt} < ${q.before}`);
@@ -284,6 +297,21 @@ export class ConversationService {
       noiseUnread: unread?.noise ?? 0,
       totalUnread: unread?.total ?? 0,
     };
+  }
+
+  /** Conversazioni importanti per vista: id del progetto, oppure "inbox", "news", "spam". */
+  importantCounts(): Record<string, number> {
+    const rows = this.db.$client
+      .prepare(
+        `select case when c.is_spam = 1 then 'spam' when c.project_id is not null then c.project_id when c.is_noise = 1 then 'news' else 'inbox' end as k,
+                count(*) as n
+           from conversations c
+          where c.deleted_at is null and c.trashed_at is null
+            and exists (select 1 from messages m where m.conversation_id = c.id and m.important = 1 and m.deleted_at is null)
+          group by k`,
+      )
+      .all() as { k: string; n: number }[];
+    return Object.fromEntries(rows.map((r) => [r.k, r.n]));
   }
 
   get(id: string): ConversationDetail | undefined {

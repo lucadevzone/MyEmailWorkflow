@@ -2,33 +2,59 @@
 .pm-project { flex: 1; min-height: 0; display: flex; align-items: stretch; }
 .pm-project__main { flex: 999 1 480px; min-width: 0; display: flex; position: relative; }
 
-/* Barra contatti */
-.pm-rail {
-  flex: 0 0 var(--rail-w); display: flex; flex-direction: column; align-items: center; gap: 14px;
-  padding: 18px 0; border-right: 1px solid var(--border); overflow-y: auto; position: relative;
-}
-.pm-rail__compose {
-  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 6px 12px;
-  border-bottom: 1px solid var(--border); text-align: center; align-self: stretch;
-}
-.pm-rail__compose-title { font-size: var(--fs-sm); font-weight: 600; line-height: 1.2; }
-.pm-rail__compose-hint { font-size: var(--fs-xs); color: var(--ink-muted); line-height: 1.3; }
-.pm-rail__item { display: flex; flex-direction: column; align-items: center; gap: 6px; border: 0; background: transparent; padding: 0; max-width: 76px; }
-.pm-rail__name { font-size: var(--fs-sm); color: var(--ink-2); text-align: center; line-height: 1.2; overflow-wrap: anywhere; }
-.pm-rail__name--strong { font-weight: 600; color: var(--ink); }
-.pm-rail__item[aria-pressed="true"] .pm-group,
-.pm-rail__item[aria-pressed="true"] .pm-avatar { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent); }
-.pm-rail__sep { width: 32px; height: 1px; background: var(--border); flex: none; }
-.pm-rail__add {
-  width: 44px; height: 44px; border-radius: 50%; border: 1.5px dashed var(--border-dashed); background: transparent;
-  display: flex; align-items: center; justify-content: center; color: var(--ink-muted); flex: none;
-}
-.pm-rail__add:hover { border-color: var(--ink-muted); color: var(--ink); }
-.pm-rail__multi { font-size: var(--fs-sm); }
-
 /* Lista conversazioni */
 .pm-convlist { flex: 999 1 480px; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 .pm-subtabs { display: flex; align-items: center; gap: 20px; padding: 0 24px; height: 48px; border-bottom: 1px solid var(--border); flex: none; }
+
+/* Intestazione del progetto (UI v2): viste a sinistra, invio al centro, azioni a destra */
+.pm-projheader { display: flex; align-items: center; gap: 14px; padding: 0 16px; height: 60px; border-bottom: 1px solid var(--border); flex: none; }
+.pm-projheader__left, .pm-projheader__right { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.pm-projheader__right { justify-content: flex-end; gap: 6px; }
+.pm-sendinfo { flex: none; max-width: 40%; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: var(--fs-md); color: var(--ink-muted); white-space: nowrap; overflow: hidden; }
+.pm-sendinfo__item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; border: 0; background: transparent; padding: 0; color: inherit; font: inherit; }
+.pm-sendinfo__sig { cursor: pointer; }
+.pm-sendinfo__sig:hover { color: var(--ink); }
+.pm-views { flex: none; }
+.pm-views .pm-seg__opt { display: inline-flex; align-items: center; gap: 6px; height: 30px; font-size: var(--fs-md); }
+.pm-views .pm-badge { min-width: 18px; height: 18px; font-size: 11px; }
+.pm-views__mark { color: #B8860B; }
+.pm-views__count { color: var(--ink-muted); font-weight: 500; }
+.pm-taskbtn {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px; border-radius: var(--r-md); flex: none;
+  border: 1px solid var(--border-control); background: var(--surface); color: var(--ink-2); font: inherit; font-weight: 600; cursor: pointer;
+}
+.pm-taskbtn--has { background: var(--task-bg); border-color: var(--task-border); color: var(--task-heading); }
+.pm-taskbtn--late { color: var(--danger); }
+.pm-taskbtn[aria-pressed="true"] { background: var(--task-heading); border-color: var(--task-heading); color: #fff; }
+
+/* Nuova mail ▾ */
+.pm-newmail { position: relative; flex: none; }
+.pm-popover.pm-newmail__panel { position: absolute; right: 0; top: calc(100% + 8px); width: 440px; padding: 0; gap: 0; z-index: 46; }
+.pm-newmail__title { font-weight: 600; padding: 14px 16px 8px; }
+.pm-newmail__hint { margin: 0; padding: 0 16px 8px; font-size: var(--fs-md); }
+.pm-newmail__search { display: flex; align-items: center; gap: 8px; height: 40px; margin: 0 16px 12px; padding: 0 12px; border: 1px solid var(--border-control); border-radius: var(--r-lg); color: var(--ink-muted); }
+.pm-newmail__search input { border: 0; outline: none; background: transparent; flex: 1; min-width: 0; font: inherit; color: var(--ink); }
+.pm-newmail__body { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 16px; border-top: 1px solid var(--border-subtle); max-height: 50vh; overflow-y: auto; }
+.pm-newmail__grid { display: flex; flex-wrap: wrap; gap: 12px 14px; }
+.pm-newmail__bubble { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 60px; border: 0; background: transparent; padding: 0; cursor: pointer; color: inherit; font: inherit; border-radius: 6px; }
+.pm-newmail__bubble--edit { cursor: default; }
+.pm-newmail__bubble[aria-pressed="true"] .pm-group,
+.pm-newmail__bubble[aria-pressed="true"] .pm-avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+.pm-newmail__name { font-size: var(--fs-sm); color: var(--ink-2); text-align: center; line-height: 1.2; max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-newmail__name--strong { font-weight: 600; color: var(--ink); }
+.pm-newmail__name--muted { color: var(--ink-muted); }
+.pm-newmail__grip { cursor: grab; }
+.pm-newmail__add { width: 44px; height: 44px; border-radius: 50%; box-sizing: border-box; border: 1.5px dashed var(--border-dashed); display: flex; align-items: center; justify-content: center; color: var(--ink-muted); }
+.pm-newmail__add--group { width: 42px; height: 42px; border-radius: 14px; }
+.pm-newmail__bubble:hover .pm-newmail__add { border-color: var(--ink-muted); color: var(--ink); }
+.pm-newmail__results { display: flex; flex-direction: column; gap: 2px; padding: 4px 8px 10px; border-top: 1px solid var(--border-subtle); max-height: 50vh; overflow-y: auto; }
+.pm-newmail__row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 8px; border: 0; background: transparent; border-radius: var(--r-md); text-align: left; font: inherit; color: var(--ink); cursor: pointer; min-width: 0; }
+.pm-newmail__row:hover, .pm-newmail__row[aria-pressed="true"] { background: var(--accent-soft); }
+.pm-newmail__empty { padding: 10px 8px; font-size: var(--fs-md); }
+.pm-newmail__foot { display: flex; align-items: center; gap: 8px; padding: 10px 12px 10px 10px; background: var(--surface-muted); border-top: 1px solid var(--border-subtle); border-radius: 0 0 var(--r-xl) var(--r-xl); }
+.pm-newmail__newcontact { display: flex; flex-direction: column; gap: 8px; padding: 10px 16px 0; border-top: 1px solid var(--border-subtle); }
+.pm-newmail__newcontact .pm-newmail__foot { margin: 4px -16px 0; }
+.pm-newmail__panel > .pm-input { margin: 0 16px 12px; width: auto; }
 .pm-subtab { height: 48px; display: flex; align-items: center; border: 0; background: transparent; padding: 0; color: var(--ink-muted); }
 .pm-subtab[aria-current="true"] { color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--ink); }
 .pm-convstack { padding: 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-height: 0; flex: 1; }
@@ -141,9 +167,13 @@ button.pm-conv:hover { border-color: var(--border-strong); }
 .pm-tree__snippet { font-size: var(--fs-md); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Barra dei task */
-.pm-tasks { flex: 1 1 300px; max-width: var(--tasks-w); min-width: 0; background: var(--surface-muted); border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
-.pm-tasks__head { display: flex; align-items: center; gap: 8px; padding: 0 16px; height: 48px; border-bottom: 1px solid var(--border-subtle); flex: none; }
-.pm-tasks__title { font-weight: 600; flex: 1; }
+.pm-tasks {
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: 30; width: min(var(--tasks-w), 100%);
+  background: var(--surface-muted); border-left: 1px solid var(--border); box-shadow: var(--shadow-pop);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.pm-tasks__head { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 16px; height: 60px; border-bottom: 1px solid var(--border-subtle); flex: none; }
+.pm-tasks__title { font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pm-tasks__body { padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; }
 .pm-tasks__new { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 1px dashed var(--border-dashed); border-radius: var(--r-lg); color: var(--ink-muted); flex: none; }
 .pm-tasks__new input { border: 0; outline: none; background: transparent; flex: 1; min-width: 0; color: var(--ink); }
@@ -172,28 +202,14 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
   .pm-conv__tree { border-left: 0; border-top: 1px solid var(--border-subtle); }
 }
 
-/* Sotto i 1100 px la barra dei task va sotto la lista e scorre la pagina intera (§3.3). */
-@media (max-width: 1100px) {
-  .pm-project__main { flex-wrap: wrap; align-content: flex-start; overflow-y: auto; }
-  .pm-convlist { flex: 1 1 100%; min-height: auto; }
-  .pm-convstack { overflow: visible; flex: none; }
-  .pm-tasks { flex: 1 1 100%; max-width: none; min-height: auto; border-left: 0; border-top: 1px solid var(--border); }
-  .pm-tasks__body { overflow: visible; }
+/* Sotto i 1000 px l'intestazione va a capo: le info di invio scendono sotto. */
+@media (max-width: 1000px) {
+  .pm-projheader { height: auto; min-height: 60px; flex-wrap: wrap; padding: 10px 16px; row-gap: 8px; }
+  .pm-sendinfo { order: 3; max-width: 100%; flex: 1 1 100%; justify-content: flex-start; }
 }
 
-/* Telefono: la barra contatti diventa una riga orizzontale scorrevole. */
+/* Telefono */
 @media (max-width: 640px) {
-  .pm-project { flex-direction: column; }
-  .pm-rail {
-    flex: none; flex-direction: row; align-items: flex-start; gap: 12px; padding: 10px 12px; overflow-x: auto; overflow-y: hidden;
-    border-right: 0; border-bottom: 1px solid var(--border);
-  }
-  .pm-rail .pm-label { display: none; }
-  .pm-rail__compose { border-bottom: 0; border-right: 1px solid var(--border); padding: 0 12px 0 0; align-self: stretch; justify-content: center; flex: none; }
-  .pm-rail__compose-hint { display: none; }
-  .pm-rail__sep { width: 1px; height: 44px; align-self: center; }
-  .pm-rail__item { flex: none; width: 64px; }
-  .pm-rail__add { align-self: flex-start; margin-top: 2px; }
   .pm-subtabs { padding: 0 12px; gap: 14px; }
   .pm-convstack { padding: 10px; }
   .pm-conv__main { padding: 14px; }
@@ -211,7 +227,6 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
   font-size: var(--fs-md); color: var(--ink-muted); white-space: nowrap; overflow: hidden;
 }
 .pm-subtabs__account strong { color: var(--ink-2); font-weight: 600; }
-.pm-rail__empty { font-size: var(--fs-sm); color: var(--ink-muted); text-align: center; padding: 0 8px; line-height: 1.35; }
 
 /* Badge "nuova / N nuove" dopo il titolo della conversazione */
 .pm-newbadge {
@@ -334,3 +349,7 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
 .pm-related__bulk { display: flex; gap: 14px; align-items: center; margin-bottom: 6px; font-size: var(--fs-md); }
 .pm-related__row { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; cursor: pointer; }
 .pm-related li.is-off { opacity: .55; }
+
+/* Filtro per persona nell'intestazione: si accorcia con i puntini invece di invadere il centro */
+.pm-projheader__left { overflow: hidden; }
+.pm-projheader__left > .pm-personchip { min-width: 0; flex: 0 1 auto; white-space: nowrap; }

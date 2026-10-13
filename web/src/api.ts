@@ -116,10 +116,12 @@ export const api = {
     if (q.projectId) p.set('projectId', q.projectId);
     if (q.person) p.set('person', q.person);
     if (q.archived) p.set('archived', '1');
+    if (q.important) p.set('important', '1');
     if (q.before) p.set('before', String(q.before));
     return request<ConversationListItem[]>('GET', `/api/conversations?${p}`);
   },
   conversationCounts: () => request<UnreadCountsDto>('GET', '/api/conversations/counts'),
+  importantCounts: () => request<Record<string, number>>('GET', '/api/conversations/important-counts'),
   conversation: (id: string) => request<ConversationDetail>('GET', `/api/conversations/${id}`),
   setNoise: (id: string, isNoise: boolean) => request<{ ok: true }>('POST', `/api/conversations/${id}/noise`, { isNoise }),
   markMessageRead: (id: string) => request<{ activityIds: string[] }>('POST', `/api/messages/${id}/read`),
@@ -171,6 +173,7 @@ export const api = {
   people: (scope: { view: 'inbox' | 'noise' | 'project' | 'all'; projectId?: string }) =>
     request<PersonDto[]>('GET', `/api/people?view=${scope.view}${scope.projectId ? `&projectId=${scope.projectId}` : ''}`),
   peopleDirectory: () => request<PeopleDirectoryDto>('GET', '/api/people/directory'),
+  searchPeople: (q: string) => request<PersonDto[]>('GET', `/api/people/search?q=${encodeURIComponent(q)}`),
   suggestProject: (emails: string[]) =>
     request<ProjectSuggestion[]>('GET', `/api/people/suggest-project?emails=${encodeURIComponent(emails.join(','))}`),
   createContact: (input: ContactInput) => request<PersonDto>('POST', '/api/contacts', input),

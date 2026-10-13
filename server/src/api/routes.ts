@@ -183,7 +183,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   // ─── Conversazioni ─────────────────────────────────────────────────────────
 
   app.get<{
-    Querystring: { view?: string; projectId?: string; person?: string; archived?: string; before?: string; limit?: string };
+    Querystring: { view?: string; projectId?: string; person?: string; archived?: string; important?: string; before?: string; limit?: string };
   }>(
     '/api/conversations',
     async (req, reply) => {
@@ -195,6 +195,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
         person: req.query.person,
         personAddressIds: req.query.person ? deps.people.addressIdsFor(req.query.person) : undefined,
         archived: req.query.archived === '1',
+        important: req.query.important === '1',
         before: req.query.before ? Number(req.query.before) : undefined,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
       });
@@ -202,6 +203,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   );
 
   app.get('/api/conversations/counts', async () => conversationsSvc.counts());
+  app.get('/api/conversations/important-counts', async () => conversationsSvc.importantCounts());
 
   app.get<{ Params: { id: string } }>('/api/conversations/:id', async (req, reply) => {
     return conversationsSvc.get(req.params.id) ?? reply.code(404).send({ error: 'Conversazione non trovata' });
@@ -529,6 +531,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return deps.people.inScope(scope);
   });
 
+  app.get<{ Querystring: { q?: string } }>('/api/people/search', async (req) => deps.people.search(String(req.query.q ?? '')));
   app.get('/api/people/directory', async () => deps.people.directory());
 
   app.get<{ Querystring: { emails?: string } }>('/api/people/suggest-project', async (req) =>

@@ -22,6 +22,7 @@ export function useServerEvents() {
       } else if (event.type === 'conversations') {
         qc.invalidateQueries({ queryKey: ['conversations'] });
         qc.invalidateQueries({ queryKey: ['counts'] });
+        qc.invalidateQueries({ queryKey: ['important-counts'] });
         qc.invalidateQueries({ queryKey: ['projects'] });
         qc.invalidateQueries({ queryKey: ['people'] });
         for (const id of event.ids) qc.invalidateQueries({ queryKey: ['conversation', id] });

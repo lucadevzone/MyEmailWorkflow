@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 
-/** Modalità gestione (S6): barra dei progetti o barra contatti, mai entrambe insieme. */
-export type EditingMode = null | 'projects' | 'rail';
+/** Modalità gestione (S6) della barra dei progetti. */
+export type EditingMode = null | 'projects';
 
 const EditingContext = createContext<{ mode: EditingMode; setMode: (m: EditingMode) => void }>({ mode: null, setMode: () => {} });
 

@@ -167,6 +167,42 @@ export class PeopleService {
     return people;
   }
 
+  /**
+   * Cerca tra tutti gli indirizzi visti e i contatti (la rubrica elenca solo i più frequenti):
+   * per scegliere a chi scrivere o di chi vedere le conversazioni.
+   */
+  search(q: string, limit = 10): PersonDto[] {
+    const like = `%${q.trim().toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    if (like === '%%') return [];
+    const rows = this.db.$client
+      .prepare(
+        `select ca.id, ca.contact_id as contactId, ca.email, ca.display_name as name, ca.last_seen_at as last
+           from contact_addresses ca
+           left join contacts c on c.id = ca.contact_id and c.deleted_at is null
+          where lower(ca.email) like ? escape '\\' or lower(coalesce(ca.display_name, '')) like ? escape '\\' or lower(coalesce(c.display_name, '')) like ? escape '\\'
+          order by ca.contact_id is null, ca.last_seen_at desc
+          limit ?`,
+      )
+      .all(like, like, like, limit * 3) as { id: string; contactId: string | null; email: string; name: string | null; last: number | null }[];
+    const info = this.contactInfo(rows.map((r) => r.contactId).filter((x): x is string => !!x));
+    const out = new Map<string, PersonDto>();
+    for (const r of rows) {
+      const c = r.contactId ? info.get(r.contactId) : undefined;
+      const key = c ? `c:${r.contactId}` : `a:${r.id}`;
+      if (out.has(key)) continue;
+      out.set(key, {
+        key,
+        contactId: c ? r.contactId : null,
+        name: c?.name ?? r.name,
+        emails: c?.emails ?? [r.email],
+        conversationCount: 0,
+        lastSeenAt: r.last,
+        avatarUrl: c?.avatarUrl ?? null,
+      });
+    }
+    return [...out.values()].slice(0, limit);
+  }
+
   directory(): PeopleDirectoryDto {
     const active = this.toPeople(this.aggregate({ view: 'all' }));
     const all = this.db.select().from(contacts).where(isNull(contacts.deletedAt)).all();

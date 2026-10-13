@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
-import { MailCheck, Send, Settings2, Signature, X } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Bookmark, Ellipsis, MailCheck, Send, Signature, X } from 'lucide-react';
 import type { ConversationQuery, ProjectDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
+import { Icon } from '../ui/Icon.tsx';
+import { useOpenMenu } from '../ui/contextMenu.tsx';
 import { useToast } from '../ui/toast.tsx';
 import type { PaneAction } from '../workspace/pane.ts';
 import { MailView } from '../mail/MailView.tsx';
 import { composeTarget, seedOf } from '../mail/seed.ts';
 import { paths, SYSTEM_INBOX, SYSTEM_NEWS, SYSTEM_SPAM } from '../shell/paths.ts';
 import { ConversationItem } from './ConversationItem.tsx';
-import { Rail } from './Rail.tsx';
 import { TasksSidebar } from './TasksSidebar.tsx';
-import { RailEditor } from './RailEditor.tsx';
-import { EditingDimmer, useEditing } from '../ui/editing.tsx';
+import { NewMailMenu } from './NewMailMenu.tsx';
 
 const PAGE = 50;
 const focusKey = (projectKey: string) => `mmw.focus.${projectKey}`;
@@ -31,8 +31,16 @@ const writeFocus = (k: string, id: string | null) => {
     else localStorage.removeItem(focusKey(k));
   } catch {}
 };
+const TASKS_KEY = 'mmw.tasks.open';
+const readTasksOpen = () => {
+  try {
+    return localStorage.getItem(TASKS_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
 
-/** S1 · Progetto: barra contatti | conversazioni (una in focus) | barra dei task. */
+/** S1 · Progetto: intestazione (viste, invio, Nuova mail, Task) | conversazioni (una in focus) | pannello dei task a comparsa. */
 export function ProjectPage({ projectKey, conversationId, messageId, draftId, onEditProject }: {
   projectKey: string;
   conversationId: string | null;
@@ -48,18 +56,41 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
   const { data: counts } = useQuery({ queryKey: ['counts'], queryFn: api.conversationCounts });
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
   const project = isProject ? projects.find((p) => p.id === projectKey) : undefined;
-  const [archived, setArchived] = useState(false);
-  const [person, setPerson] = useState<string | null>(null);
-  const editing = useEditing();
+  const [view, setView] = useState<'active' | 'important' | 'archived'>('active');
+  const archived = view === 'archived';
+  // Filtro per persona: arriva dalla ricerca (?person=…), si toglie dal chip.
+  // Lo si tiene nello stato della pagina, così resta aprendo le conversazioni.
+  const [params, setParams] = useSearchParams();
+  const [person, setPerson] = useState<{ key: string; name: string } | null>(null);
+  useEffect(() => {
+    const key = params.get('person');
+    if (!key) return;
+    setPerson({ key, name: params.get('name') || 'persona' });
+    setView('active');
+    params.delete('person');
+    params.delete('name');
+    setParams(params, { replace: true });
+  }, [params, setParams]);
+  const clearPerson = () => setPerson(null);
+  const { data: important = {} } = useQuery({ queryKey: ['important-counts'], queryFn: api.importantCounts });
+  const [tasksOpen, setTasksOpenState] = useState(readTasksOpen);
+  const setTasksOpen = (v: boolean) => {
+    setTasksOpenState(v);
+    try {
+      localStorage.setItem(TASKS_KEY, v ? '1' : '0');
+    } catch {}
+  };
+  const openMenu = useOpenMenu();
 
   const query: ConversationQuery = useMemo(
     () => ({
       view: projectKey === SYSTEM_INBOX ? 'inbox' : projectKey === SYSTEM_NEWS ? 'noise' : projectKey === SYSTEM_SPAM ? 'spam' : 'project',
       projectId: isProject ? projectKey : undefined,
-      person: person && person !== 'all' ? person : undefined,
+      person: person?.key,
       archived,
+      important: view === 'important',
     }),
-    [projectKey, isProject, person, archived],
+    [projectKey, isProject, person, archived, view],
   );
   const list = useInfiniteQuery({
     queryKey: ['conversations', query],
@@ -140,62 +171,92 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
     return <MailView key={conversationId ?? 'new-mail'} projectKey={projectKey} conversationId={conversationId} messageId={messageId} draftId={draftId} />;
   }
 
+  const unread = isProject ? (project?.unreadCount ?? 0) : projectKey === SYSTEM_INBOX ? (counts?.inboxUnread ?? 0) : projectKey === SYSTEM_NEWS ? (counts?.noiseUnread ?? 0) : 0;
+  const importantCount = important[projectKey] ?? 0;
+  const openTasks = project?.openTaskCount ?? 0;
+  const late = !!project?.overdueTaskCount;
+
   return (
     <div className="pm-project">
-      <h1 className="pm-sr-only">{project?.name ?? (projectKey === SYSTEM_INBOX ? 'Da smistare' : 'News')}</h1>
-      {isProject && editing.mode === 'rail' && <RailEditor projectId={projectKey} onDone={() => editing.setMode(null)} />}
-      {isProject && editing.mode !== 'rail' && (
-        <Rail
-          projectId={projectKey}
-          onManage={() => editing.setMode('rail')}
-          filter={person}
-          onFilter={setPerson}
-          onCompose={(to) => pane.compose({ to, projectId: projectKey })}
-          onOpenPerson={(key) => navigate(`${paths.contacts()}?focus=${encodeURIComponent(key)}`)}
-        />
-      )}
+      <h1 className="pm-sr-only">{project?.name ?? (projectKey === SYSTEM_INBOX ? 'Da smistare' : projectKey === SYSTEM_SPAM ? 'Spam' : 'News')}</h1>
       <div className="pm-project__main">
-      {editing.mode === 'rail' && <EditingDimmer />}
       <section className="pm-convlist" aria-label="Conversazioni">
-        <div className="pm-subtabs">
-          <button type="button" className="pm-subtab" aria-current={!archived ? 'true' : undefined} onClick={() => setArchived(false)}>
-            Attive · {total}
-          </button>
-          <button type="button" className="pm-subtab" aria-current={archived ? 'true' : undefined} onClick={() => setArchived(true)}>
-            Archiviate
-          </button>
-          {person && (
-            <span className="pm-personchip pm-personchip--removable" style={{ paddingLeft: 10 }}>
-              filtro per persona
-              <button type="button" className="pm-personchip__remove" onClick={() => setPerson(null)} aria-label="Togli il filtro">
-                <Ic icon={X} size={15} />
+        <div className="pm-projheader">
+          <div className="pm-projheader__left">
+            <span className="pm-seg pm-views" role="radiogroup" aria-label="Vista">
+              <button type="button" role="radio" className="pm-seg__opt" aria-checked={view === 'active'} title={`${total} conversazioni attive`} onClick={() => setView('active')}>
+                Attive {unread > 0 && <span className="pm-badge">{unread > 99 ? '99+' : unread}</span>}
+              </button>
+              <button type="button" role="radio" className="pm-seg__opt" aria-checked={view === 'important'} onClick={() => setView('important')}>
+                <Ic icon={Bookmark} size={14} className="pm-views__mark" /> Importanti {importantCount > 0 && <span className="pm-views__count">{importantCount}</span>}
+              </button>
+              <button type="button" role="radio" className="pm-seg__opt" aria-checked={view === 'archived'} onClick={() => setView('archived')}>
+                Archiviate
+              </button>
+            </span>
+            {person && (
+              <span className="pm-personchip pm-personchip--removable" style={{ paddingLeft: 10 }}>
+                <span className="pm-truncate">con {person.name}</span>
+                <button type="button" className="pm-personchip__remove" onClick={clearPerson} aria-label="Togli il filtro per persona">
+                  <Ic icon={X} size={15} />
+                </button>
+              </span>
+            )}
+          </div>
+          {/* Account di uscita e firma del progetto: tutte le mail nuove e le risposte partono da qui. */}
+          {project && (
+            <span className="pm-sendinfo">
+              <span className="pm-sendinfo__item" title="Account di uscita del progetto">
+                <Ic icon={Send} size={15} />
+                {outgoing ? <span className="pm-truncate">{outgoing.email}</span> : 'Account di uscita non trovato'}
+              </span>
+              <span aria-hidden="true">·</span>
+              <button type="button" className="pm-sendinfo__item pm-sendinfo__sig" title={signature ? `Firma: ${signature.text}` : 'Nessuna firma: sceglila nelle impostazioni del progetto'} onClick={() => onEditProject(project)}>
+                <Ic icon={Signature} size={15} />
+                <span className="pm-truncate">{signature ? `Firma: ${signature.label}` : 'Nessuna firma'}</span>
               </button>
             </span>
           )}
-          {/* Account di uscita del progetto: tutte le mail nuove e le risposte partono da qui. */}
-          <span className="pm-subtabs__account">
-            {project && (
-              <>
-                <span className="pm-subtabs__item" title="Account di uscita del progetto">
-                  <Ic icon={Send} size={15} />
-                  {outgoing ? <span className="pm-truncate">{outgoing.email}</span> : 'Account di uscita non trovato'}
-                </span>
-                <span className="pm-subtabs__sep" aria-hidden="true" />
-                <button type="button" className="pm-subtabs__item pm-subtabs__sig" title={signature ? `Firma: ${signature.text}` : 'Nessuna firma: sceglila in Modifica progetto'} onClick={() => onEditProject(project)}>
-                  <Ic icon={Signature} size={15} />
-                  <span className="pm-truncate">{signature ? signature.label : 'Nessuna firma'}</span>
-                </button>
-              </>
+          <div className="pm-projheader__right">
+            {project && <NewMailMenu projectId={projectKey} onCompose={(to) => pane.compose({ to, projectId: projectKey })} />}
+            {projectKey !== SYSTEM_SPAM && (
+              <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Segna tutto come letto" title="Segna tutto come letto" onClick={() => void markAllRead()}>
+                <Ic icon={MailCheck} />
+              </button>
             )}
-          </span>
-          <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Segna tutto come letto" title="Segna tutto come letto" onClick={() => void markAllRead()}>
-            <Ic icon={MailCheck} />
-          </button>
-          {project && (
-            <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Impostazioni del progetto" title="Impostazioni del progetto" onClick={() => onEditProject(project)}>
-              <Ic icon={Settings2} />
-            </button>
-          )}
+            {project && (
+              <button
+                type="button"
+                className="pm-iconbtn pm-iconbtn--sm"
+                aria-label="Altre azioni del progetto"
+                title="Altre azioni"
+                onClick={(e) =>
+                  openMenu(
+                    {
+                      title: project.name,
+                      actions: [{ id: 'settings', icon: 'tune', label: 'Impostazioni del progetto', primary: true, run: () => onEditProject(project) }],
+                    },
+                    e.currentTarget,
+                  )
+                }
+              >
+                <Ic icon={Ellipsis} />
+              </button>
+            )}
+            {project && (
+              <button
+                type="button"
+                className={`pm-taskbtn${openTasks ? ' pm-taskbtn--has' : ''}${late ? ' pm-taskbtn--late' : ''}`}
+                aria-pressed={tasksOpen}
+                aria-label={`Task del progetto: ${openTasks} aperti${late ? `, ${project.overdueTaskCount} scaduti` : ''}`}
+                title="Task del progetto"
+                onClick={() => setTasksOpen(!tasksOpen)}
+              >
+                <Icon name={late ? 'assignment_late' : 'assignment'} size={18} />
+                {openTasks > 0 && <span>{openTasks}</span>}
+              </button>
+            )}
+          </div>
         </div>
         <div className="pm-convstack">
           {/* Account collegato ma ancora nessun progetto: lo smistamento non ha dove proporre. */}
@@ -210,7 +271,13 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
           {list.isLoading && <div className="pm-empty">Caricamento…</div>}
           {!list.isLoading && items.length === 0 && (
             <div className="pm-empty">
-              {archived ? 'Nessuna conversazione archiviata.' : projectKey === SYSTEM_INBOX ? 'Niente da smistare.' : 'Nessuna conversazione.'}
+              {view === 'important'
+                ? 'Nessuna conversazione importante: segna un messaggio con il segnalibro.'
+                : archived
+                  ? 'Nessuna conversazione archiviata.'
+                  : projectKey === SYSTEM_INBOX
+                    ? 'Niente da smistare.'
+                    : 'Nessuna conversazione.'}
             </div>
           )}
           {items.map((c) => (
@@ -234,7 +301,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
           )}
         </div>
       </section>
-      {isProject && <TasksSidebar projectId={projectKey} />}
+      {isProject && tasksOpen && <TasksSidebar projectId={projectKey} onClose={() => setTasksOpen(false)} />}
       </div>
 
     </div>

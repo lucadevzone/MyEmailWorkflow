@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, GripVertical, Mail, Plus } from 'lucide-react';
+import { Calendar, GripVertical, Mail, Plus, X } from 'lucide-react';
 import type { TaskDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
@@ -11,8 +11,8 @@ import { paths } from '../shell/paths.ts';
 import { TagEditor, type TagEditorTarget } from './TagEditor.tsx';
 import { useConfirm } from '../ui/confirm.tsx';
 
-/** Barra dei task del progetto (D9): task di tutte le conversazioni più quelli del progetto. */
-export function TasksSidebar({ projectId }: { projectId: string }) {
+/** Pannello dei task del progetto (D9, a comparsa nella UI v2): task di tutte le conversazioni più quelli del progetto. */
+export function TasksSidebar({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks', 'project', projectId], queryFn: () => api.projectTasks(projectId) });
   const ops = useTaskOps();
   const ask = useConfirm();
@@ -58,6 +58,9 @@ export function TasksSidebar({ projectId }: { projectId: string }) {
             Terminati · {done.length}
           </button>
         </span>
+        <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Chiudi i task del progetto" title="Chiudi" onClick={onClose}>
+          <Ic icon={X} size={15} />
+        </button>
       </div>
       <div className="pm-tasks__body">
         {tab === 'open' && (

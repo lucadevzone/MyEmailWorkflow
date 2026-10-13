@@ -6,7 +6,8 @@ import type { SearchScope } from '@mmw/shared';
 import { api, type AskSource } from '../api.ts';
 import { shortDate } from '../lib/format.ts';
 import { Ic } from '../ui/Ic.tsx';
-import { PersonAvatar } from '../ui/People.tsx';
+import { GroupBadge, PersonAvatar } from '../ui/People.tsx';
+import { usePeopleSearch } from '../people/usePeopleSearch.ts';
 import { paths, projectKeyOf, SYSTEM_INBOX, SYSTEM_NEWS, SYSTEM_SPAM } from './paths.ts';
 
 const SCOPE_KEY = 'mmw.search.scope';
@@ -64,6 +65,9 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
     staleTime: 30_000,
   });
   const data = q.length >= 2 ? res.data : undefined;
+  // Persone e gruppi dalla rubrica: scegliendone uno si vedono le sue conversazioni.
+  const { data: dir } = useQuery({ queryKey: ['directory'], queryFn: api.peopleDirectory, enabled: q.length >= 2, staleTime: 60_000 });
+  const found = usePeopleSearch(q);
 
   // Assistente sulla posta: risponde dalle conversazioni trovate, citandole come [1], [2]…
   const [answer, setAnswer] = useState<{ q: string; text: string; busy: boolean; error?: string; sources: AskSource[] } | null>(null);
@@ -152,6 +156,57 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
     if (!data) return [];
     const t = data.terms;
     const out: { title: string; hits: Hit[] }[] = [];
+    // Nel progetto corrente (ambito "Solo…") filtra la sua lista; altrimenti apre la scheda con tutte le conversazioni.
+    const openPerson = (key: string, name: string) =>
+      go(onlyCurrent && current ? `${paths.project(current)}?person=${encodeURIComponent(key)}&name=${encodeURIComponent(name)}` : `${paths.contacts()}?focus=${encodeURIComponent(key)}`);
+    const ql = q.toLowerCase();
+    const seen = new Set<string>();
+    const people = [...(dir?.contacts ?? []), ...(dir?.suggested ?? []), ...found]
+      .filter((p) => {
+        if (seen.has(p.key) || (!found.includes(p) && !((p.name ?? '').toLowerCase().includes(ql) || p.emails.some((e) => e.toLowerCase().includes(ql))))) return false;
+        seen.add(p.key);
+        return true;
+      })
+      .slice(0, 5);
+    const teams = (dir?.groups ?? []).filter((g) => g.name.toLowerCase().includes(ql)).slice(0, 3);
+    if (people.length || teams.length)
+      out.push({
+        title: 'Persone',
+        hits: [
+          ...teams.map((g) => ({
+            key: `g:${g.id}`,
+            open: () => openPerson(`g:${g.id}`, g.name),
+            node: (
+              <>
+                <span className="pm-result__people">
+                  <GroupBadge size={30} members={g.members.map((m) => ({ name: m.name, email: m.emails[0] ?? m.key }))} />
+                </span>
+                <span className="pm-result__main">
+                  <span className="pm-result__title">{highlight(g.name, t)}</span>
+                  <span className="pm-result__ctx">Gruppo · {g.members.length} persone · {onlyCurrent && current ? `conversazioni in ${currentName}` : 'tutte le conversazioni'}</span>
+                </span>
+              </>
+            ),
+          })),
+          ...people.map((p) => ({
+            key: `p:${p.key}`,
+            open: () => openPerson(p.key, p.name ?? p.emails[0] ?? ''),
+            node: (
+              <>
+                <span className="pm-result__people">
+                  <PersonAvatar person={{ name: p.name, email: p.emails[0] ?? p.key }} avatarUrl={p.avatarUrl} size={26} />
+                </span>
+                <span className="pm-result__main">
+                  <span className="pm-result__title">{highlight(p.name ?? p.emails[0] ?? '', t)}</span>
+                  <span className="pm-result__ctx">
+                    {p.emails[0]} · {onlyCurrent && current ? `conversazioni in ${currentName}` : 'tutte le conversazioni'}
+                  </span>
+                </span>
+              </>
+            ),
+          })),
+        ],
+      });
     if (data.conversations.length)
       out.push({
         title: 'Conversazioni',
@@ -215,7 +270,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
         })),
       });
     return out;
-  }, [data, projects]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, projects, dir, found, onlyCurrent, current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flat = groups.flatMap((g) => g.hits);
   const total = flat.length;
@@ -248,7 +303,7 @@ export function SearchBox({ onClose }: { onClose: () => void }) {
           role="combobox"
           aria-expanded={q.length >= 2}
           aria-controls="pm-results"
-          aria-label="Cerca in conversazioni, allegati, task e note"
+          aria-label="Cerca in conversazioni, persone, allegati, task e note"
           placeholder={onlyCurrent && currentName ? `Cerca in ${currentName}…` : 'Cerca in tutti i progetti…'}
           value={text}
           onChange={(e) => setText(e.target.value)}

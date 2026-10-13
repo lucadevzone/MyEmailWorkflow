@@ -5,6 +5,7 @@ import type { PersonRef } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { PersonAvatar, PersonChip } from '../ui/People.tsx';
+import { usePeopleSearch } from '../people/usePeopleSearch.ts';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -28,8 +29,19 @@ export function RecipientField({ label, value, onChange, autoFocus, extra }: {
     return out;
   }, [dir]);
   const q = text.trim().toLowerCase();
+  // Prima la rubrica (contatti e più frequenti), poi il resto degli indirizzi visti.
+  const found = usePeopleSearch(text);
   const matches = q
-    ? [...people.values()].filter((p) => !value.includes(p.email) && (p.email.includes(q) || (p.name ?? '').toLowerCase().includes(q))).slice(0, 6)
+    ? [
+        ...new Map(
+          [
+            ...[...people.values()].filter((p) => p.email.includes(q) || (p.name ?? '').toLowerCase().includes(q)),
+            ...found.flatMap((p) => p.emails.map((email) => ({ name: p.name, email }))),
+          ]
+            .filter((p) => !value.includes(p.email))
+            .map((p) => [p.email, p]),
+        ).values(),
+      ].slice(0, 6)
     : [];
 
   const add = (email: string) => {

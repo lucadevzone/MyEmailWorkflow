@@ -145,6 +145,21 @@ describe('progetti e spostamenti', () => {
   });
 });
 
+describe('importanti e ricerca persone', () => {
+  it('la vista Importanti mostra attive e archiviate con un messaggio importante; la ricerca trova ogni indirizzo visto', async () => {
+    const a = await incoming('<1@x>', 1, { from: 'Studio Barone <info@studio.it>' });
+    const b = await incoming('<2@x>', 2);
+    await incoming('<3@x>', 3);
+    conv().setImportant([a.messageId, b.messageId], true);
+    s.actions.archive(b.conversationId);
+    expect(conv().list({ view: 'inbox', important: true }).map((c) => c.id).sort()).toEqual([a.conversationId, b.conversationId].sort());
+    expect(conv().importantCounts()).toEqual({ inbox: 2 });
+    expect(s.people.search('baro').map((p) => p.name)).toEqual(['Studio Barone']);
+    expect(s.people.search('mario@x').map((p) => p.emails[0])).toEqual(['mario@x.it']);
+    expect(s.people.search('zzz')).toHaveLength(0);
+  });
+});
+
 describe('letto / non letto', () => {
   it('segna come letto subito e propaga a Gmail al batch', async () => {
     const { conversationId, messageId } = await incoming('<1@x>', 7);
