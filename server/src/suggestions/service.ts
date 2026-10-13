@@ -37,13 +37,12 @@ export class SuggestionService {
       return { conversationId: r.subjectId };
     }
     if (r.kind === 'task') {
-      // I task stanno nei progetti: da Da smistare si sceglie il progetto e la conversazione lo segue.
+      // Il task va dove sta la conversazione (anche Da smistare); se si sceglie un progetto, la conversazione lo segue.
       const conv = this.db.select({ projectId: conversations.projectId }).from(conversations).where(eq(conversations.id, r.subjectId)).get();
-      const target = conv?.projectId ?? body.projectId;
-      if (!target) throw new SuggestionError('Scegli il progetto del task');
+      const target = conv?.projectId ?? body.projectId ?? null;
       const p = JSON.parse(r.payload) as TaskSuggestionPayload;
       this.resolve(id, 'accepted');
-      if (!conv?.projectId) this.actions.move(r.subjectId, target);
+      if (!conv?.projectId && target) this.actions.move(r.subjectId, target);
       this.tasks.create({ projectId: target, title: p.title, details: p.details, dueDate: p.dueDate, conversationId: r.subjectId, messageId: p.messageId });
       return { conversationId: r.subjectId };
     }

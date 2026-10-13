@@ -328,7 +328,8 @@ export interface TaskDto {
 }
 
 export interface TaskInput {
-  projectId: string;
+  /** null = Da smistare. */
+  projectId: string | null;
   title: string;
   details?: string | null;
   conversationId?: string | null;
@@ -404,6 +405,9 @@ export interface UnreadCountsDto {
   noiseUnread: number;
   /** Messaggi non letti fuori dal rumore (Da smistare + progetti attivi). */
   totalUnread: number;
+  /** Task aperti di Da smistare, e quanti sono scaduti. */
+  inboxOpenTasks: number;
+  inboxOverdueTasks: number;
 }
 
 export interface ConversationQuery {

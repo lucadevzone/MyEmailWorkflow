@@ -109,7 +109,14 @@ export function Sidebar({ open, onNewProject, onEditProject, floating }: {
         )}
       </div>
       <div className="pm-sidebar__body">
-        <Row to={paths.project(SYSTEM_INBOX)} label="Da smistare" icon={<Ic icon={Inbox} size={16} />} unread={counts?.inboxUnread} total={counts?.inbox} />
+        <Row
+          to={paths.project(SYSTEM_INBOX)}
+          label="Da smistare"
+          icon={<Ic icon={Inbox} size={16} />}
+          unread={counts?.inboxUnread}
+          total={counts?.inbox}
+          tasks={counts ? { openTaskCount: counts.inboxOpenTasks, overdueTaskCount: counts.inboxOverdueTasks } : undefined}
+        />
         <span className="pm-sidebar__rule" aria-hidden="true" />
         {groups.map((g) => {
           const c = g.category;
@@ -178,7 +185,7 @@ function useProjectMenu(to: string, label: string, project?: ProjectDto, onEditP
   });
 }
 
-function Row({ to, label, icon, unread, total, project, onEditProject, muted, indent }: {
+function Row({ to, label, icon, unread, total, project, onEditProject, muted, indent, tasks: taskCounts }: {
   to: string;
   label: string;
   icon?: React.ReactNode;
@@ -190,6 +197,8 @@ function Row({ to, label, icon, unread, total, project, onEditProject, muted, in
   /** News e Spam: contatore grigio, meno in evidenza. */
   muted?: boolean;
   indent?: boolean;
+  /** Task di Da smistare (per i progetti si leggono dal progetto). */
+  tasks?: { openTaskCount: number; overdueTaskCount: number };
 }) {
   // Resta attiva anche dentro conversazioni e messaggi del progetto.
   const current = !!useMatch({ path: to, end: false });
@@ -199,11 +208,15 @@ function Row({ to, label, icon, unread, total, project, onEditProject, muted, in
     <NavLink to={to} className={`pm-sidebar__item${indent ? ' pm-sidebar__item--indent' : ''}`} aria-current={current ? 'page' : undefined} {...ctx}>
       {icon}
       <span className="pm-sidebar__name">{label}</span>
-      {!!project?.openTaskCount && (
-        <span className={`pm-sidebar__tasks${project.overdueTaskCount ? ' pm-sidebar__tasks--late' : ''}`} title={taskLabel(project)} aria-label={taskLabel(project)}>
-          <Icon name={project.overdueTaskCount ? 'assignment_late' : 'assignment'} size={16} />
-        </span>
-      )}
+      {(() => {
+        const t = project ?? taskCounts;
+        if (!t?.openTaskCount) return null;
+        return (
+          <span className={`pm-sidebar__tasks${t.overdueTaskCount ? ' pm-sidebar__tasks--late' : ''}`} title={taskLabel(t)} aria-label={taskLabel(t)}>
+            <Icon name={t.overdueTaskCount ? 'assignment_late' : 'assignment'} size={16} />
+          </span>
+        );
+      })()}
       {!!count && <span className={`pm-badge${unread && !muted ? '' : ' pm-badge--muted'}`}>{count > 99 ? '99+' : count}</span>}
     </NavLink>
   );

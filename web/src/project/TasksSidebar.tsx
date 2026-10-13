@@ -7,12 +7,16 @@ import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { useContextMenu, type MenuAction } from '../ui/contextMenu.tsx';
 import { dueInfo, useTaskOps } from '../tasks/useTaskOps.ts';
-import { paths } from '../shell/paths.ts';
+import { paths, SYSTEM_INBOX } from '../shell/paths.ts';
 import { TagEditor, type TagEditorTarget } from './TagEditor.tsx';
 import { useConfirm } from '../ui/confirm.tsx';
 
-/** Pannello dei task del progetto (D9, a comparsa nella UI v2): task di tutte le conversazioni più quelli del progetto. */
+/**
+ * Pannello dei task del progetto (D9, a comparsa nella UI v2): task di tutte le conversazioni più quelli
+ * del progetto. projectId "inbox" = Da smistare, che ha la sua lista come un progetto.
+ */
 export function TasksSidebar({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+  const scope = projectId === SYSTEM_INBOX ? null : projectId;
   const { data: tasks = [] } = useQuery({ queryKey: ['tasks', 'project', projectId], queryFn: () => api.projectTasks(projectId) });
   const ops = useTaskOps();
   const ask = useConfirm();
@@ -29,7 +33,7 @@ export function TasksSidebar({ projectId, onClose }: { projectId: string; onClos
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (title.trim()) ops.create.mutate({ projectId, title }, { onSuccess: () => setTitle('') });
+    if (title.trim()) ops.create.mutate({ projectId: scope, title }, { onSuccess: () => setTitle('') });
   };
   const moveBy = (t: TaskDto, delta: -1 | 1) => {
     const i = open.findIndex((x) => x.id === t.id);
@@ -49,7 +53,7 @@ export function TasksSidebar({ projectId, onClose }: { projectId: string; onClos
   return (
     <aside className="pm-tasks" aria-label="Task del progetto">
       <div className="pm-tasks__head">
-        <span className="pm-tasks__title">Task del progetto</span>
+        <span className="pm-tasks__title">{scope ? 'Task del progetto' : 'Task di Da smistare'}</span>
         <span className="pm-seg" role="radiogroup" aria-label="Stato dei task">
           <button type="button" role="radio" className="pm-seg__opt" aria-checked={tab === 'open'} onClick={() => setTab('open')}>
             Aperti · {open.length}
@@ -66,7 +70,7 @@ export function TasksSidebar({ projectId, onClose }: { projectId: string; onClos
         {tab === 'open' && (
           <form className="pm-tasks__new" onSubmit={submit}>
             <Ic icon={Plus} size={15} />
-            <input placeholder="Nuovo task del progetto" aria-label="Nuovo task del progetto" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input placeholder={scope ? 'Nuovo task del progetto' : 'Nuovo task'} aria-label={scope ? 'Nuovo task del progetto' : 'Nuovo task di Da smistare'} value={title} onChange={(e) => setTitle(e.target.value)} />
           </form>
         )}
         {list.length === 0 && <div className="pm-empty">{tab === 'open' ? 'Nessun task aperto.' : 'Nessun task terminato.'}</div>}
@@ -76,7 +80,7 @@ export function TasksSidebar({ projectId, onClose }: { projectId: string; onClos
             t={t}
             open={expanded === t.id}
             onToggle={() => setExpanded(expanded === t.id ? null : t.id)}
-            onEdit={(anchor) => setEditor({ target: { kind: 'task', task: t, projectId, conversationId: t.conversationId }, anchor })}
+            onEdit={(anchor) => setEditor({ target: { kind: 'task', task: t, projectId: scope, conversationId: t.conversationId }, anchor })}
             onClose={async () => (t.status !== 'open' || (await ask({ message: 'Segnare il task come terminato?', okLabel: 'Sì, terminato' }))) && ops.update.mutate({ id: t.id, patch: { status: t.status === 'open' ? 'done' : 'open' } })}
             onMove={tab === 'open' ? (d) => moveBy(t, d) : undefined}
             drag={
@@ -243,13 +247,13 @@ function TaskItem({ t, open, onToggle, onEdit, onClose, onMove, drag }: {
                 <Ic icon={Calendar} size={15} /> {due.label}
               </span>
             )}
-            {t.conversationId && t.projectId && (
-              <button type="button" className="pm-infochip" onClick={() => navigate(paths.conversation(t.projectId!, t.conversationId!))}>
+            {t.conversationId && (
+              <button type="button" className="pm-infochip" onClick={() => navigate(paths.conversation(t.projectId ?? SYSTEM_INBOX, t.conversationId!))}>
                 <span className="pm-truncate" style={{ maxWidth: 220 }}>{t.conversationSubject ?? 'Conversazione'}</span>
               </button>
             )}
-            {t.messageId && t.conversationId && t.projectId && (
-              <button type="button" className="pm-infochip" onClick={() => navigate(paths.message(t.projectId!, t.conversationId!, t.messageId!))} title="Apri la mail da cui è nato">
+            {t.messageId && t.conversationId && (
+              <button type="button" className="pm-infochip" onClick={() => navigate(paths.message(t.projectId ?? SYSTEM_INBOX, t.conversationId!, t.messageId!))} title="Apri la mail da cui è nato">
                 <Ic icon={Mail} size={15} /> dalla mail
               </button>
             )}

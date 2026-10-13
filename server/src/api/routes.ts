@@ -856,8 +856,10 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     if (conversationId) bus.publish({ type: 'conversations', ids: [conversationId] });
   };
 
-  app.get<{ Params: { id: string } }>('/api/projects/:id/tasks', async (req) => deps.tasks.forProject(req.params.id));
-  app.get<{ Params: { id: string } }>('/api/projects/:id/task-suggestions', async (req) => conversationsSvc.projectTaskSuggestions(req.params.id));
+  // "inbox" = Da smistare, che ha la sua lista di task come un progetto.
+  const taskScope = (id: string) => (id === 'inbox' ? null : id);
+  app.get<{ Params: { id: string } }>('/api/projects/:id/tasks', async (req) => deps.tasks.forProject(taskScope(req.params.id)));
+  app.get<{ Params: { id: string } }>('/api/projects/:id/task-suggestions', async (req) => conversationsSvc.projectTaskSuggestions(taskScope(req.params.id)));
   app.get<{ Params: { id: string } }>('/api/conversations/:id/tasks', async (req) => deps.tasks.forConversation(req.params.id));
 
   app.post('/api/tasks', async (req, reply) => {

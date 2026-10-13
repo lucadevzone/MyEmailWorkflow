@@ -68,8 +68,10 @@ export function TaskNotesSection({ c, d, tasks, loading, canRemind, onRemind, on
   const done = tasks.filter((t) => t.status === 'done');
   const notes = d?.notes ?? [];
   const projectId = c.projectId;
+  // Task nei progetti e in Da smistare (projectId null); non nelle News e nello Spam.
+  const taskable = !c.isNoise && !c.isSpam;
   const edit = (task: TaskDto | undefined, anchor: DOMRect) => {
-    if (projectId) onEditor({ target: { kind: 'task', task, projectId, conversationId: c.id }, anchor });
+    if (taskable) onEditor({ target: { kind: 'task', task, projectId, conversationId: c.id }, anchor });
   };
   const editNote = (note: NoteDto | undefined, anchor: DOMRect) => onEditor({ target: { kind: 'note', note, conversationId: c.id }, anchor });
   const rectOf = (e: React.MouseEvent) => (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -83,14 +85,14 @@ export function TaskNotesSection({ c, d, tasks, loading, canRemind, onRemind, on
         menuAt(() => ({
           title: 'Task e note',
           actions: [
-            ...(projectId ? [{ id: 'new', icon: 'assignment_add', label: 'Nuovo task', primary: true, run: () => edit(undefined, anchor) }] : []),
+            ...(taskable ? [{ id: 'new', icon: 'assignment_add', label: 'Nuovo task', primary: true, run: () => edit(undefined, anchor) }] : []),
             { id: 'note', icon: 'note_add', label: 'Nuova nota', primary: true, run: () => editNote(undefined, anchor) },
             ...(canRemind ? [{ id: 'remind', icon: 'reply', label: 'Ricordami di rispondere', primary: true, run: onRemind }] : []),
           ],
         }))(e);
       }}
     >
-      <SectionHead label={projectId ? 'Task e note' : 'Note'} count={(loading ? c.taskCount : open.length) + notes.length} collapsed={collapsed} onToggle={toggle} />
+      <SectionHead label={taskable ? 'Task e note' : 'Note'} count={(loading ? c.taskCount : open.length) + notes.length} collapsed={collapsed} onToggle={toggle} />
       {!collapsed && (
         <div className="pm-tags">
           {open.map((t) => (
@@ -144,7 +146,7 @@ export function TaskNotesSection({ c, d, tasks, loading, canRemind, onRemind, on
               <span className="pm-tag__text">{noteTitleOf(n)}</span>
             </button>
           ))}
-          {projectId && (
+          {taskable && (
             <button type="button" className="pm-addpill pm-addpill--task" onClick={(e) => edit(undefined, rectOf(e))}>
               + task
             </button>

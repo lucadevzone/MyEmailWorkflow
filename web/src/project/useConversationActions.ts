@@ -111,7 +111,7 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
     const pct = sug.confidence != null ? ` · ${Math.round(sug.confidence * 100)}%` : '';
     if (sug.kind === 'project') return `Sposta in ${p.projectName}${pct}`;
     if (sug.kind === 'new_project') return `Nuovo progetto «${p.projectName}»`;
-    if (sug.kind === 'task') return `+ Task: ${p.title}`;
+    if (sug.kind === 'task') return `+ task: ${p.title}`;
     if (sug.kind === 'action' && p.action === 'reply') return `Rispondi: «${(p.draft ?? '').replace(/\s+/g, ' ').slice(0, 36)}…»`;
     if (sug.kind === 'action' && p.action === 'archive') return 'Archivia (suggerito)';
     if (sug.kind === 'action' && p.action === 'noise') return 'È una news (suggerito)';
@@ -128,7 +128,7 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
   /** Azioni del menu contestuale: prima le suggerite, poi le principali (barra), poi le altre (palette). */
   const menuSpec = (focused: boolean) => {
     const suggested: MenuAction[] = c.suggestions
-      .filter((s) => s.kind !== 'task' || c.projectId)
+      .filter((s) => s.kind !== 'task' || (!c.isNoise && !c.isSpam))
       .map((s) => ({ s, label: suggestionLabel(s) }))
       .filter((x): x is { s: SuggestionDto; label: string } => !!x.label)
       .map(({ s, label }) => ({ id: s.id, tone: 'ai' as const, icon: 'auto_awesome', label, run: () => runSuggestion(s) }));
@@ -140,7 +140,7 @@ export function useConversationActions(c: ConversationListItem, h: ConversationH
         ? { id: 'unarchive', icon: 'unarchive', label: 'Ripristina', primary: true, run: () => unarchive.mutate() }
         : { id: 'archive', icon: 'archive', label: 'Archivia', primary: true, run: () => archive.mutate() },
       ...moveTargets(),
-      ...(c.projectId ? [{ id: 'task', icon: 'assignment_add', label: 'Nuovo task', run: h.newTask }] : []),
+      ...(!c.isNoise && !c.isSpam ? [{ id: 'task', icon: 'assignment_add', label: 'Nuovo task', run: h.newTask }] : []),
       { id: 'note', icon: 'sticky_note_2', label: 'Nuova nota', run: h.newNote },
       { id: 'upload', icon: 'create_new_folder', label: 'Aggiungi risorsa', keywords: 'carica file', run: h.uploadResource },
       { id: 'unread', icon: 'mark_email_unread', label: 'Segna come non letta', run: () => unread.mutate() },

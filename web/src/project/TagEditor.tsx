@@ -11,7 +11,7 @@ import { Icon } from '../ui/Icon.tsx';
 import { useConfirm } from '../ui/confirm.tsx';
 
 export type TagEditorTarget =
-  | { kind: 'task'; task?: TaskDto; projectId: string; conversationId: string | null; messageId?: string | null; initialTitle?: string; initialBody?: string; quote?: QuoteSelector }
+  | { kind: 'task'; task?: TaskDto; projectId: string | null; conversationId: string | null; messageId?: string | null; initialTitle?: string; initialBody?: string; quote?: QuoteSelector }
   | { kind: 'note'; note?: NoteDto; conversationId: string; messageId?: string | null; initialBody?: string; quote?: QuoteSelector };
 
 /**

@@ -152,7 +152,7 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
             id: 'note', icon: 'sticky_note_2', label: 'Crea una nota', primary: true,
             run: () => setEditor({ target: { kind: 'note', conversationId: d.id, messageId: m.id, initialBody: `${quoteText(text)}\n\n`, quote }, anchor: rect }),
           },
-          ...(d.projectId
+          ...(!d.isNoise
             ? [
                 {
                   id: 'task', icon: 'assignment', label: 'Crea un task', primary: true,
@@ -160,7 +160,7 @@ export function MessageCard({ m, d, index, total, onCompose, active = true }: {
                     setEditor({
                       target: {
                         kind: 'task' as const,
-                        projectId: d.projectId!,
+                        projectId: d.projectId,
                         conversationId: d.id,
                         messageId: m.id,
                         initialTitle: taskTitle(text),

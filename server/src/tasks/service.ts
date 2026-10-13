@@ -1,4 +1,4 @@
-// Task: stanno nei progetti, in una coda ordinata a mano (indici frazionari).
+// Task: stanno nei progetti o in Da smistare (projectId null), in una coda ordinata a mano (indici frazionari).
 // Un task nuovo va in fondo; "in cima" lo mette in testa (la priorità del requisito RF-F1).
 
 import { and, asc, desc, eq, isNull, like } from 'drizzle-orm';
@@ -13,7 +13,8 @@ import { rankBetween } from '../lib/rank.ts';
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data non valida (AAAA-MM-GG)');
 
 export const taskInputSchema = z.object({
-  projectId: z.string().min(1, 'I task stanno in un progetto'),
+  /** null = Da smistare. */
+  projectId: z.string().min(1).nullable(),
   title: z.string().trim().min(1, 'Il titolo è obbligatorio').max(300),
   details: z.string().trim().nullable().optional(),
   conversationId: z.string().nullable().optional(),
@@ -30,7 +31,7 @@ export const taskPatchSchema = z
     details: z.string().trim().nullable(),
     dueDate: isoDate.nullable(),
     status: z.enum(['open', 'done']),
-    projectId: z.string().min(1),
+    projectId: z.string().min(1).nullable(),
   })
   .partial();
 
@@ -42,6 +43,9 @@ export const taskMoveSchema = z.object({
 export class TaskError extends Error {}
 
 type Row = typeof tasks.$inferSelect;
+
+/** I task di un progetto, o di Da smistare (null). */
+const inScope = (projectId: string | null) => (projectId ? eq(tasks.projectId, projectId) : isNull(tasks.projectId));
 
 export class TaskService {
   constructor(private db: Db) {}
@@ -73,11 +77,11 @@ export class TaskService {
   }
 
   /** Aperti in ordine di coda; completati dal più recente. */
-  forProject(projectId: string): TaskDto[] {
-    const open = this.query(and(eq(tasks.projectId, projectId), eq(tasks.status, 'open'), isNull(tasks.deletedAt)))
+  forProject(projectId: string | null): TaskDto[] {
+    const open = this.query(and(inScope(projectId), eq(tasks.status, 'open'), isNull(tasks.deletedAt)))
       .orderBy(asc(tasks.rank))
       .all();
-    const done = this.query(and(eq(tasks.projectId, projectId), eq(tasks.status, 'done'), isNull(tasks.deletedAt)))
+    const done = this.query(and(inScope(projectId), eq(tasks.status, 'done'), isNull(tasks.deletedAt)))
       .orderBy(desc(tasks.completedAt))
       .limit(100)
       .all();
@@ -96,20 +100,22 @@ export class TaskService {
     return r && this.toDto(r.t, r.subject);
   }
 
-  private edgeRank(projectId: string, edge: 'first' | 'last'): string | null {
+  private edgeRank(projectId: string | null, edge: 'first' | 'last'): string | null {
     return (
       this.db
         .select({ rank: tasks.rank })
         .from(tasks)
-        .where(and(eq(tasks.projectId, projectId), eq(tasks.status, 'open'), isNull(tasks.deletedAt)))
+        .where(and(inScope(projectId), eq(tasks.status, 'open'), isNull(tasks.deletedAt)))
         .orderBy(edge === 'first' ? asc(tasks.rank) : desc(tasks.rank))
         .get()?.rank ?? null
     );
   }
 
   create(input: z.infer<typeof taskInputSchema>): TaskDto {
-    const p = this.db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, input.projectId), isNull(projects.deletedAt))).get();
-    if (!p) throw new TaskError('Progetto non trovato');
+    if (input.projectId) {
+      const p = this.db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, input.projectId), isNull(projects.deletedAt))).get();
+      if (!p) throw new TaskError('Progetto non trovato');
+    }
     const rank = input.top ? rankBetween(null, this.edgeRank(input.projectId, 'first')) : rankBetween(this.edgeRank(input.projectId, 'last'), null);
     const t = now();
     const id = newId();
@@ -142,9 +148,9 @@ export class TaskService {
     if (patch.status && patch.status !== cur.status) {
       extra.completedAt = patch.status === 'done' ? t : null;
       // Riaperto: torna in fondo alla coda.
-      if (patch.status === 'open') extra.rank = rankBetween(this.edgeRank(patch.projectId ?? cur.projectId!, 'last'), null);
+      if (patch.status === 'open') extra.rank = rankBetween(this.edgeRank(patch.projectId !== undefined ? patch.projectId : cur.projectId, 'last'), null);
     }
-    if (patch.projectId && patch.projectId !== cur.projectId && !extra.rank) {
+    if (patch.projectId !== undefined && patch.projectId !== cur.projectId && !extra.rank) {
       extra.rank = rankBetween(this.edgeRank(patch.projectId, 'last'), null);
     }
     this.db.update(tasks).set({ ...patch, ...extra, updatedAt: t }).where(eq(tasks.id, id)).run();
@@ -154,11 +160,11 @@ export class TaskService {
   /** Sposta un task aperto subito dopo afterId (null = in cima). */
   move(id: string, afterId: string | null): TaskDto {
     const cur = this.db.select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt))).get();
-    if (!cur?.projectId) throw new TaskError('Task non trovato');
+    if (!cur) throw new TaskError('Task non trovato');
     const open = this.db
       .select({ id: tasks.id, rank: tasks.rank })
       .from(tasks)
-      .where(and(eq(tasks.projectId, cur.projectId), eq(tasks.status, 'open'), isNull(tasks.deletedAt)))
+      .where(and(inScope(cur.projectId), eq(tasks.status, 'open'), isNull(tasks.deletedAt)))
       .orderBy(asc(tasks.rank))
       .all()
       .filter((x) => x.id !== id);
@@ -176,7 +182,7 @@ export class TaskService {
   remindReply(conversationId: string, messageId?: string | null): TaskDto {
     const conv = this.db.select().from(conversations).where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))).get();
     if (!conv) throw new TaskError('Conversazione non trovata');
-    if (!conv.projectId) throw new TaskError('Sposta prima la conversazione in un progetto');
+    if (conv.isNoise || conv.isSpam) throw new TaskError('Le News e lo Spam non hanno task');
     const open = this.db
       .select({ id: tasks.id })
       .from(tasks)

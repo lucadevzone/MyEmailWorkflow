@@ -35,6 +35,8 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
   const [editor, setEditor] = useState<{ target: TagEditorTarget; anchor: DOMRect } | null>(null);
   const navigate = useNavigate();
   const anchorOf = (el: Element | null) => el?.getBoundingClientRect() ?? new DOMRect(window.innerWidth / 2, 200, 0, 0);
+  // Task nei progetti e in Da smistare; non nelle News e nello Spam.
+  const taskable = !c.isNoise && !c.isSpam;
 
   const upload = useMutation({
     mutationFn: (files: File[]) => Promise.all(files.map((f) => api.uploadResource(c.id, f))),
@@ -46,7 +48,7 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
 
   const actions = useConversationActions(c, {
     compose: cb.onCompose,
-    newTask: () => c.projectId && setEditor({ target: { kind: 'task', projectId: c.projectId, conversationId: c.id }, anchor: anchorOf(ref.current) }),
+    newTask: () => taskable && setEditor({ target: { kind: 'task', projectId: c.projectId, conversationId: c.id }, anchor: anchorOf(ref.current) }),
     newNote: () => setEditor({ target: { kind: 'note', conversationId: c.id }, anchor: anchorOf(ref.current) }),
     uploadResource: () => fileInput.current?.click(),
     toggleFocus: focused ? cb.onUnfocus : cb.onFocus,
@@ -71,7 +73,7 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
     wasFocused.current = focused;
   }, [focused]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const suggestions = c.suggestions.filter((s) => actions.suggestionLabel(s) && (s.kind !== 'task' || c.projectId));
+  const suggestions = c.suggestions.filter((s) => actions.suggestionLabel(s) && (s.kind !== 'task' || taskable));
   const title = c.summary ?? c.subject ?? '(nessun oggetto)';
 
   const extras = (
@@ -139,8 +141,8 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
         <button type="button" className="pm-btn pm-btn--primary" onClick={() => void actions.reply()}>
           <Ic icon={Reply} size={15} /> Rispondi
         </button>
-        {c.projectId && (
-          <button type="button" className="pm-btn pm-btn--ghost" onClick={(e) => setEditor({ target: { kind: 'task', projectId: c.projectId!, conversationId: c.id }, anchor: anchorOf(e.currentTarget) })}>
+        {taskable && (
+          <button type="button" className="pm-btn pm-btn--ghost" onClick={(e) => setEditor({ target: { kind: 'task', projectId: c.projectId, conversationId: c.id }, anchor: anchorOf(e.currentTarget) })}>
             <Icon name="assignment" size={16} /> Task
           </button>
         )}
@@ -275,7 +277,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
   onUpload: () => void;
 }) {
   const { data: d } = useQuery({ queryKey: ['conversation', c.id], queryFn: () => api.conversation(c.id) });
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery({ queryKey: ['tasks', 'conversation', c.id], queryFn: () => api.conversationTasks(c.id), enabled: !!c.projectId });
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({ queryKey: ['tasks', 'conversation', c.id], queryFn: () => api.conversationTasks(c.id), enabled: !c.isNoise && !c.isSpam });
   const openTasks = tasks.filter((t) => t.status === 'open');
   const me = useMe();
   const menuAt = useMenuAt();
@@ -287,7 +289,7 @@ function FocusedBody({ c, title, selectedMessageId, cb, suggestions, actions, on
   const remindReply = () => void api.remindReply(c.id).then(refreshItems);
   // Solo se l'ultimo messaggio è arrivato (non ho ancora risposto).
   const awaitingReply = d?.messages.at(-1)?.direction === 'in'; // i messaggi arrivano in ordine di data
-  const canRemind = !!c.projectId && !hasReplyTask && awaitingReply;
+  const canRemind = !c.isNoise && !c.isSpam && !hasReplyTask && awaitingReply;
   // Lo stesso suggerimento due volte (vecchie estrazioni ripetute) si mostra una volta sola.
   const uniqueSuggestions = suggestions.filter((s, i, all) => all.findIndex((x) => actions.suggestionLabel(x) === actions.suggestionLabel(s)) === i);
   const toast = useToast();

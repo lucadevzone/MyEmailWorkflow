@@ -176,8 +176,11 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
 
   const unread = isProject ? (project?.unreadCount ?? 0) : projectKey === SYSTEM_INBOX ? (counts?.inboxUnread ?? 0) : projectKey === SYSTEM_NEWS ? (counts?.noiseUnread ?? 0) : 0;
   const importantCount = important[projectKey] ?? 0;
-  const openTasks = project?.openTaskCount ?? 0;
-  const late = !!project?.overdueTaskCount;
+  // Da smistare ha la sua lista di task, come un progetto.
+  const hasTasks = isProject || projectKey === SYSTEM_INBOX;
+  const openTasks = isProject ? (project?.openTaskCount ?? 0) : (counts?.inboxOpenTasks ?? 0);
+  const overdue = isProject ? (project?.overdueTaskCount ?? 0) : (counts?.inboxOverdueTasks ?? 0);
+  const late = overdue > 0;
 
   return (
     <div className="pm-project">
@@ -246,13 +249,13 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
                 <Ic icon={Ellipsis} />
               </button>
             )}
-            {project && (
+            {hasTasks && (
               <button
                 type="button"
                 className={`pm-taskbtn${openTasks ? ' pm-taskbtn--has' : ''}${late ? ' pm-taskbtn--late' : ''}`}
                 aria-pressed={tasksOpen}
-                aria-label={`Task del progetto: ${openTasks} aperti${late ? `, ${project.overdueTaskCount} scaduti` : ''}`}
-                title="Task del progetto"
+                aria-label={`Task ${isProject ? 'del progetto' : 'di Da smistare'}: ${openTasks} aperti${late ? `, ${overdue} scaduti` : ''}`}
+                title={isProject ? 'Task del progetto' : 'Task di Da smistare'}
                 onClick={() => setTasksOpen(!tasksOpen)}
               >
                 <Icon name={late ? 'assignment_late' : 'assignment'} size={18} />
@@ -318,7 +321,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
           )}
         </div>
       </section>
-      {isProject && tasksOpen && <TasksSidebar projectId={projectKey} onClose={() => setTasksOpen(false)} />}
+      {hasTasks && tasksOpen && <TasksSidebar projectId={projectKey} onClose={() => setTasksOpen(false)} />}
       </div>
 
     </div>

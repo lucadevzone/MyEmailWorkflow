@@ -101,6 +101,28 @@ const mail = (id: string, subject: string, body: string, opts: { date?: string; 
     ),
   });
 
+describe('task di Da smistare', () => {
+  it('Da smistare ha la sua lista; i task seguono la conversazione quando si sposta; News senza task', async () => {
+    const inbox = () => s.tasks.forProject(null).filter((t) => t.status === 'open').map((t) => t.title);
+    s.tasks.create({ projectId: null, title: 'Rinnovare SPID', dueDate: '2020-01-01' });
+    const r = await mail('spid', 'Scadenza PosteID', 'Il servizio scade il 15/12');
+    const reply = s.tasks.remindReply(r.conversationId);
+    expect(reply.projectId).toBeNull();
+    expect(inbox()).toEqual(['Rinnovare SPID', reply.title]);
+    expect(new ConversationService(s.db).counts()).toMatchObject({ inboxOpenTasks: 2, inboxOverdueTasks: 1 });
+    expect(titles()).toEqual([]);
+
+    s.actions.move(r.conversationId, projectId);
+    expect(inbox()).toEqual(['Rinnovare SPID']);
+    expect(titles()).toEqual([reply.title]);
+    s.actions.move(r.conversationId, null);
+    expect(inbox()).toEqual(['Rinnovare SPID', reply.title]);
+
+    const n = await mail('promo', 'Saldi', 'sconti', { noise: true });
+    expect(() => s.tasks.remindReply(n.conversationId)).toThrow('News');
+  });
+});
+
 describe('fusione di progetti', () => {
   it('sposta conversazioni, task in coda, note e risorse; il sorgente sparisce', async () => {
     const projects = new ProjectService(s.db);
@@ -162,14 +184,19 @@ describe('task suggeriti', () => {
     expect(conv.list({ view: 'project', projectId })[0]!.taskCount).toBe(1);
   });
 
-  it('da Da smistare serve il progetto, e la conversazione lo segue', async () => {
+  it('da Da smistare il task resta in Da smistare; scegliendo un progetto la conversazione lo segue', async () => {
     llm = () => ({ task: [{ titolo: 'Preparare il preventivo', scadenza: null }] });
-    const r = await mail('a', 'Domanda', 'Mi prepari il preventivo?');
+    const a = await mail('a', 'Domanda', 'Mi prepari il preventivo?');
     await s.jobs.drain();
-    const sug = new ConversationService(s.db).list({ view: 'inbox' })[0]!.suggestions.find((x) => x.kind === 'task' && !x.payload.reply)!;
-    expect(() => s.suggestions.accept(sug.id)).toThrow('Scegli il progetto');
-    s.suggestions.accept(sug.id, { projectId });
-    expect(s.db.select().from(conversations).where(eq(conversations.id, r.conversationId)).get()!.projectId).toBe(projectId);
+    const sugOf = (id: string) => new ConversationService(s.db).list({ view: 'inbox' }).find((c) => c.id === id)!.suggestions.find((x) => x.kind === 'task' && !x.payload.reply)!;
+    s.suggestions.accept(sugOf(a.conversationId).id);
+    expect(s.tasks.forProject(null).map((t) => t.title)).toEqual(['Preparare il preventivo']);
+    expect(s.db.select().from(conversations).where(eq(conversations.id, a.conversationId)).get()!.projectId).toBeNull();
+
+    const b = await mail('b', 'Altra domanda', 'Mi prepari il preventivo?');
+    await s.jobs.drain();
+    s.suggestions.accept(sugOf(b.conversationId).id, { projectId });
+    expect(s.db.select().from(conversations).where(eq(conversations.id, b.conversationId)).get()!.projectId).toBe(projectId);
     expect(titles()).toEqual(['Preparare il preventivo']);
   });
 

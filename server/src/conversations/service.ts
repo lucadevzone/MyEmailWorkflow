@@ -8,6 +8,7 @@ import type {
   PersonRef,
   SuggestionDto,
   TaskSuggestionDto,
+  UnreadCountsDto,
 } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
 import {
@@ -250,18 +251,19 @@ export class ConversationService {
   }
 
   /** Task suggeriti e non ancora accettati nelle conversazioni attive del progetto, dal più recente. */
-  projectTaskSuggestions(projectId: string): TaskSuggestionDto[] {
+  projectTaskSuggestions(projectId: string | null): TaskSuggestionDto[] {
     const rows = this.db.$client
       .prepare(
         `select s.id, s.kind, s.confidence, s.payload, s.created_at as createdAt, c.id as conversationId, coalesce(c.summary, c.subject) as conversationTitle
            from suggestions s
            join conversations c on c.id = s.subject_id
           where s.subject_type = 'conversation' and s.kind = 'task' and s.status = 'pending'
-            and c.project_id = ? and c.deleted_at is null and c.trashed_at is null and c.archived_at is null
+            and ${projectId ? 'c.project_id = ?' : 'c.project_id is null and c.is_noise = 0 and c.is_spam = 0'}
+            and c.deleted_at is null and c.trashed_at is null and c.archived_at is null
           order by s.created_at desc
           limit 20`,
       )
-      .all(projectId) as (Omit<TaskSuggestionDto, 'payload'> & { payload: string })[];
+      .all(...(projectId ? [projectId] : [])) as (Omit<TaskSuggestionDto, 'payload'> & { payload: string })[];
     return rows.map((r) => ({ ...r, payload: JSON.parse(r.payload) }));
   }
 
@@ -276,7 +278,7 @@ export class ConversationService {
   }
 
   /** Messaggi non letti: Da smistare, Rumore e totale fuori dal rumore (Da smistare + progetti attivi). */
-  counts(): { inbox: number; noise: number; spam: number; inboxUnread: number; noiseUnread: number; totalUnread: number } {
+  counts(): UnreadCountsDto {
     const row = this.db
       .select({
         inbox: sql<number>`coalesce(sum(case when ${conversations.isNoise} = 0 then 1 else 0 end), 0)`,
@@ -318,7 +320,21 @@ export class ConversationService {
       inboxUnread: unread?.inbox ?? 0,
       noiseUnread: unread?.noise ?? 0,
       totalUnread: unread?.total ?? 0,
+      ...this.inboxTaskCounts(),
     };
+  }
+
+  /** Task aperti senza progetto (Da smistare) e quanti hanno la scadenza passata. */
+  private inboxTaskCounts(): { inboxOpenTasks: number; inboxOverdueTasks: number } {
+    const d = new Date();
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const r = this.db.$client
+      .prepare(
+        `select count(*) as open, coalesce(sum(case when due_date is not null and due_date < ? then 1 else 0 end), 0) as overdue
+           from tasks where project_id is null and status = 'open' and deleted_at is null`,
+      )
+      .get(today) as { open: number; overdue: number };
+    return { inboxOpenTasks: r.open, inboxOverdueTasks: r.overdue };
   }
 
   /** Una conversazione come riga della lista (anche archiviata), per mostrarla dove non è stata ancora caricata. */

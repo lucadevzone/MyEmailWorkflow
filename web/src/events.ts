@@ -53,6 +53,7 @@ export function useServerEvents() {
       } else if (event.type === 'tasks') {
         inv(['tasks']);
         inv(['projects']); // badge dei task nella barra
+        inv(['counts']); // task di Da smistare
       }
     };
     return () => {
