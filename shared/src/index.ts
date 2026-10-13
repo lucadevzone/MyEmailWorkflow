@@ -423,6 +423,8 @@ export interface ProjectDto {
   categoryId: string | null;
   archived: boolean;
   conversationCount: number;
+  /** Conversazioni archiviate del progetto (per la conferma di rimozione). */
+  archivedConversationCount: number;
   /** Messaggi non letti nelle conversazioni attive del progetto. */
   unreadCount: number;
   /** Task aperti, e quanti hanno la scadenza già passata. */

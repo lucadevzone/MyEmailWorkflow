@@ -10,6 +10,7 @@ import { ingestMessage, updateFlags } from '../src/ingest/ingest.ts';
 import { ConversationService } from '../src/conversations/service.ts';
 import { ProjectService } from '../src/projects/service.ts';
 import { conversations, messages } from '../src/db/schema.ts';
+import { buildApp } from '../src/app.ts';
 import type { MailProviderClient } from '../src/mail/provider.ts';
 
 // ─── Server di posta e SMTP finti ────────────────────────────────────────────
@@ -116,6 +117,31 @@ describe('progetti e spostamenti', () => {
     const reply = await incoming('<2@x>', 2, { gmThreadId: 'T' });
     expect(reply.conversationId).toBe(conversationId);
     expect(conv().list({ view: 'project', projectId })[0]!.messageCount).toBe(2);
+  });
+
+  it('rimuovendo un progetto le conversazioni tornano in Da smistare; con "archivia tutto" le aperte vengono archiviate', async () => {
+    const app = buildApp({ ...s, port: 4310 });
+    const headers = { host: '127.0.0.1:4310', 'x-mmw': '1', 'content-type': 'application/json' };
+    const projects = new ProjectService(s.db);
+    const a = (await incoming('<1@x>', 1)).conversationId;
+    const b = (await incoming('<2@x>', 2)).conversationId;
+    s.actions.move(a, projectId);
+    s.actions.move(b, projectId);
+    s.actions.archive(b);
+    expect(projects.get(projectId)).toMatchObject({ conversationCount: 1, archivedConversationCount: 1 });
+
+    let res = await app.inject({ method: 'POST', url: `/api/projects/${projectId}/remove`, headers, payload: {} });
+    expect(res.json()).toMatchObject({ movedConversations: 2, archived: 0 });
+    expect(conv().list({ view: 'inbox' }).map((c) => c.id)).toEqual([a]);
+    expect(conv().list({ view: 'inbox', archived: true }).map((c) => c.id)).toEqual([b]);
+
+    const other = projects.create({ name: 'Altro', outgoingAccountId: accountId }).id;
+    s.actions.move(a, other);
+    res = await app.inject({ method: 'POST', url: `/api/projects/${other}/remove`, headers, payload: { archiveOpen: true } });
+    expect(res.json()).toMatchObject({ movedConversations: 1, archived: 1 });
+    expect(conv().list({ view: 'inbox' })).toHaveLength(0);
+    expect(conv().list({ view: 'inbox', archived: true }).map((c) => c.id).sort()).toEqual([a, b].sort());
+    await app.close();
   });
 });
 

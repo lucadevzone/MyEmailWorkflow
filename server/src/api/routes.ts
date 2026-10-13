@@ -423,8 +423,17 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     return res;
   });
 
-  app.post<{ Params: { id: string } }>('/api/projects/:id/remove', async (req) => {
-    const res = projectsSvc.remove(req.params.id);
+  app.post<{ Params: { id: string }; Body: { archiveOpen?: boolean } }>('/api/projects/:id/remove', async (req) => {
+    // "Archivia tutto": le conversazioni aperte vengono archiviate (anche su Gmail) prima di tornare in Da smistare.
+    let archived = 0;
+    if (req.body?.archiveOpen) {
+      const open = deps.sqlite
+        .prepare('select id from conversations where project_id = ? and deleted_at is null and trashed_at is null and archived_at is null')
+        .all(req.params.id) as { id: string }[];
+      for (const c of open) deps.actions.archive(c.id);
+      archived = open.length;
+    }
+    const res = { ...projectsSvc.remove(req.params.id), archived };
     reclassifyInbox(deps.db);
     bus.publish({ type: 'projects' });
     bus.publish({ type: 'conversations', ids: [] });

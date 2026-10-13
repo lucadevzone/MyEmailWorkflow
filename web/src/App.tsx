@@ -4,7 +4,7 @@ import type { ProjectDto } from '@mmw/shared';
 import { useServerEvents } from './events.ts';
 import { TopBar } from './shell/TopBar.tsx';
 import { Sidebar, useSidebarState } from './shell/Sidebar.tsx';
-import { ProjectsEditor } from './shell/ProjectsEditor.tsx';
+import { ManageSidebar } from './shell/ManageSidebar.tsx';
 import { paths, projectKeyOf, SYSTEM_INBOX } from './shell/paths.ts';
 import { ProjectPage } from './project/ProjectPage.tsx';
 import { ContactsPage } from './people/ContactsPage.tsx';
@@ -38,19 +38,17 @@ export function App() {
   const newProject = () => navigate(paths.newProject());
   return (
     <div className="pm-app">
-      {!welcome &&
-        (editing.mode === 'projects' ? (
-          <ProjectsEditor onDone={() => editing.setMode(null)} />
-        ) : (
-          <TopBar
-            sidebarOpen={fullPage ? floating : sidebarOpen}
-            onToggleSidebar={() => (fullPage ? setFloating(!floating) : setSidebarOpen(!sidebarOpen))}
-            showTitle={!mailMode}
-          />
-        ))}
+      {!welcome && (
+        <TopBar
+          sidebarOpen={fullPage ? floating : sidebarOpen}
+          onToggleSidebar={() => (fullPage ? setFloating(!floating) : setSidebarOpen(!sidebarOpen))}
+          showTitle={!mailMode}
+        />
+      )}
       <div className="pm-shell">
-        {!welcome && !fullPage && <Sidebar open={sidebarOpen} onNewProject={newProject} onEditProject={editProject} />}
-        {!welcome && fullPage && floating && (
+        {editing.mode === 'projects' && <ManageSidebar onDone={() => editing.setMode(null)} />}
+        {!welcome && editing.mode !== 'projects' && !fullPage && <Sidebar open={sidebarOpen} onNewProject={newProject} onEditProject={editProject} />}
+        {!welcome && editing.mode !== 'projects' && fullPage && floating && (
           <>
             <div className="pm-sidebar__scrim" onClick={() => setFloating(false)} aria-hidden="true" />
             <Sidebar open onNewProject={newProject} onEditProject={editProject} floating={() => setFloating(false)} />

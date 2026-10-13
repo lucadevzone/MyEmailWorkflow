@@ -41,11 +41,12 @@ export class ProjectService {
     const stats = this.db
       .select({
         projectId: conversations.projectId,
-        conversations: sql<number>`count(distinct ${conversations.id})`,
-        lastMessageAt: sql<number | null>`max(${conversations.lastMessageAt})`,
+        conversations: sql<number>`sum(case when ${conversations.archivedAt} is null then 1 else 0 end)`,
+        archived: sql<number>`sum(case when ${conversations.archivedAt} is not null then 1 else 0 end)`,
+        lastMessageAt: sql<number | null>`max(case when ${conversations.archivedAt} is null then ${conversations.lastMessageAt} end)`,
       })
       .from(conversations)
-      .where(and(isNull(conversations.deletedAt), isNull(conversations.trashedAt), isNull(conversations.archivedAt)))
+      .where(and(isNull(conversations.deletedAt), isNull(conversations.trashedAt)))
       .groupBy(conversations.projectId)
       .all();
     const unread = this.db
@@ -91,6 +92,7 @@ export class ProjectService {
       categoryId: r.categoryId,
       archived: r.archived,
       conversationCount: statsBy.get(r.id)?.conversations ?? 0,
+      archivedConversationCount: statsBy.get(r.id)?.archived ?? 0,
       unreadCount: unreadBy.get(r.id) ?? 0,
       openTaskCount: tasksBy.get(r.id)?.open ?? 0,
       overdueTaskCount: tasksBy.get(r.id)?.overdue ?? 0,

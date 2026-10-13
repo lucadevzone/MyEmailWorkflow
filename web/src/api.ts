@@ -204,7 +204,8 @@ export const api = {
   createCategory: (name: string) => request<ProjectCategoryDto>('POST', '/api/categories', { name }),
   updateCategory: (id: string, patch: { name?: string; collapsed?: boolean }) => request<ProjectCategoryDto>('PATCH', `/api/categories/${id}`, patch),
   deleteCategory: (id: string) => request<void>('DELETE', `/api/categories/${id}`),
-  removeProject: (id: string) => request<{ movedConversations: number }>('POST', `/api/projects/${id}/remove`),
+  removeProject: (id: string, archiveOpen = false) =>
+    request<{ movedConversations: number; archived: number }>('POST', `/api/projects/${id}/remove`, { archiveOpen }),
   mergeProject: (id: string, intoId: string) => request<{ movedConversations: number }>('POST', `/api/projects/${id}/merge`, { intoId }),
   reorderProjectMembers: (projectId: string, keys: string[]) => request<{ ok: true }>('PUT', `/api/projects/${projectId}/members/order`, { keys }),
   projectMembers: (projectId: string) => request<ProjectMembersDto>('GET', `/api/projects/${projectId}/members`),

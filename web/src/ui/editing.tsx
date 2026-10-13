@@ -19,8 +19,9 @@ export function EditingDimmer() {
       <div className="pm-dimmer__card">
         <div style={{ fontWeight: 600 }}>Modalità gestione</div>
         <p>
-          Trascina dalla maniglia per riordinare; il segno meno rimuove la voce. Per le persone e i gruppi significa toglierli da
-          questo progetto, non eliminare il contatto. Da smistare, News e Tutti sono fissi. Le modifiche si applicano con Fine.
+          Trascina dalla maniglia per riordinare i progetti o spostarli in un'altra categoria; anche le categorie si trascinano.
+          La × su un progetto rimanda le sue conversazioni in Da smistare; su una categoria lascia i suoi progetti in «Senza
+          categoria». Da smistare, News e Spam sono fissi. Le modifiche si applicano con Fine.
         </p>
       </div>
       <div className="pm-dimmer__ghost" aria-hidden="true" />

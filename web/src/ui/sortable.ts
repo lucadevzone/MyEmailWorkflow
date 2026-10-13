@@ -5,7 +5,7 @@ import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
  * attenua e una linea sull'elemento sotto il puntatore indica dove verrà lasciato. Sulla maniglia a
  * fuoco Alt+←/→ (asse x) o Alt+↑/↓ (asse y) spostano l'elemento.
  */
-export function useSortable(ids: string[], onReorder: (ids: string[]) => void, axis: 'x' | 'y') {
+export function useSortable(ids: string[], onReorder: (ids: string[], moved: string) => void, axis: 'x' | 'y') {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<{ id: string; after: boolean } | null>(null);
   const grabbed = useRef<string | null>(null);
@@ -21,7 +21,7 @@ export function useSortable(ids: string[], onReorder: (ids: string[]) => void, a
       const rest = ids.filter((x) => x !== dragging);
       const i = rest.indexOf(over.id);
       rest.splice(over.after ? i + 1 : i, 0, dragging);
-      if (rest.join() !== ids.join()) onReorder(rest);
+      if (rest.join() !== ids.join()) onReorder(rest, dragging);
     }
     reset();
   };
@@ -56,6 +56,7 @@ export function useSortable(ids: string[], onReorder: (ids: string[]) => void, a
   };
 
   const gripProps = (id: string) => ({
+    'data-sort-grip': id,
     onPointerDown: () => (grabbed.current = id),
     onKeyDown: (e: KeyboardEvent) => {
       if (!e.altKey) return;
@@ -69,7 +70,9 @@ export function useSortable(ids: string[], onReorder: (ids: string[]) => void, a
       const next = [...ids];
       next.splice(i, 1);
       next.splice(j, 0, id);
-      onReorder(next);
+      onReorder(next, id);
+      // Spostando i nodi la maniglia perde il fuoco: lo si rimette, per poter premere ancora.
+      requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-sort-grip="${CSS.escape(id)}"]`)?.focus());
     },
   });
 
