@@ -2,7 +2,11 @@
   display: flex; align-items: center; gap: var(--s-2); padding: 0 var(--s-4);
   min-height: var(--topbar-h); background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap;
 }
-.pm-topbar__sep { width: 1px; height: 24px; background: var(--border); margin: 0 var(--s-1); flex: none; }
+.pm-topbar__sep { width: 1px; height: 22px; background: var(--border); margin: 0 8px 0 6px; flex: none; }
+.pm-topbar__title {
+  margin: 0; min-width: 0; font-size: 17px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .pm-topbar__tabs { display: flex; align-items: center; gap: 2px; flex: 1 1 auto; flex-wrap: wrap; min-width: 0; }
 .pm-topbar__tabsep { width: 1px; height: 20px; background: var(--border); margin: 0 6px; flex: none; }
 .pm-topbar__tools { display: flex; align-items: center; gap: var(--s-1); }
@@ -28,12 +32,8 @@
 /* Telefono: una sola riga, tab scorrevoli in orizzontale */
 @media (max-width: 640px) {
   .pm-topbar { flex-wrap: nowrap; gap: 2px; padding: 0 6px; }
-  .pm-topbar > .pm-topbar__sep { display: none; }
-  .pm-topbar__tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .pm-topbar__tabs::-webkit-scrollbar { display: none; }
-  .pm-tab { padding: 0 10px; }
   .pm-topbar__tools { gap: 0; }
-  .pm-topbar--searching .pm-topbar__tabs { display: none; }
+  .pm-topbar--searching .pm-topbar__tools { display: none; }
   .pm-searchwrap { flex: 1 1 auto; }
   .pm-results { width: calc(100vw - 12px); left: -6px; }
 }

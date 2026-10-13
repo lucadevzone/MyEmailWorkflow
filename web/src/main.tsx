@@ -16,6 +16,7 @@ import './styles/base.css';
 import './styles/components/app.css';
 import './styles/components/topbar.css';
 import './styles/components/statusbar.css';
+import './styles/components/sidebar.css';
 import './styles/components/buttons.css';
 import './styles/components/people.css';
 import './styles/components/project.css';

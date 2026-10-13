@@ -1,16 +1,25 @@
-.pm-statusbar {
-  display: flex; align-items: center; justify-content: flex-end; gap: 18px; padding: 0 16px; flex: none;
-  height: var(--statusbar-h); background: var(--surface); border-top: 1px solid var(--border);
-  font-size: var(--fs-md); color: var(--ink-2);
+/* Indicatore Stato (in alto a destra) e il suo pannello: sostituiscono la barra di stato. */
+.pm-statusmenu { position: relative; }
+.pm-statusbtn {
+  display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; margin-left: 4px;
+  border: 1px solid var(--border-control); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font: inherit; cursor: pointer;
 }
-.pm-status { display: flex; align-items: center; gap: 6px; }
-.pm-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--online); }
-.pm-status--off::before { background: var(--danger); }
-.pm-status__detail { color: var(--ink-muted); }
+.pm-statusbtn:hover, .pm-statusbtn[aria-expanded="true"] { background: var(--surface-muted); }
+.pm-dot--ok { background: var(--online); }
+.pm-dot--warn { background: #D98A1E; }
+.pm-dot--off { background: var(--danger); }
+.pm-popover.pm-statuspanel { position: absolute; right: 0; top: calc(100% + 8px); width: 400px; padding: 0; gap: 0; overflow: hidden; }
+.pm-statuspanel__title { font-weight: 600; padding: 14px 16px 10px; border-bottom: 1px solid var(--border-subtle); }
+.pm-statuspanel__row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); color: var(--ink-2); }
+.pm-statuspanel__text { flex: 1; min-width: 0; }
+.pm-statuspanel__name { font-weight: 500; color: var(--ink); }
+.pm-statuspanel__sub { font-size: var(--fs-sm); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-statuspanel__legend { display: flex; flex-wrap: wrap; gap: 14px; padding: 10px 16px; background: var(--surface-muted); font-size: var(--fs-sm); color: var(--ink-muted); }
+.pm-statuspanel__legend > span { display: inline-flex; align-items: center; gap: 6px; }
 
-/* O3 · Pannello Attività, sopra la barra di stato */
+/* O3 · Pannello Attività, aperto dal pannello Stato (sotto la barra superiore) */
 .pm-activities {
-  position: fixed; right: 16px; bottom: calc(var(--statusbar-h) + 8px); z-index: 50; width: min(520px, calc(100vw - 32px));
+  position: fixed; right: 16px; top: calc(var(--topbar-h) + 8px); z-index: 50; width: min(520px, calc(100vw - 32px));
   max-height: min(70vh, 640px); display: flex; flex-direction: column; background: var(--surface);
   border: 1px solid var(--border-control); border-radius: var(--r-2xl); box-shadow: var(--shadow-pop); overflow: hidden;
 }
@@ -30,6 +39,3 @@
 .pm-activity__status--running { background: var(--accent-soft); color: var(--accent); }
 .pm-activity__status--failed { background: #FBE9EC; color: var(--danger); }
 .pm-activity__status--done { background: var(--task-bg); color: var(--task-heading); }
-
-/* Analisi in background: pausa / ripresa */
-.pm-analysis--paused { border-color: #E8C9A0; background: #FDF6EC; color: #8A5A1A; }

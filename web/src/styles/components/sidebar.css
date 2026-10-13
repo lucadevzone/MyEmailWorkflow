@@ -1,0 +1,61 @@
+/* Barra laterale dei progetti (UI v2) */
+.pm-sidebar {
+  flex: none; width: var(--sidebar-w); display: flex; flex-direction: column; min-height: 0;
+  background: var(--surface); border-right: 1px solid var(--border);
+}
+.pm-sidebar__head { display: flex; align-items: center; gap: 2px; height: 56px; padding: 0 8px 0 16px; flex: none; }
+.pm-sidebar__label { font-size: var(--fs-xs); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-label); }
+.pm-sidebar__body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 16px; display: flex; flex-direction: column; gap: 2px; }
+.pm-sidebar__rule { display: block; height: 1px; background: var(--border); margin: 8px 8px; flex: none; }
+.pm-sidebar__item {
+  display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 0 10px; border-radius: var(--r-lg);
+  color: var(--ink); text-decoration: none; flex: none;
+}
+.pm-sidebar__item--indent { padding-left: 22px; }
+.pm-sidebar__item:hover { background: var(--surface-chip); }
+.pm-sidebar__item[aria-current="page"] { background: var(--surface); box-shadow: 0 0 0 1px var(--border), var(--shadow-sm); font-weight: 600; }
+.pm-sidebar__item > svg { color: var(--ink-2); }
+.pm-sidebar__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-sidebar__tasks { display: inline-flex; color: var(--task-heading); flex: none; }
+.pm-sidebar__tasks--late { color: var(--danger); }
+.pm-sidebar__group { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.pm-sidebar__cat {
+  display: flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 0; background: transparent;
+  border-radius: var(--r-md); color: var(--ink-label); font: inherit; text-align: left; cursor: pointer;
+}
+.pm-sidebar__cat:hover { background: var(--surface-chip); }
+.pm-sidebar__cat--static { cursor: default; padding-left: 10px; }
+.pm-sidebar__cat--static:hover { background: transparent; }
+.pm-sidebar__catname { flex: 1; min-width: 0; font-size: var(--fs-xs); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-sidebar__empty { padding: 4px 22px 6px; font-size: var(--fs-sm); color: var(--ink-muted); }
+.pm-badge {
+  flex: none; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: var(--r-pill);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; font-size: var(--fs-sm); font-weight: 600;
+}
+.pm-badge--muted { background: var(--surface-track); color: var(--ink-2); }
+
+/* Chiusa: colonna con le iniziali */
+.pm-sidebar--closed { width: var(--sidebar-closed-w); align-items: center; padding: 12px 0; gap: 8px; overflow-y: auto; }
+.pm-sidebar--closed .pm-sidebar__rule { width: 32px; margin: 4px 0; }
+.pm-sidebar__mini {
+  position: relative; width: 38px; height: 38px; flex: none; border-radius: var(--r-lg); display: flex; align-items: center; justify-content: center;
+  background: var(--surface-chip); color: var(--ink-2); font-size: var(--fs-sm); font-weight: 600; text-decoration: none;
+}
+.pm-sidebar__mini--icon { background: transparent; }
+.pm-sidebar__mini:hover { background: var(--surface-track); }
+.pm-sidebar__mini[aria-current="page"] { background: var(--ink); color: #fff; }
+.pm-sidebar__minibadge {
+  position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box;
+  border-radius: var(--r-pill); border: 2px solid var(--surface); background: var(--accent); color: #fff;
+  font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.pm-sidebar__minibadge--muted { background: var(--surface-track); color: var(--ink-2); }
+
+/* Sopra il contenuto, nelle viste a tutta pagina */
+.pm-sidebar--floating { position: absolute; left: 0; top: 0; bottom: 0; z-index: 40; box-shadow: var(--shadow-pop); }
+.pm-sidebar__scrim { position: absolute; inset: 0; z-index: 39; background: rgba(27, 26, 23, .12); }
+
+@media (max-width: 640px) {
+  .pm-sidebar:not(.pm-sidebar--floating):not(.pm-sidebar--closed) { position: absolute; left: 0; top: 0; bottom: 0; z-index: 40; box-shadow: var(--shadow-pop); }
+}

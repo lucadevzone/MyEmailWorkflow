@@ -86,7 +86,8 @@
 
   /* Layout */
   --topbar-h: 56px;
-  --statusbar-h: 40px;
+  --sidebar-w: 250px;
+  --sidebar-closed-w: 64px;
   --rail-w: 84px;
   --tasks-w: 330px;
   --assistant-w: 400px;

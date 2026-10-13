@@ -1,2 +1,5 @@
 .pm-app { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
 .pm-content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.pm-shell { flex: 1; min-height: 0; display: flex; position: relative; }
+.pm-shell > .pm-content { flex: 1; min-width: 0; }
+.pm-spacer { flex: 1; }
