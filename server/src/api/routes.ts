@@ -22,7 +22,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import type { BlobStore } from '../store/blobs.ts';
 import type { SyncManager } from '../sync/manager.ts';
 import { bus } from '../events/bus.ts';
-import { ProjectError, ProjectService, projectInputSchema, projectPatchSchema } from '../projects/service.ts';
+import { categoryInputSchema, categoryPatchSchema, layoutSchema, ProjectError, ProjectService, projectInputSchema, projectPatchSchema } from '../projects/service.ts';
 import { ActivityError, type ActivityService } from '../activities/service.ts';
 import type { ActivityRunner } from '../activities/runner.ts';
 import { ActionError, composeSchema, type MailActions } from '../actions/mail-actions.ts';
@@ -384,6 +384,35 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     projectsSvc.reorder(ids as string[]);
     bus.publish({ type: 'projects' });
     return { ok: true };
+  });
+
+  app.put('/api/projects/layout', async (req) => {
+    projectsSvc.saveLayout(parse(layoutSchema, req.body));
+    bus.publish({ type: 'projects' });
+    return { ok: true };
+  });
+
+  // ─── Categorie dei progetti ────────────────────────────────────────────────
+
+  app.get('/api/categories', async () => projectsSvc.categories());
+
+  app.post('/api/categories', async (req, reply) => {
+    const c = projectsSvc.createCategory(parse(categoryInputSchema, req.body));
+    bus.publish({ type: 'projects' });
+    return reply.code(201).send(c);
+  });
+
+  app.patch<{ Params: { id: string } }>('/api/categories/:id', async (req, reply) => {
+    const c = projectsSvc.updateCategory(req.params.id, parse(categoryPatchSchema, req.body));
+    if (!c) return reply.code(404).send({ error: 'Categoria non trovata' });
+    bus.publish({ type: 'projects' });
+    return c;
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/categories/:id', async (req, reply) => {
+    projectsSvc.deleteCategory(req.params.id);
+    bus.publish({ type: 'projects' });
+    return reply.code(204).send();
   });
 
   app.post<{ Params: { id: string }; Body: { intoId?: string } }>('/api/projects/:id/merge', async (req) => {

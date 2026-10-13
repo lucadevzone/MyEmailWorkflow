@@ -419,6 +419,8 @@ export interface ProjectDto {
   /** Firma delle mail del progetto (null = nessuna). */
   signatureId: string | null;
   color: string | null;
+  /** Categoria nella barra laterale (null = "Senza categoria"). */
+  categoryId: string | null;
   archived: boolean;
   conversationCount: number;
   /** Messaggi non letti nelle conversazioni attive del progetto. */
@@ -435,6 +437,23 @@ export interface ProjectInput {
   outgoingAccountId: string;
   signatureId?: string | null;
   color?: string | null;
+  categoryId?: string | null;
+}
+
+/** Categoria della barra dei progetti, nell'ordine scelto dall'utente. */
+export interface ProjectCategoryDto {
+  id: string;
+  name: string;
+  collapsed: boolean;
+}
+
+/**
+ * Disposizione della barra laterale salvata dalla modalità Gestione: ordine delle categorie e, per ogni
+ * progetto in ordine, la sua categoria (null = Senza categoria).
+ */
+export interface ProjectLayoutInput {
+  categories: string[];
+  projects: { id: string; categoryId: string | null }[];
 }
 
 // ─── Coda attività ───────────────────────────────────────────────────────────

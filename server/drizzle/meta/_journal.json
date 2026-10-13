@@ -141,6 +141,13 @@
       "when": 1791812312824,
       "tag": "0019_job_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1791900562958,
+      "tag": "0020_project_categories",
+      "breakpoints": true
     }
   ]
 }

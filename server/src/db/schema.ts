@@ -78,6 +78,17 @@ export const syncState = sqliteTable(
 
 // ─── Progetti e conversazioni ────────────────────────────────────────────────
 
+/** Categorie della barra dei progetti (Personale, Lavoro…): servono solo a ordinare. */
+export const projectCategories = sqliteTable('project_categories', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  /** Ordine nella barra (indice frazionario). */
+  rank: text('rank'),
+  /** Chiusa nella barra laterale: i suoi progetti non si vedono, gli indicatori salgono sulla riga. */
+  collapsed: integer('collapsed', { mode: 'boolean' }).notNull().default(false),
+  ...meta(),
+});
+
 export const projects = sqliteTable('projects', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
@@ -89,6 +100,8 @@ export const projects = sqliteTable('projects', {
   signatureId: text('signature_id'),
   /** Ordine nella barra dei progetti (indice frazionario); NULL = in fondo, per nome. */
   rank: text('rank'),
+  /** NULL = "Senza categoria". */
+  categoryId: text('category_id').references(() => projectCategories.id),
   ...meta(),
 });
 

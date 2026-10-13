@@ -1,8 +1,8 @@
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import type { ProjectDto } from '@mmw/shared';
+import type { ProjectCategoryDto, ProjectDto, ProjectLayoutInput } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
-import { accounts, conversations, drafts, messages, notes, projectContacts, projectGroups, projects, resources, suggestions, tasks } from '../db/schema.ts';
+import { accounts, conversations, projectCategories, drafts, messages, notes, projectContacts, projectGroups, projects, resources, suggestions, tasks } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
 import { rankBetween } from '../lib/rank.ts';
 
@@ -12,6 +12,14 @@ export const projectInputSchema = z.object({
   outgoingAccountId: z.string().min(1, "Serve un account d'uscita"),
   signatureId: z.string().nullable().optional(),
   color: z.string().nullable().optional(),
+  categoryId: z.string().nullable().optional(),
+});
+
+export const categoryInputSchema = z.object({ name: z.string().trim().min(1, 'Il nome è obbligatorio') });
+export const categoryPatchSchema = categoryInputSchema.partial().extend({ collapsed: z.boolean().optional() });
+export const layoutSchema = z.object({
+  categories: z.array(z.string()),
+  projects: z.array(z.object({ id: z.string(), categoryId: z.string().nullable() })),
 });
 
 export const projectPatchSchema = projectInputSchema.partial().extend({ archived: z.boolean().optional() });
@@ -80,6 +88,7 @@ export class ProjectService {
       outgoingAccountId: r.outgoingAccountId,
       signatureId: r.signatureId,
       color: r.color,
+      categoryId: r.categoryId,
       archived: r.archived,
       conversationCount: statsBy.get(r.id)?.conversations ?? 0,
       unreadCount: unreadBy.get(r.id) ?? 0,
@@ -95,6 +104,7 @@ export class ProjectService {
 
   create(input: z.infer<typeof projectInputSchema>): ProjectDto {
     this.assertAccount(input.outgoingAccountId);
+    if (input.categoryId) this.assertCategory(input.categoryId);
     const t = now();
     const id = newId();
     this.db
@@ -106,6 +116,7 @@ export class ProjectService {
         outgoingAccountId: input.outgoingAccountId,
         signatureId: input.signatureId ?? null,
         color: input.color ?? null,
+        categoryId: input.categoryId ?? null,
         createdAt: t,
         updatedAt: t,
       })
@@ -115,6 +126,7 @@ export class ProjectService {
 
   update(id: string, patch: z.infer<typeof projectPatchSchema>): ProjectDto | undefined {
     if (patch.outgoingAccountId) this.assertAccount(patch.outgoingAccountId);
+    if (patch.categoryId) this.assertCategory(patch.categoryId);
     const res = this.db
       .update(projects)
       .set({ ...patch, updatedAt: now() })
@@ -134,6 +146,77 @@ export class ProjectService {
         prev = rank;
       }
     });
+  }
+
+  // ─── Categorie ───────────────────────────────────────────────────────────
+
+  categories(): ProjectCategoryDto[] {
+    return this.db
+      .select({ id: projectCategories.id, name: projectCategories.name, collapsed: projectCategories.collapsed })
+      .from(projectCategories)
+      .where(isNull(projectCategories.deletedAt))
+      .orderBy(sql`${projectCategories.rank} is null`, asc(projectCategories.rank), asc(projectCategories.name))
+      .all();
+  }
+
+  /** Nuova categoria, in fondo all'elenco. */
+  createCategory(input: z.infer<typeof categoryInputSchema>): ProjectCategoryDto {
+    const last = this.db
+      .select({ rank: projectCategories.rank })
+      .from(projectCategories)
+      .where(isNull(projectCategories.deletedAt))
+      .orderBy(sql`${projectCategories.rank} desc`)
+      .limit(1)
+      .get();
+    const t = now();
+    const id = newId();
+    this.db.insert(projectCategories).values({ id, name: input.name, rank: rankBetween(last?.rank ?? null, null), createdAt: t, updatedAt: t }).run();
+    return this.categories().find((c) => c.id === id)!;
+  }
+
+  updateCategory(id: string, patch: z.infer<typeof categoryPatchSchema>): ProjectCategoryDto | undefined {
+    const res = this.db
+      .update(projectCategories)
+      .set({ ...patch, updatedAt: now() })
+      .where(and(eq(projectCategories.id, id), isNull(projectCategories.deletedAt)))
+      .run();
+    return res.changes ? this.categories().find((c) => c.id === id) : undefined;
+  }
+
+  /** Eliminata la categoria, i suoi progetti finiscono in "Senza categoria". */
+  deleteCategory(id: string) {
+    const t = now();
+    this.db.transaction((tx) => {
+      tx.update(projects).set({ categoryId: null, updatedAt: t }).where(eq(projects.categoryId, id)).run();
+      tx.update(projectCategories).set({ deletedAt: t, updatedAt: t }).where(eq(projectCategories.id, id)).run();
+    });
+  }
+
+  /** Disposizione decisa nella modalità Gestione: ordine delle categorie, ordine e categoria dei progetti. */
+  saveLayout(layout: ProjectLayoutInput) {
+    const known = new Set(this.categories().map((c) => c.id));
+    for (const p of layout.projects) if (p.categoryId && !known.has(p.categoryId)) throw new ProjectError('Categoria non trovata');
+    const t = now();
+    this.db.transaction((tx) => {
+      let prev: string | null = null;
+      for (const id of layout.categories) {
+        if (!known.has(id)) continue;
+        const rank = rankBetween(prev, null);
+        tx.update(projectCategories).set({ rank, updatedAt: t }).where(eq(projectCategories.id, id)).run();
+        prev = rank;
+      }
+      prev = null;
+      for (const p of layout.projects) {
+        const rank = rankBetween(prev, null);
+        tx.update(projects).set({ rank, categoryId: p.categoryId, updatedAt: t }).where(eq(projects.id, p.id)).run();
+        prev = rank;
+      }
+    });
+  }
+
+  private assertCategory(id: string) {
+    const c = this.db.select({ id: projectCategories.id }).from(projectCategories).where(and(eq(projectCategories.id, id), isNull(projectCategories.deletedAt))).get();
+    if (!c) throw new ProjectError('Categoria non trovata');
   }
 
   /**
