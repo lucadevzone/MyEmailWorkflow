@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Bookmark, Ellipsis, MailCheck, Send, Signature, X } from 'lucide-react';
@@ -32,6 +32,8 @@ const writeFocus = (k: string, id: string | null) => {
     else localStorage.removeItem(focusKey(k));
   } catch {}
 };
+/** Posizione nella lista per progetto e vista: aprendo una mail la lista lascia il posto alla vista Email. */
+const savedScroll = new Map<string, number>();
 const TASKS_KEY = 'mmw.tasks.open';
 const readTasksOpen = () => {
   try {
@@ -183,15 +185,27 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
         ? (counts?.spam ?? items.length)
         : (counts?.noise ?? items.length);
 
+  // Prima di lasciare la lista per la vista Email se ne ricorda la posizione (il ritorno riparte da lì).
+  const listEl = useRef<HTMLDivElement | null>(null);
+  const scrollKey = `${projectKey}:${view}`;
+  const rememberScroll = () => {
+    if (listEl.current) savedScroll.set(scrollKey, listEl.current.scrollTop);
+  };
   const pane: PaneAction = useMemo(
     () => ({
-      openMessage: (cid, mid) => navigate(paths.message(projectKey, cid, mid)),
-      compose: (request) => navigate(composeTarget(projectKey, request), { state: { seed: seedOf(request) } }),
+      openMessage: (cid, mid) => {
+        rememberScroll();
+        navigate(paths.message(projectKey, cid, mid));
+      },
+      compose: (request) => {
+        rememberScroll();
+        navigate(composeTarget(projectKey, request), { state: { seed: seedOf(request) } });
+      },
       openNote: () => {},
       openTasks: () => {},
       close: () => {},
     }),
-    [navigate, projectKey],
+    [navigate, projectKey, scrollKey], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const markAllRead = async () => {
@@ -209,6 +223,14 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
   const outgoing = project ? accounts.find((a) => a.id === project.outgoingAccountId) : undefined;
   const { data: signatures = [] } = useQuery({ queryKey: ['signatures'], queryFn: api.signatures, enabled: !!project });
   const signature = project?.signatureId ? signatures.find((s) => s.id === project.signatureId) : undefined;
+
+  // Tornando dalla vista Email la lista riprende dal punto in cui era.
+  const mailOpen = !!(messageId || draftId);
+  useLayoutEffect(() => {
+    if (mailOpen) return;
+    const y = savedScroll.get(scrollKey);
+    if (listEl.current && y) listEl.current.scrollTop = y;
+  }, [mailOpen, scrollKey]);
 
   // S2/S3: il carosello prende il posto della lista; la conversazione resta in focus al ritorno.
   if (messageId || draftId) {
@@ -317,7 +339,11 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
             )}
           </div>
         </div>
-        <div className={`pm-convstack${selected.length ? ' pm-convstack--selecting' : ''}`}>
+        <div
+          ref={listEl}
+          className={`pm-convstack${selected.length ? ' pm-convstack--selecting' : ''}`}
+          onScroll={(e) => savedScroll.set(scrollKey, e.currentTarget.scrollTop)}
+        >
           {pinned && (
             <div className={`pm-selrow${selected.includes(pinned.id) ? ' is-selected' : ''}`}>
             {selectBox(pinned)}
