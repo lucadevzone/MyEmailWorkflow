@@ -148,6 +148,13 @@
       "when": 1791900562958,
       "tag": "0020_project_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1791910443466,
+      "tag": "0021_slim_indexes",
+      "breakpoints": true
     }
   ]
 }

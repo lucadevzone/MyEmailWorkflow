@@ -18,6 +18,12 @@ import type { FetchedMessage, FlagUpdate, MailProviderClient, MailboxState } fro
 import { describeImapError } from '../accounts/service.ts';
 
 const BACKFILL_BATCH = 50;
+/**
+ * Tra una mail importata e l'altra si cede il turno: il server fa una cosa alla volta e senza pause
+ * l'importazione terrebbe ferme le richieste dell'interfaccia. Lo storico non ha fretta: pausa più lunga.
+ */
+const yieldTurn = (ms = 0) => new Promise<void>((r) => (ms ? setTimeout(r, ms) : setImmediate(r)));
+const BACKFILL_PAUSE_MS = 20;
 const MAX_BACKOFF_MS = 5 * 60_000;
 
 export interface AccountSyncDeps {
@@ -194,7 +200,7 @@ export class AccountSync {
       return;
     }
     const batch = older.slice(-BACKFILL_BATCH);
-    await this.ingestAll(provider.fetchUids(batch));
+    await this.ingestAll(provider.fetchUids(batch), undefined, BACKFILL_PAUSE_MS);
     const newLowest = batch[0]!;
     this.saveRow({ lowestUid: newLowest, backfillDone: older.length <= BACKFILL_BATCH });
     this.flushEvents();
@@ -202,13 +208,14 @@ export class AccountSync {
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
-  private async ingestAll(source: AsyncIterable<FetchedMessage>, filter?: (m: FetchedMessage) => boolean) {
+  private async ingestAll(source: AsyncIterable<FetchedMessage>, filter?: (m: FetchedMessage) => boolean, pauseMs = 0) {
     for await (const m of source) {
       if (this.stopped) return;
       if (filter && !filter(m)) continue;
       const res = await ingestMessage(this.deps.ctx, this.account, { ...m, mailbox: this.status.mailbox });
       this.touched.add(res.conversationId);
       if (res.created) this.status.imported++;
+      await yieldTurn(pauseMs);
     }
   }
 

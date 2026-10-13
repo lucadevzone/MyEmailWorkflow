@@ -191,6 +191,14 @@ export const messages = sqliteTable(
     index('messages_rfc_id').on(t.rfcMessageId),
     uniqueIndex('messages_account_gm_msgid').on(t.accountId, t.gmMsgid),
     index('messages_account_mailbox_uid').on(t.accountId, t.mailbox, t.uid),
+    // Indici "snelli": la tabella è grande (contiene il testo delle mail) e contare scorrendola tutta
+    // costa secondi. Questi contengono solo le informazioni chiave delle righe che servono.
+    // Non letti per progetto e per vista (barra laterale, contatori).
+    index('messages_unread').on(t.conversationId).where(sql`seen = 0 and direction = 'in' and deleted_at is null`),
+    // Conversazioni con messaggi importanti (vista Importanti e suo conteggio).
+    index('messages_important').on(t.conversationId).where(sql`important = 1 and deleted_at is null`),
+    // Da messaggio a conversazione e data senza leggere la riga intera (rubrica, persone).
+    index('messages_slim').on(t.id, t.conversationId, t.date).where(sql`deleted_at is null`),
   ],
 );
 
