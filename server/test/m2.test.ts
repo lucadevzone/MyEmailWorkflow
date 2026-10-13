@@ -145,6 +145,27 @@ describe('progetti e spostamenti', () => {
   });
 });
 
+describe('unione di conversazioni scelte', () => {
+  it('unisce messaggi e task nella conversazione nata per prima; solo nello stesso progetto', async () => {
+    const a = (await incoming('<a@x>', 1, { subject: 'Riunione WP5' })).conversationId;
+    const b = (await incoming('<b@x>', 2, { subject: 'Agenda WP5' })).conversationId;
+    const c = (await incoming('<c@x>', 3, { subject: 'Altro' })).conversationId;
+    s.tasks.create({ projectId: null, title: 'Preparare le slide', conversationId: b });
+    s.actions.archive(b);
+    s.actions.move(c, projectId);
+    expect(() => s.actions.merge([a])).toThrow('almeno due');
+    expect(() => s.actions.merge([a, c])).toThrow('stesso progetto');
+
+    const r = s.actions.merge([b, a]);
+    expect(r.conversationId).toBe(a);
+    const merged = conv().get(a)!;
+    expect(merged.messages).toHaveLength(2);
+    expect(merged.archived).toBe(false); // una era aperta
+    expect(s.tasks.forConversation(a).map((t) => t.title)).toEqual(['Preparare le slide']);
+    expect(conv().item(b)).toBeUndefined();
+  });
+});
+
 describe('importanti e ricerca persone', () => {
   it('la vista Importanti mostra attive e archiviate con un messaggio importante; la ricerca trova ogni indirizzo visto', async () => {
     const a = await incoming('<1@x>', 1, { from: 'Studio Barone <info@studio.it>' });

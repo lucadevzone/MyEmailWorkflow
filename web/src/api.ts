@@ -140,6 +140,7 @@ export const api = {
   deleteSenderRule: (id: string) => request<void>('DELETE', `/api/sender-rules/${id}`),
   relatedForMove: (id: string, projectId: string) => request<RelatedMoveDto>('GET', `/api/conversations/${id}/related?projectId=${encodeURIComponent(projectId)}`),
   relatedForArchive: (id: string) => request<RelatedMoveDto>('GET', `/api/conversations/${id}/related?mode=archive`),
+  mergeConversations: (ids: string[]) => request<{ conversationId: string }>('POST', '/api/conversations/merge', { ids }),
   archiveMany: (ids: string[]) => request<{ archived: number; activityIds: string[] }>('POST', '/api/conversations/archive-many', { ids }),
   moveMany: (ids: string[], projectId: string) => request<{ moved: number }>('POST', '/api/conversations/move-many', { ids, projectId }),
   move: (id: string, projectId: string | null) =>

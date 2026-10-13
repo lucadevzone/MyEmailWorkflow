@@ -108,3 +108,17 @@
 
 /* Sintesi su richiesta */
 .pm-summary__gen { margin-top: 8px; align-self: flex-start; }
+
+/* Selezione multipla: casella in una colonna fuori dalla conversazione, barra delle azioni cumulative */
+.pm-selrow { display: flex; align-items: flex-start; gap: 8px; }
+.pm-selrow > :last-child { flex: 1; min-width: 0; }
+.pm-selbox { flex: none; width: 20px; height: 52px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.pm-selbox input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--accent); opacity: .35; transition: opacity .12s; }
+.pm-selrow:hover .pm-selbox input, .pm-selbox input:focus-visible, .pm-selbox input:checked, .pm-convstack--selecting .pm-selbox input { opacity: 1; }
+.pm-selrow.is-selected > .pm-crow, .pm-selrow.is-selected > .pm-conv { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.pm-selrow.is-selected > .pm-crow { background: var(--accent-soft); }
+.pm-bulkbar {
+  display: flex; align-items: center; gap: 6px; flex: none; min-height: 48px; padding: 4px 16px 4px 10px; flex-wrap: wrap;
+  background: var(--accent-soft); border-bottom: 1px solid var(--border);
+}
+.pm-bulkbar__count { font-weight: 600; margin-right: 6px; }

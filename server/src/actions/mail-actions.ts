@@ -8,7 +8,7 @@ import { COMPOSE_FONTS, COMPOSE_FONT_SIZES, type AccountDto, type SettingsDto } 
 import type { BlobStore } from '../store/blobs.ts';
 import type Database from 'better-sqlite3';
 import type { Db } from '../db/client.ts';
-import { attachments, blobs, conversations, drafts, messageAddresses, messages, notes, projects, tasks } from '../db/schema.ts';
+import { attachments, blobs, conversations, drafts, messageAddresses, messages, notes, projects, suggestions, tasks } from '../db/schema.ts';
 import { newId, now } from '../lib/ids.ts';
 import { bus } from '../events/bus.ts';
 import { buildTree, ConversationService } from '../conversations/service.ts';
@@ -20,7 +20,7 @@ import { enqueueSummary } from '../ai/summarize.ts';
 import { clearProjectSuggestions, enqueueClassification } from '../ai/classify.ts';
 import { clearReplySuggestion, completeReplyTasks } from '../ai/extract-tasks.ts';
 import { clearActionSuggestions } from '../ai/suggest-actions.ts';
-import { PRIORITY } from '../jobs/queue.ts';
+import { enqueueJob, PRIORITY } from '../jobs/queue.ts';
 
 export const composeSchema = z
   .object({
@@ -266,6 +266,34 @@ export class MailActions {
   }
 
   /** Annulla un distacco: la conversazione staccata torna in quella d'origine. */
+  /**
+   * Unisce conversazioni scelte dall'utente (selezione multipla): devono stare nello stesso posto (stesso
+   * progetto, o tutte in Da smistare / News / Spam). Resta quella nata per prima; messaggi, task, note e risorse
+   * passano a lei. Le risposte future si agganciano ai messaggi spostati.
+   */
+  merge(ids: string[]): { conversationId: string } {
+    const { db } = this.deps;
+    const unique = [...new Set(ids)];
+    if (unique.length < 2) throw new ActionError('Servono almeno due conversazioni');
+    const rows = db.select().from(conversations).where(and(inArray(conversations.id, unique), isNull(conversations.deletedAt))).all();
+    if (rows.length !== unique.length) throw new ActionError('Conversazione non trovata');
+    const place = (r: (typeof rows)[number]) => (r.isSpam ? 'spam' : r.projectId ?? (r.isNoise ? 'news' : 'inbox'));
+    if (new Set(rows.map(place)).size > 1) throw new ActionError('Si uniscono solo conversazioni dello stesso progetto: sposta prima le altre');
+    const target = mergeConversations(db, unique);
+    const others = unique.filter((id) => id !== target);
+    // Suggerimenti in attesa delle conversazioni che spariscono: non valgono più.
+    db.delete(suggestions).where(and(eq(suggestions.subjectType, 'conversation'), inArray(suggestions.subjectId, others), eq(suggestions.status, 'pending'))).run();
+    // Basta una aperta perché l'unione resti aperta.
+    if (rows.some((r) => !r.archivedAt)) db.update(conversations).set({ archivedAt: null }).where(eq(conversations.id, target)).run();
+    // Sintesi rifatta subito (azione dell'utente: anche con l'analisi in pausa).
+    db.update(conversations).set({ summaryUpdatedAt: null }).where(eq(conversations.id, target)).run();
+    enqueueJob(db, 'summarize', { conversationId: target }, PRIORITY.focus + 3);
+    bus.publish({ type: 'conversations', ids: unique });
+    bus.publish({ type: 'projects' });
+    bus.publish({ type: 'tasks' });
+    return { conversationId: target };
+  }
+
   rejoin(conversationId: string): { conversationId: string } {
     const { db } = this.deps;
     const c = db.select().from(conversations).where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))).get();

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Bookmark, Ellipsis, MailCheck, Send, Signature, X } from 'lucide-react';
-import type { ConversationQuery, ProjectDto } from '@mmw/shared';
+import type { ConversationListItem, ConversationQuery, ProjectDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { Icon } from '../ui/Icon.tsx';
@@ -15,6 +15,7 @@ import { paths, SYSTEM_INBOX, SYSTEM_NEWS, SYSTEM_SPAM } from '../shell/paths.ts
 import { ConversationItem } from './ConversationItem.tsx';
 import { TasksSidebar } from './TasksSidebar.tsx';
 import { NewMailMenu } from './NewMailMenu.tsx';
+import { BulkBar } from './BulkBar.tsx';
 
 const PAGE = 50;
 const focusKey = (projectKey: string) => `mmw.focus.${projectKey}`;
@@ -99,6 +100,44 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
     getNextPageParam: (last) => (last.length < PAGE ? undefined : last[last.length - 1]!.sortAt),
   });
   const items = list.data?.pages.flat() ?? [];
+
+  // Selezione multipla (caselle a sinistra delle righe): azioni cumulative nella barra sotto l'intestazione.
+  // Maiusc+clic seleziona l'intervallo dall'ultima spuntata. Esc deseleziona. Cambiando vista si azzera.
+  const [selected, setSelected] = useState<string[]>([]);
+  const lastPicked = useRef<string | null>(null);
+  useEffect(() => setSelected([]), [query]);
+  useEffect(() => {
+    if (!selected.length) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || document.querySelector('[role="dialog"], [role="alertdialog"], .pm-ctx-layer')) return;
+      setSelected([]);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selected.length]);
+  const toggleSelect = (id: string, range: boolean) => {
+    const on = !selected.includes(id);
+    const ids = items.map((c) => c.id);
+    const from = lastPicked.current ? ids.indexOf(lastPicked.current) : -1;
+    const to = ids.indexOf(id);
+    const span = range && from >= 0 && to >= 0 ? ids.slice(Math.min(from, to), Math.max(from, to) + 1) : [id];
+    lastPicked.current = id;
+    setSelected(on ? [...new Set([...selected, ...span])] : selected.filter((x) => !span.includes(x)));
+  };
+  const selectBox = (c: ConversationListItem) => (
+    <label className="pm-selbox" title="Seleziona (Maiusc+clic per un intervallo)">
+      <input
+        type="checkbox"
+        checked={selected.includes(c.id)}
+        aria-label={`Seleziona «${c.summary ?? c.subject ?? 'conversazione'}»`}
+        onClick={(e) => {
+          e.preventDefault();
+          toggleSelect(c.id, e.shiftKey);
+        }}
+        onChange={() => {}}
+      />
+    </label>
+  );
 
   // Il focus si ricorda per progetto: tornando sulla tab si ritrova (§2.3, regola 1).
   useEffect(() => {
@@ -264,8 +303,21 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
             )}
           </div>
         </div>
-        <div className="pm-convstack">
+        {selected.length > 0 && (
+          <BulkBar
+            ids={selected}
+            projectKey={projectKey}
+            archivedView={archived}
+            total={items.length}
+            onSelectAll={() => setSelected(items.map((c) => c.id))}
+            onClear={() => setSelected([])}
+            onMerged={(id) => focus(id)}
+          />
+        )}
+        <div className={`pm-convstack${selected.length ? ' pm-convstack--selecting' : ''}`}>
           {pinned && (
+            <div className={`pm-selrow${selected.includes(pinned.id) ? ' is-selected' : ''}`}>
+            {selectBox(pinned)}
             <ConversationItem
               key={`pinned-${pinned.id}`}
               c={pinned}
@@ -278,6 +330,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
                 onCompose: (r) => pane.compose({ conversationId: r.replyTo ? pinned.id : null, ...r }),
               }}
             />
+            </div>
           )}
           {/* Account collegato ma ancora nessun progetto: lo smistamento non ha dove proporre. */}
           {projectKey === SYSTEM_INBOX && !archived && projectsLoaded && !projects.some((p) => !p.archived) && (
@@ -301,8 +354,9 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
             </div>
           )}
           {items.map((c) => (
+            <div key={c.id} className={`pm-selrow${selected.includes(c.id) ? ' is-selected' : ''}`}>
+            {selectBox(c)}
             <ConversationItem
-              key={c.id}
               c={c}
               focused={c.id === conversationId}
               selectedMessageId={c.id === conversationId ? messageId : null}
@@ -313,6 +367,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
                 onCompose: (r) => pane.compose({ conversationId: r.replyTo ? c.id : null, ...r }),
               }}
             />
+            </div>
           ))}
           {list.hasNextPage && (
             <button type="button" className="pm-btn pm-btn--secondary" style={{ alignSelf: 'center' }} onClick={() => list.fetchNextPage()} disabled={list.isFetchingNextPage}>

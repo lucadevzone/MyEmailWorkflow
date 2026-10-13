@@ -360,6 +360,10 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     if (!projectId) throw new ActionError('Serve il progetto');
     return relatedFor(deps.sqlite, req.params.id, { mode: 'move', projectId });
   });
+  app.post<{ Body: { ids?: unknown } }>('/api/conversations/merge', async (req) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((x): x is string => typeof x === 'string').slice(0, 50) : [];
+    return deps.actions.merge(ids);
+  });
   app.post<{ Body: { ids?: string[] } }>('/api/conversations/archive-many', async (req) => {
     const ids = (req.body?.ids ?? []).filter((x) => typeof x === 'string').slice(0, 500);
     const activityIds = ids.flatMap((id) => deps.actions.archive(id));
