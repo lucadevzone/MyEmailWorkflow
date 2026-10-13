@@ -121,7 +121,7 @@ export function StatusMenu() {
                 <div className="pm-statuspanel__name">Analisi</div>
                 <div className="pm-statuspanel__sub" title={jobsDetail ? `In coda: ${jobsDetail}` : undefined}>
                   {jobs.paused
-                    ? `in pausa · ${jobs.pending.toLocaleString('it-IT')} in attesa`
+                    ? `in pausa · ${jobs.pending.toLocaleString('it-IT')} in attesa · posta nuova e conversazioni aperte sì`
                     : jobs.pending || jobs.running
                       ? `${jobs.running ? `ora: ${KIND[jobs.running] ?? jobs.running} · ` : ''}${jobs.pending.toLocaleString('it-IT')} in coda`
                       : 'niente da analizzare'}

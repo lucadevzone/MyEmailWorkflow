@@ -7,9 +7,16 @@ import { newId, now } from '../lib/ids.ts';
 
 /**
  * idle = quando non c'è altro (es. indicizzare lo storico, dopo l'analisi della posta recente);
- * focus = la conversazione che l'utente ha aperto: passa davanti a tutto e gira anche con l'analisi in pausa.
+ * fresh = posta appena ricevuta (ultime 48 ore): gira anche con l'analisi in pausa;
+ * focus = la conversazione che l'utente ha aperto: passa davanti a tutto, anche in pausa.
  */
-export const PRIORITY = { idle: -10, background: 0, normal: 10, focus: 100 } as const;
+export const PRIORITY = { idle: -10, background: 0, normal: 10, fresh: 50, focus: 100 } as const;
+
+/** Da questa priorità in su i lavori girano anche con l'analisi in background in pausa. */
+export const RUNS_WHEN_PAUSED = PRIORITY.fresh;
+
+/** Posta "appena ricevuta": arrivata nelle ultime 48 ore. */
+export const FRESH_MS = 48 * 3_600_000;
 
 let notify: () => void = () => {};
 /** Il JobRunner si registra qui per essere svegliato quando arriva un lavoro. */

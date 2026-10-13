@@ -45,12 +45,12 @@ const classifyPrompt = () => prompts.filter((p) => p.includes('Progetti candidat
 const projectSugs = <T extends { kind: string }>(c: { suggestions: T[] } | undefined): T[] =>
   (c?.suggestions ?? []).filter((x) => x.kind === 'project' || x.kind === 'new_project');
 
-const mail = (o: { id: string; from: string; subject: string; body: string; extra?: string }) =>
+const mail = (o: { id: string; from: string; subject: string; body: string; extra?: string; date?: string }) =>
   ingestMessage(s, { id: accountId, email: 'me@gmail.com' }, {
     uid: uid++,
     mailbox: 'All',
     source: Buffer.from(
-      [`Message-ID: ${o.id}`, `From: ${o.from}`, 'To: me@gmail.com', `Subject: ${o.subject}`, `Date: ${new Date().toUTCString()}`, o.extra, 'Content-Type: text/plain; charset=utf-8']
+      [`Message-ID: ${o.id}`, `From: ${o.from}`, 'To: me@gmail.com', `Subject: ${o.subject}`, `Date: ${o.date ?? new Date().toUTCString()}`, o.extra, 'Content-Type: text/plain; charset=utf-8']
         .filter(Boolean)
         .join('\r\n') + `\r\n\r\n${o.body}`,
     ),
@@ -190,7 +190,9 @@ describe('progetto suggerito', () => {
 
   it('pausa dell\'analisi: i lavori restano in coda e ripartono alla ripresa', async () => {
     s.settings.update({ aiPaused: true });
-    const r = await mail({ id: '<p@x>', from: 'mario@x.it', subject: 'Spese', body: 'spese del personale PNRR' });
+    // Non appena ricevuta (quella si analizzerebbe anche in pausa): di qualche giorno fa.
+    const date = new Date(Date.now() - 5 * 86_400_000).toUTCString();
+    const r = await mail({ id: '<p@x>', from: 'mario@x.it', subject: 'Spese', body: 'spese del personale PNRR', date });
     await s.jobs.drain();
     const summaryOf = () => s.db.select().from(conversations).where(eq(conversations.id, r.conversationId)).get()!.summary;
     expect(summaryOf()).toBeNull();

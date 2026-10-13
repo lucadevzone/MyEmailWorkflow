@@ -31,7 +31,7 @@ import { enqueueEmbedding } from '../ai/embed.ts';
 import { enqueueClassification } from '../ai/classify.ts';
 import { clearReplySuggestion, completeReplyTasks, enqueueTaskExtraction } from '../ai/extract-tasks.ts';
 import { clearActionSuggestions, enqueueActionSuggestion } from '../ai/suggest-actions.ts';
-import { PRIORITY } from '../jobs/queue.ts';
+import { FRESH_MS, PRIORITY } from '../jobs/queue.ts';
 
 export interface RawFetched {
   uid: number | null;
@@ -227,15 +227,16 @@ export async function ingestMessage(
     .where(eq(conversations.id, result.conversationId))
     .get();
   if (conv && !conv.isNoise && !conv.isSpam) {
-    const priority = date > Date.now() - 30 * 86_400_000 ? PRIORITY.normal : PRIORITY.background;
+    // Appena ricevuta: analizzata subito, anche con l'analisi in pausa; poi recente; il resto in background.
+    const priority = date > Date.now() - FRESH_MS ? PRIORITY.fresh : date > Date.now() - 30 * 86_400_000 ? PRIORITY.normal : PRIORITY.background;
     enqueueEmbedding(ctx.db, result.messageId, priority);
     enqueueSummary(ctx.db, result.conversationId, priority);
     if (!conv.projectId) enqueueClassification(ctx.db, result.conversationId, priority);
     // Task suggeriti solo dalla posta in arrivo recente: dallo storico sarebbero rumore.
-    if (priority === PRIORITY.normal && direction === 'in') {
+    if (priority >= PRIORITY.normal && direction === 'in') {
       // Prima la valutazione (rispondi/archivia/rumore): se il messaggio non chiede nulla, i task si saltano.
-      enqueueActionSuggestion(ctx.db, result.messageId);
-      enqueueTaskExtraction(ctx.db, result.messageId);
+      enqueueActionSuggestion(ctx.db, result.messageId, priority);
+      enqueueTaskExtraction(ctx.db, result.messageId, priority);
     }
   }
   // Una risposta (anche da Gmail o dal telefono) chiude "rispondere" (suggerimenti e task) e le azioni proposte.

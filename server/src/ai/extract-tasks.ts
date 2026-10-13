@@ -134,9 +134,9 @@ function saveTask(db: Db, conversationId: string, payload: TaskSuggestionPayload
   return true;
 }
 
-export function enqueueTaskExtraction(db: Db, messageId: string) {
+export function enqueueTaskExtraction(db: Db, messageId: string, priority: number = PRIORITY.normal) {
   if (!messageInWindow(db, messageId)) return;
-  enqueueJob(db, 'extract_tasks', { messageId }, PRIORITY.normal);
+  enqueueJob(db, 'extract_tasks', { messageId }, priority);
 }
 
 export async function extractTasks(db: Db, messageId: string, llm: Llm) {

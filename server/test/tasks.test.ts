@@ -154,11 +154,14 @@ describe("finestra dell'analisi", () => {
 describe('conversazione aperta', () => {
   it("con l'analisi in pausa, la conversazione aperta si analizza lo stesso; le altre restano in coda", async () => {
     s.settings.update({ aiPaused: true });
-    const a = await mail('a', 'Preventivo', 'Mi mandi il preventivo?');
-    const b = await mail('b', 'Altro', 'Ciao');
+    const tenDaysAgo = new Date(Date.now() - 10 * 86_400_000).toUTCString();
+    const a = await mail('a', 'Preventivo', 'Mi mandi il preventivo?', { date: tenDaysAgo });
+    const b = await mail('b', 'Altro', 'Ciao', { date: tenDaysAgo });
+    const fresh = await mail('f', 'Appena arrivata', 'Ci vediamo domani?');
     await s.jobs.drain();
     const conv = new ConversationService(s.db);
-    expect(conv.item(a.conversationId)!.summary).toBeNull(); // in pausa non si muove nulla
+    expect(conv.item(a.conversationId)!.summary).toBeNull(); // in pausa la posta non appena ricevuta resta in coda
+    expect(conv.item(fresh.conversationId)!.summary).toBe('x'); // quella appena ricevuta si analizza subito
 
     const r = analyzeFocused(s.db, a.conversationId);
     expect(r.queued).toEqual(expect.arrayContaining(['embed', 'summarize', 'classify', 'extract_tasks']));

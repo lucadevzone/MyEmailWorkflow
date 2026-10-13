@@ -659,7 +659,7 @@ function AiModel() {
           </label>
           <label className="pm-field pm-field--check">
             <input type="checkbox" checked={settings.aiPaused} onChange={(e) => save.mutate({ aiPaused: e.target.checked })} />
-            <span>Metti in pausa l'analisi in background (sintesi, classificazione, indicizzazione); l'assistente resta attivo</span>
+            <span>Metti in pausa l'analisi in background (sintesi, classificazione, indicizzazione). Restano attivi l'assistente, la posta appena ricevuta e le conversazioni che apri</span>
           </label>
           <label className="pm-field">
             <span className="pm-muted">Tieni il modello in memoria dopo l'ultimo uso</span>
