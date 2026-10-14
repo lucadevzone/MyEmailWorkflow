@@ -83,7 +83,7 @@ interface MailProvider {
    - Non generano suggerimenti di task: un task di tre anni fa è rumore.
    - Lo storico smistato in blocco è il terreno della modalità *organizza tu*.
 3. **Incrementale**: IMAP IDLE per i nuovi messaggi, CONDSTORE/MODSEQ per i flag cambiati altrove.
-4. Le cancellazioni fatte altrove (expunge) non sono ancora riflesse: arrivano con la coda attività (M2).
+4. Le cancellazioni fatte altrove (expunge) non sono ancora riflesse (TODO).
 5. Lo stato di avanzamento per account e cartella (`uidvalidity`, `last_uid`, `oldest_synced_date`, `modseq`) vive nel DB. Il sync riprende da dove si era fermato.
 
 Il server di posta resta la **fonte di verità per i messaggi grezzi**. L'app è la fonte di verità per progetti, note, task e annotazioni, che non vengono mai scritti sul server.
@@ -239,7 +239,7 @@ La specifica grafica completa è in `ui-posta-per-progetti.md` (fornita a parte,
 ## 8. Sicurezza
 
 - Il server accetta connessioni solo su `127.0.0.1`. Contro gli attacchi da altri siti verso localhost: controllo dell'header `Host` (DNS rebinding) e header obbligatorio `X-MMW: 1` sulle richieste che modificano stato (un sito esterno non può impostarlo senza un preflight CORS, che il server non concede).
-- MVP: le credenziali stanno in `.env.local`, escluso da git. In Electron passano al Keychain di macOS (`safeStorage`).
+- Le password degli account stanno nel Portachiavi di macOS (`@napi-rs/keyring`, servizio `my-mail-workflow`); nel database c'è solo il riferimento `keychain:<id account>`. Gli account di sviluppo con `env:NOME` in `.env.local` (escluso da git) vengono spostati nel Portachiavi all'avvio. Con l'uso su più PC le password non viaggiano: si reinseriscono su ogni Mac.
 - L'HTML delle email viene renderizzato in un iframe sandbox. Le immagini remote sono bloccate di default per evitare i tracking pixel.
 
 ## 9. Roadmap
@@ -261,11 +261,13 @@ La specifica grafica completa è in `ui-posta-per-progetti.md` (fornita a parte,
   - *versione* = contenuto nuovo (sha256 diverso); lo stesso contenuto rimandato resta nella storia come "rinviato da";
   - nessun dato salvato: le versioni restano corrette con lo storico importato fuori ordine e con le unioni di conversazioni (la tabella `version_chains` resta inutilizzata, per un eventuale raggruppamento manuale).
 
-- **M2, rimandato**:
-  - spostamento di una *singola* email (con distacco in una nuova conversazione). Il threading per References la ricollegherebbe alla conversazione d'origine, quindi serve un vincolo esplicito di "separazione".
-  - HTML in composizione: per ora solo testo semplice (gli allegati in uscita ci sono, da file o da risorse del progetto).
-  - Modifica di un invio già in coda: per ora si annulla e si riscrive.
+- **Fatto dopo M2**:
+  - *Stacca* una singola email in una nuova conversazione (RF-C5): la separazione è un vincolo esplicito (`split_from_id`), così il threading per References non la ricollega; tra conversazioni della stessa famiglia la posta successiva va a quella del genitore più vicino.
+  - Composizione in HTML o testo (TipTap), con firme per progetto; allegati in uscita da file o da risorse del progetto.
+  - *Blocca invio* (RF-I3): un invio ancora in coda torna in bozza per essere modificato.
+- **Ancora rimandato** (vedi la sezione TODO del README):
   - "Ripristina dall'archivio" è solo locale: su Gmail resta archiviata finché non arriva posta nuova.
+  - Le cancellazioni fatte altrove (expunge) non sono riflesse nell'app.
 - **Letto su Gmail**: aprire una conversazione la segna letta subito nell'app; l'attività `set_flags` va al batch. Finché è in coda, il sync non sovrascrive lo stato locale con quello del server.
 - **Risposta da Da smistare**: si sceglie il progetto nel compositore e la conversazione viene spostata lì all'invio.
 - **Importante** (segnalibro) = flag `\\Flagged` di Gmail ("Speciali"), sincronizzato come il letto.
