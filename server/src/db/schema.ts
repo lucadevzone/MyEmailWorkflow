@@ -156,6 +156,11 @@ export const messages = sqliteTable(
     accountId: text('account_id').notNull().references(() => accounts.id),
     direction: text('direction', { enum: ['in', 'out'] }).notNull(),
     rfcMessageId: text('rfc_message_id'),
+    /**
+     * Chiave uguale su tutti i PC (uso alternato, docs/03): account + Message-ID, o l'identificativo
+     * Gmail se manca. I dati personali scambiati tra PC si riferiscono ai messaggi con questa chiave.
+     */
+    stableKey: text('stable_key'),
     inReplyTo: text('in_reply_to'),
     /** JSON: string[] dell'header References. */
     references: text('references'),
@@ -189,6 +194,7 @@ export const messages = sqliteTable(
   (t) => [
     index('messages_conversation_date').on(t.conversationId, t.date),
     index('messages_rfc_id').on(t.rfcMessageId),
+    index('messages_stable_key').on(t.stableKey),
     uniqueIndex('messages_account_gm_msgid').on(t.accountId, t.gmMsgid),
     index('messages_account_mailbox_uid').on(t.accountId, t.mailbox, t.uid),
     // Indici "snelli": la tabella è grande (contiene il testo delle mail) e contare scorrendola tutta

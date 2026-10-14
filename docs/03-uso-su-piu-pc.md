@@ -1,6 +1,6 @@
 # Uso alternato su più PC — progetto
 
-Versione 0.1 — 2026-10-14 · stato: **da approvare**
+Versione 0.3 — 2026-10-14 · stato: **approvato** · fase 1 fatta
 
 ## 1. Obiettivo e vincoli
 
@@ -25,15 +25,17 @@ Il database locale resta **uno solo, come oggi**: le query dell'app non cambiano
 
 Il problema: oggi ogni PC dà ai messaggi e alle conversazioni codici interni propri. Per riapplicare "questa conversazione sta nel progetto X" o "questo task nasce da quel messaggio" sull'altro PC servono identità valide su entrambi.
 
-- **Messaggio**: chiave stabile = account + identificativo Gmail del messaggio (`X-GM-MSGID`); per IMAP generico, il `Message-ID`. Nel file di scambio i riferimenti ai messaggi (task, note, annotazioni, bozze) usano questa chiave e all'import vengono tradotti nei codici locali.
+- **Messaggio**: chiave stabile = account + `Message-ID` (presente anche nei messaggi scritti nell'app prima dell'invio, quindi non cambia quando arriva la copia da Gmail); se manca, l'identificativo Gmail. Colonna `messages.stable_key`; nel file viaggia un'impronta di 16 caratteri. Nel file di scambio i riferimenti ai messaggi (task, note, annotazioni, bozze) usano questa chiave e all'import vengono tradotti nei codici locali.
 - **Conversazione**: il codice della conversazione diventa **comune**. Il file di scambio contiene la mappa "messaggio → conversazione" (per tutti i messaggi, circa 62.000 righe, 1-2 MB compressi). All'import il PC adotta quei codici: raggruppa i propri messaggi come indicato dalla mappa, così unioni e distacchi fatti sull'altro PC valgono anche qui, e i task restano agganciati alla conversazione giusta.
 - **Posta non ancora importata** sul PC che prende (per esempio la prima volta, o dopo giorni): la mappa resta conservata in locale, e quando il messaggio arriva da Gmail finisce subito nella conversazione e nel progetto giusti.
 - **Progetti, task, note, contatti…** hanno già codici unici (ULID) creati su un PC e conservati: viaggiano così come sono.
 
 ## 4. La cartella condivisa
 
+La cartella si sceglie nella procedura di benvenuto e si può cambiare dalle Impostazioni: cambiandola, l'app copia il suo contenuto (semaforo, dati personali, file) nella nuova posizione.
+
 ```
-Google Drive/My Drive/MyEmailWorkflow/
+<cartella scelta>/
   semaforo.json          chi ha il database, segnale di vita, versione corrente
   personale-<versione>.sqlite.gz   dati personali alla versione indicata (si tengono le ultime 3)
   files/<sha>            file caricati da te (risorse, foto)
@@ -74,7 +76,7 @@ Google Drive/My Drive/MyEmailWorkflow/
 ## 7. Impostazioni
 
 Comuni (viaggiano): tutto ciò che oggi sta in Impostazioni tranne quanto sotto.
-Solo di questo PC: nome del PC, cartella condivisa, modello di Ollama e permanenza in memoria, pausa dell'analisi, minuti di inattività prima del rilascio.
+Solo di questo PC: nome del PC, cartella condivisa (scelta nel benvenuto, modificabile con copia del contenuto), modello di Ollama e permanenza in memoria, pausa dell'analisi, minuti di inattività prima del rilascio.
 
 **Account**: viaggiano senza password. Sul secondo PC, alla prima presa, l'app chiede la password per le app di Gmail e la mette nel Portachiavi di quel Mac.
 
@@ -86,7 +88,7 @@ Procedura di benvenuto → *Ho già l'app su un altro PC* → scelta della carte
 
 | | Dimensione indicativa |
 |---|---|
-| Dati personali (oggi: 41.972 conversazioni, 430 nei progetti, pochi task) | 1-3 MB compressi per consegna |
+| Dati personali (misurato il 2026-10-14: 41.974 conversazioni, 67.547 messaggi nella mappa, 430 conversazioni nei progetti) | **3 MB compressi** per consegna (esportazione 3,4 s, importazione 6 s) |
 | `semaforo.json` | < 1 KB, ogni 30 s mentre si lavora |
 | File caricati | solo quelli nuovi |
 | Posta e allegati di posta | 0 (da Gmail) |

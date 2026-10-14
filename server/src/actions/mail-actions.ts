@@ -21,6 +21,7 @@ import { clearProjectSuggestions, enqueueClassification } from '../ai/classify.t
 import { clearReplySuggestion, completeReplyTasks } from '../ai/extract-tasks.ts';
 import { clearActionSuggestions } from '../ai/suggest-actions.ts';
 import { enqueueJob, PRIORITY } from '../jobs/queue.ts';
+import { stableKeyOf } from '../sharing/keys.ts';
 
 export const composeSchema = z
   .object({
@@ -425,6 +426,7 @@ export class MailActions {
           accountId: account.id,
           direction: 'out',
           rfcMessageId,
+          stableKey: stableKeyOf(account.id, rfcMessageId, null, messageId),
           inReplyTo: parent?.rfcMessageId ?? null,
           references: JSON.stringify(references),
           fromAddress: account.email.toLowerCase(),

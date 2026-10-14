@@ -32,6 +32,7 @@ import { enqueueClassification } from '../ai/classify.ts';
 import { clearReplySuggestion, completeReplyTasks, enqueueTaskExtraction } from '../ai/extract-tasks.ts';
 import { clearActionSuggestions, enqueueActionSuggestion } from '../ai/suggest-actions.ts';
 import { FRESH_MS, PRIORITY } from '../jobs/queue.ts';
+import { stableKeyOf } from '../sharing/keys.ts';
 
 export interface RawFetched {
   uid: number | null;
@@ -143,6 +144,7 @@ export async function ingestMessage(
         accountId: account.id,
         direction,
         rfcMessageId,
+        stableKey: stableKeyOf(account.id, rfcMessageId, raw.gmMsgid ?? null, messageId),
         inReplyTo,
         references: JSON.stringify(references),
         gmMsgid: raw.gmMsgid ?? null,
