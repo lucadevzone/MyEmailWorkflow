@@ -33,6 +33,12 @@ Client di posta personale **organizzato per progetti**, non per cartelle. Ogni c
 - Ricerca unica su conversazioni, persone, allegati, task e note, anche **per significato**; l'assistente risponde citando le mail.
 - L'analisi in background si fa solo sulla **posta recente** (90 giorni, impostabile fino a "tutta"); per la posta più vecchia la sintesi si genera su richiesta. Può essere messa **in pausa**: la posta appena ricevuta e le conversazioni che apri si analizzano comunque.
 
+**Uso su più PC**
+- Si può usare l'app su più Mac, **uno alla volta**, attraverso una cartella condivisa (per esempio su Google Drive).
+- Viaggiano solo i **dati personali** (progetti, task, note, regole, contatti, stato delle conversazioni, coda degli invii), pochi MB compressi, più i file che hai caricato tu; la posta ogni PC la scarica da Gmail.
+- Un **semaforo** nella cartella dice chi ha il database: l'altro PC resta in sola lettura e può chiederlo con *Usa qui*. Il database si consegna e si libera alla chiusura, dopo 10 minuti senza uso (impostabile) e a richiesta; ogni 10 minuti c'è una consegna di sicurezza.
+- Sul secondo Mac la procedura di benvenuto ha la scelta *Ho già l'app su un altro PC*: cartella condivisa, dati personali, password degli account; la posta che arriva da Gmail va subito nel progetto giusto.
+
 ## Requisiti
 
 - **macOS** (le password degli account sono salvate nel Portachiavi)
@@ -56,6 +62,8 @@ Il backend ascolta su `127.0.0.1:4310`, l'interfaccia su <http://localhost:5173>
 
 Le migrazioni del database si applicano da sole all'avvio del server.
 
+**Su un secondo Mac**: sul primo scegli la cartella condivisa in Impostazioni → *Uso su più PC*; sul secondo, al primo avvio, scegli *Ho già l'app su un altro PC* e la stessa cartella (vedi [docs/03-uso-su-piu-pc.md](docs/03-uso-su-piu-pc.md)).
+
 ### Configurazione facoltativa
 
 Copia `.env.example` in `.env.local` (escluso da git) solo se vuoi cambiare i valori predefiniti:
@@ -75,6 +83,7 @@ Copia `.env.example` in `.env.local` (escluso da git) solo se vuoi cambiare i va
 - Tutto resta in locale: posta, progetti, task, note e analisi stanno in `data/` (database SQLite + allegati deduplicati), esclusa da git.
 - L'LLM gira in Ollama sullo stesso computer.
 - La posta resta anche sul server di posta: cancellando `data/` viene reimportata.
+- Con l'uso su più PC, nella cartella condivisa finiscono il semaforo, le ultime tre versioni dei dati personali (`personale-<n>.sqlite`) e i file caricati da te (`files/`). **Per ora il file dei dati personali non è cifrato** (vedi TODO): contiene anche sintesi, bozze, invii in coda e chat con l'assistente.
 - `pnpm reset:all` (con il server fermo) riporta l'app allo stato iniziale spostando i dati in una copia datata `data-backup-…` (anch'essa esclusa da git); con `--delete` li cancella insieme alle password nel Portachiavi.
 
 ## Struttura
@@ -83,7 +92,7 @@ Copia `.env.example` in `.env.local` (escluso da git) solo se vuoi cambiare i va
 server/   backend: Node + Fastify, SQLite (drizzle, FTS5, sqlite-vec), imapflow, nodemailer, Ollama
 web/      interfaccia: React 19 + Vite, TanStack Query, TipTap, CSS a componenti
 shared/   tipi condivisi (DTO dell'API)
-docs/     requisiti e system design
+docs/     requisiti, system design, uso su più PC
 data/     database e allegati (creata al primo avvio, esclusa da git)
 ```
 
@@ -102,7 +111,37 @@ data/     database e allegati (creata al primo avvio, esclusa da git)
 | `pnpm --filter @mmw/server try:summary` | stampa le sintesi che l'LLM produrrebbe, senza salvarle |
 | `pnpm --filter @mmw/server try:classify` | prova la classificazione su uno scenario sintetico in memoria |
 
+## TODO
+
+**Uso su più PC**
+- [ ] Prova reale con due Mac e la cartella vera di Google Drive (finora solo test automatici e cartelle temporanee).
+- [ ] Cifratura del file dei dati personali (AES-256, frase segreta nel Portachiavi di ogni Mac; il semaforo resta in chiaro). Da valutare se non far viaggiare sintesi e chat.
+
+**Account e accesso**
+- [ ] OAuth Google (XOAUTH2) al posto della password per le app, per una versione distribuibile; per Google Workspace un client OAuth *Internal* dell'organizzazione.
+- [ ] Account IMAP/SMTP generico anche nella procedura di benvenuto (oggi solo da Impostazioni → Account) e più provato.
+
+**Progetti**
+- [ ] Sezione *Progetti archiviati* nelle Impostazioni, con *Riattiva* ed *Elimina definitivamente* (oggi note, task e risorse di un progetto rimosso restano legati a lui, invisibili).
+
+**Sincronizzazione con Gmail**
+- [ ] *Ripristina dall'archivio* anche su Gmail (oggi è solo locale: su Gmail resta archiviata finché non arriva posta nuova).
+- [ ] Riflettere nell'app le cancellazioni fatte altrove (expunge sul server).
+
+**Assistente**
+- [ ] RF-B6: proporre un gruppo quando un insieme di destinatari ricorre spesso (priorità bassa).
+- [ ] RF-D6 v3: riconoscere le versioni di un file anche dal contenuto simile (PDF, immagini) — da progettare prima.
+
+**Prestazioni** (solo se torna la lentezza)
+- [ ] Spostare il testo delle mail (≈300 MB) fuori dalla tabella `messages`.
+- [ ] Lista dei progetti più veloce (oggi ~100 ms).
+
+**Piattaforma**
+- [ ] App desktop impacchettata (Electron o Tauri con il server come processo separato): avvio e arresto del server con l'app, scelta della cartella dei dati, moduli nativi (better-sqlite3, sqlite-vec, Portachiavi) per Intel e Apple Silicon.
+- [ ] Versione mobile (futuro).
+
 ## Documentazione
 
 - [Requisiti](docs/01-requisiti.md)
 - [System design](docs/02-system-design.md)
+- [Uso su più PC](docs/03-uso-su-piu-pc.md)
