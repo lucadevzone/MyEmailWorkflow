@@ -193,7 +193,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
   // ─── Conversazioni ─────────────────────────────────────────────────────────
 
   app.get<{
-    Querystring: { view?: string; projectId?: string; person?: string; archived?: string; important?: string; before?: string; limit?: string };
+    Querystring: { view?: string; projectId?: string; person?: string; archived?: string; important?: string; unread?: string; before?: string; limit?: string };
   }>(
     '/api/conversations',
     async (req, reply) => {
@@ -206,6 +206,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
         personAddressIds: req.query.person ? deps.people.addressIdsFor(req.query.person) : undefined,
         archived: req.query.archived === '1',
         important: req.query.important === '1',
+        unread: req.query.unread === 'only' || req.query.unread === 'exclude' ? req.query.unread : undefined,
         before: req.query.before ? Number(req.query.before) : undefined,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
       });

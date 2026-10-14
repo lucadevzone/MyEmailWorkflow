@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Bookmark, Ellipsis, FolderInput, FolderPlus, Mail, MessagesSquare, Paperclip, Reply, Sparkles, StickyNote, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Bookmark, ChevronUp, Ellipsis, FolderInput, FolderPlus, Mail, MessagesSquare, Paperclip, Reply, Sparkles, StickyNote, X } from 'lucide-react';
 import type { ConversationDetail, ConversationListItem, MessageDto, SuggestionDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { shortDate } from '../lib/format.ts';
@@ -215,6 +215,9 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
         <span className="pm-conv__more">
           <ImportantToggle c={c} large />
         </span>
+        <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Comprimi la conversazione (Esc)" title="Comprimi (Esc)" onClick={cb.onUnfocus}>
+          <Ic icon={ChevronUp} />
+        </button>
         <button
           type="button"
           className="pm-iconbtn pm-iconbtn--sm"

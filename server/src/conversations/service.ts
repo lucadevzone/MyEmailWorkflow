@@ -93,6 +93,12 @@ export class ConversationService {
         where.push(q.archived ? isNotNull(conversations.archivedAt) : isNull(conversations.archivedAt));
       }
     }
+    if (q.unread) {
+      // Messaggi in arrivo non letti (indice snello messages_unread).
+      // Indicato esplicitamente: altrimenti SQLite sceglie un indice che lo costringe a leggere tutti i messaggi.
+      const unreadIds = sql`(select conversation_id from messages indexed by messages_unread where seen = 0 and direction = 'in' and deleted_at is null)`;
+      where.push(q.unread === 'only' ? sql`${conversations.id} in ${unreadIds}` : sql`${conversations.id} not in ${unreadIds}`);
+    }
     // Ordine: ultimo messaggio, ma una conversazione appena staccata sta in cima finché non arriva altro.
     const sortAt = sql<number>`max(${conversations.lastMessageAt}, coalesce(${conversations.splitAt}, 0))`;
     if (q.before) where.push(sql`${sortAt} < ${q.before}`);

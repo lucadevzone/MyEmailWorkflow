@@ -109,14 +109,42 @@
 /* Sintesi su richiesta */
 .pm-summary__gen { margin-top: 8px; align-self: flex-start; }
 
-/* Selezione multipla: casella in una colonna fuori dalla conversazione, barra delle azioni cumulative */
-.pm-selrow { display: flex; align-items: flex-start; gap: 8px; }
+/* Lista delle conversazioni (stile Gmail): gruppi per data, ognuno un riquadro con righe contigue */
+.pm-convstack { gap: 16px; }
+.pm-cgroup { display: flex; flex-direction: column; gap: 6px; }
+.pm-cgroup__head {
+  all: unset; align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 2px 6px 2px 2px;
+  border-radius: 6px; font-size: var(--fs-md); font-weight: 600; color: var(--ink-2); cursor: pointer;
+}
+.pm-cgroup__head:hover { background: var(--surface-chip); }
+.pm-cgroup__head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pm-cgroup__count { color: var(--ink-muted); font-weight: 500; }
+.pm-clist { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+
+.pm-selrow { display: flex; align-items: center; gap: 2px; position: relative; }
 .pm-selrow > :last-child { flex: 1; min-width: 0; }
-.pm-selbox { flex: none; width: 20px; height: 52px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.pm-selbox input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--accent); opacity: .35; transition: opacity .12s; }
+.pm-clist > .pm-selrow { padding-left: 8px; border-top: 1px solid var(--border-subtle); }
+.pm-clist > .pm-selrow:first-child { border-top: 0; border-radius: 11px 11px 0 0; }
+.pm-clist > .pm-selrow:last-child { border-radius: 0 0 11px 11px; }
+.pm-clist > .pm-selrow:only-child { border-radius: 11px; }
+.pm-selrow.is-unread { background: var(--surface); }
+.pm-selrow.is-read { background: #F5F7FA; }
+.pm-selrow.is-selected { background: #E8F0FE; }
+.pm-clist > .pm-selrow:not(.is-focused):hover {
+  z-index: 1; box-shadow: inset 1px 0 0 #DADCE0, inset -1px 0 0 #DADCE0, 0 1px 2px rgba(60, 64, 67, .3), 0 1px 3px 1px rgba(60, 64, 67, .15);
+}
+/* La riga dentro il riquadro: niente bordo né fondo propri, più bassa */
+.pm-selrow .pm-crow { min-height: 40px; padding: 0 14px 0 4px; border: 0; border-radius: 0; background: transparent; }
+.pm-selrow .pm-crow:hover { border-color: transparent; }
+.pm-selrow.is-read .pm-crow__title, .pm-selrow.is-read .pm-crow__names { font-weight: 400; color: var(--ink-2); }
+.pm-selbox { flex: none; width: 24px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.pm-selbox input { width: 15px; height: 15px; margin: 0; cursor: pointer; accent-color: var(--accent); opacity: .5; transition: opacity .12s; }
 .pm-selrow:hover .pm-selbox input, .pm-selbox input:focus-visible, .pm-selbox input:checked, .pm-convstack--selecting .pm-selbox input { opacity: 1; }
-.pm-selrow.is-selected > .pm-crow, .pm-selrow.is-selected > .pm-conv { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.pm-selrow.is-selected > .pm-crow { background: var(--accent-soft); }
+/* La conversazione aperta resta una scheda in rilievo dentro il riquadro */
+.pm-clist > .pm-selrow.is-focused { align-items: flex-start; padding: 10px 10px 10px 8px; background: var(--bg); }
+.pm-selrow.is-focused .pm-selbox { height: 52px; }
+.pm-selrow--pinned { align-items: flex-start; }
+.pm-selrow--pinned .pm-selbox { height: 52px; }
 .pm-projheader { position: relative; }
 .pm-bulkbar {
   position: absolute; inset: 0; z-index: 6; display: flex; align-items: center; gap: 6px; padding: 0 16px 0 10px; overflow: hidden;

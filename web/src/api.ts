@@ -112,12 +112,14 @@ export const api = {
   syncStatus: () => request<SyncStatusDto[]>('GET', '/api/sync/status'),
   syncNow: () => request<SyncStatusDto[]>('POST', '/api/sync/now'),
   jobsStatus: () => request<JobQueueStatusDto>('GET', '/api/jobs/status'),
-  conversations: (q: ConversationQuery) => {
+  conversations: (q: ConversationQuery & { limit?: number }) => {
     const p = new URLSearchParams({ view: q.view });
     if (q.projectId) p.set('projectId', q.projectId);
     if (q.person) p.set('person', q.person);
     if (q.archived) p.set('archived', '1');
     if (q.important) p.set('important', '1');
+    if (q.unread) p.set('unread', q.unread);
+    if (q.limit) p.set('limit', String(q.limit));
     if (q.before) p.set('before', String(q.before));
     return request<ConversationListItem[]>('GET', `/api/conversations?${p}`);
   },

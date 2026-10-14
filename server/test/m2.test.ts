@@ -145,6 +145,16 @@ describe('progetti e spostamenti', () => {
   });
 });
 
+describe('gruppo Da leggere', () => {
+  it('separa le conversazioni con messaggi da leggere dalle altre', async () => {
+    const a = (await incoming('<u1@x>', 1)).conversationId;
+    const b = (await incoming('<u2@x>', 2)).conversationId;
+    s.actions.markRead(b);
+    expect(conv().list({ view: 'inbox', unread: 'only' }).map((c) => c.id)).toEqual([a]);
+    expect(conv().list({ view: 'inbox', unread: 'exclude' }).map((c) => c.id)).toEqual([b]);
+  });
+});
+
 describe('segnalibro della conversazione', () => {
   it("segna l'ultimo messaggio ricevuto; toglierlo lo toglie da tutti", async () => {
     const a = await incoming('<s1@x>', 1, { gmThreadId: 'S' });

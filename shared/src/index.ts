@@ -424,6 +424,8 @@ export interface ConversationQuery {
   archived?: boolean;
   /** Solo le conversazioni con almeno un messaggio importante (attive e archiviate). */
   important?: boolean;
+  /** Solo quelle con messaggi da leggere (gruppo "Da leggere"), oppure tutte le altre. */
+  unread?: 'only' | 'exclude';
   before?: number;
 }
 
