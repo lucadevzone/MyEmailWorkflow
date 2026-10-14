@@ -21,13 +21,15 @@ export function GroupHead({ label, count, open, onToggle }: { label: string; cou
   );
 }
 
-export function DateGroupSection({ group, query, open, onToggle, hiddenId, onItems, row }: {
+export function DateGroupSection({ group, query, open, onToggle, hiddenId, targetId, onItems, row }: {
   group: DateGroupCount;
   query: ConversationQuery;
   open: boolean;
   onToggle: () => void;
   /** Conversazione mostrata altrove (aperta mentre era da leggere): qui non si ripete. */
   hiddenId: string | null;
+  /** Conversazione arrivata da un link che sta in questo gruppo: si caricano pagine finché non compare. */
+  targetId: string | null;
   /** Le conversazioni caricate (per la selezione a intervallo e "Seleziona tutte"). */
   onItems: (key: string, items: ConversationListItem[]) => void;
   row: (c: ConversationListItem) => ReactNode;
@@ -35,12 +37,12 @@ export function DateGroupSection({ group, query, open, onToggle, hiddenId, onIte
   return (
     <section className="pm-cgroup" aria-label={group.label}>
       <GroupHead label={group.label} count={group.count} open={open} onToggle={onToggle} />
-      {open && <GroupRows group={group} query={query} hiddenId={hiddenId} onItems={onItems} row={row} />}
+      {open && <GroupRows group={group} query={query} hiddenId={hiddenId} targetId={targetId} onItems={onItems} row={row} />}
     </section>
   );
 }
 
-function GroupRows({ group, query, hiddenId, onItems, row }: Omit<Parameters<typeof DateGroupSection>[0], 'open' | 'onToggle'>) {
+function GroupRows({ group, query, hiddenId, targetId, onItems, row }: Omit<Parameters<typeof DateGroupSection>[0], 'open' | 'onToggle'>) {
   const list = useInfiniteQuery({
     queryKey: ['conversations', query, 'group', group.key, group.from],
     queryFn: ({ pageParam }) => api.conversations({ ...query, unread: 'exclude', after: group.from, before: pageParam ?? group.to ?? undefined }),
@@ -54,6 +56,12 @@ function GroupRows({ group, query, hiddenId, onItems, row }: Omit<Parameters<typ
   }, [list.data, hiddenId]); // eslint-disable-line react-hooks/exhaustive-deps
   // Chiuso il gruppo, le sue righe non contano più come caricate.
   useEffect(() => () => onItems(group.key, []), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // La conversazione cercata non è ancora tra quelle caricate: avanti con le pagine (al massimo 60).
+  useEffect(() => {
+    if (!targetId || items.some((c) => c.id === targetId)) return;
+    if (list.hasNextPage && !list.isFetchingNextPage && (list.data?.pages.length ?? 0) < 60) void list.fetchNextPage();
+  }, [targetId, list.data, list.hasNextPage, list.isFetchingNextPage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Arrivati in fondo al gruppo si carica la pagina successiva.
   const sentinel = useRef<HTMLDivElement>(null);

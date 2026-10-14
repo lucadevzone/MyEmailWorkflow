@@ -18,6 +18,7 @@ import { NewMailMenu } from './NewMailMenu.tsx';
 import { BulkBar } from './BulkBar.tsx';
 import { readOpenGroups, writeOpenGroups } from './dateGroups.ts';
 import { DateGroupSection, GroupHead } from './DateGroupSection.tsx';
+import { dateGroupOf } from '@mmw/shared';
 
 const focusKey = (projectKey: string) => `mmw.focus.${projectKey}`;
 const readFocus = (k: string) => {
@@ -142,9 +143,13 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
 
   // Gruppi aperti (ricordati nel browser, per tutte le viste): di base solo "Da leggere".
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(readOpenGroups);
-  const isOpen = (key: string) => openGroups[key] ?? key === 'unread';
+  // Gruppo aperto per mostrare la conversazione arrivata da un link (solo per questa volta, non ricordato).
+  const [revealKey, setRevealKey] = useState<string | null>(null);
+  useEffect(() => setRevealKey(null), [query]);
+  const isOpen = (key: string) => key === revealKey || (openGroups[key] ?? key === 'unread');
   const toggleGroup = (key: string) => {
     const next = { ...openGroups, [key]: !isOpen(key) };
+    if (key === revealKey) setRevealKey(null);
     setOpenGroups(next);
     writeOpenGroups(next);
   };
@@ -225,15 +230,28 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
     }
   }, [conversationId, draftId, projectKey, unreadList.isLoading, groupsQuery.isLoading, items, navigate]);
 
-  // Arrivando da un link (ricerca, contatti, task) la conversazione in focus può stare molto più in basso,
-  // o non stare in questa vista (es. archiviata): la si carica da sola e la si mostra in cima.
+  // Arrivando da un link (ricerca, contatti, task) la conversazione può stare in un gruppo chiuso: si apre
+  // quel gruppo, lo si carica fino a lei e si scorre lì. Solo se non appartiene a questa vista (es. archiviata
+  // mentre si guardano le attive) la si mostra in cima alla lista.
   const loaded = !!conversationId && items.some((c) => c.id === conversationId);
   const pinnedQuery = useQuery({
     queryKey: ['conversation-item', conversationId],
     queryFn: () => api.conversationItem(conversationId!),
     enabled: !!conversationId && !loaded,
   });
-  const pinned = conversationId && !loaded ? pinnedQuery.data : undefined;
+  const target = conversationId && !loaded ? pinnedQuery.data : undefined;
+  const targetGroup = target ? dateGroupOf(target.sortAt) : null;
+  const revealable =
+    !!target &&
+    !person &&
+    belongsHere(target) &&
+    (view !== 'important' || target.important) &&
+    !target.unreadCount &&
+    dateGroups.some((g) => g.key === targetGroup!.key && g.from === targetGroup!.from);
+  useEffect(() => {
+    if (revealable && targetGroup && !isOpen(targetGroup.key)) setRevealKey(targetGroup.key);
+  }, [revealable, targetGroup?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pinned = target && !revealable ? target : undefined;
   const found = loaded || !!pinned;
   const scrolledTo = useRef<string | null>(null);
   useEffect(() => {
@@ -242,7 +260,8 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
     const el = document.querySelector(`[data-conversation="${CSS.escape(conversationId)}"]`);
     if (!el) return;
     const r = el.getBoundingClientRect();
-    if (r.top < 0 || r.bottom > window.innerHeight) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    // Salto immediato: con una lista lunga lo scorrimento animato è lento e disorienta.
+    if (r.top < 0 || r.bottom > window.innerHeight) el.scrollIntoView({ block: 'start' });
   }, [conversationId, found]);
 
   const focus = (id: string) => navigate(paths.conversation(projectKey, id));
@@ -472,6 +491,7 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
               open={isOpen(g.key)}
               onToggle={() => toggleGroup(g.key)}
               hiddenId={sticky?.id ?? null}
+              targetId={revealable && targetGroup?.key === g.key ? conversationId : null}
               onItems={onGroupItems}
               row={row}
             />

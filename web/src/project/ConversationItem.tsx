@@ -185,6 +185,9 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
   return (
     <article ref={ref} className="pm-conv pm-conv--focused" data-conversation={c.id} {...ctx}>
       <div className="pm-conv__actions" role="toolbar" aria-label="Azioni sulla conversazione">
+        <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Comprimi la conversazione (Esc)" title="Comprimi (Esc)" onClick={cb.onUnfocus}>
+          <Ic icon={ChevronUp} />
+        </button>
         <button type="button" className="pm-btn pm-btn--primary" onClick={() => void actions.reply()}>
           <Ic icon={Reply} size={15} /> Rispondi
         </button>
@@ -215,9 +218,6 @@ export function ConversationItem({ c, focused, selectedMessageId, cb }: { c: Con
         <span className="pm-conv__more">
           <ImportantToggle c={c} large />
         </span>
-        <button type="button" className="pm-iconbtn pm-iconbtn--sm" aria-label="Comprimi la conversazione (Esc)" title="Comprimi (Esc)" onClick={cb.onUnfocus}>
-          <Ic icon={ChevronUp} />
-        </button>
         <button
           type="button"
           className="pm-iconbtn pm-iconbtn--sm"
