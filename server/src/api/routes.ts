@@ -45,6 +45,8 @@ import { TaskError, taskInputSchema, taskMoveSchema, taskPatchSchema, type TaskS
 import { applyAiWindow } from '../ai/window.ts';
 import { enqueueMissingAnalysis } from '../ai/missing.ts';
 import { analyzeFocused } from '../ai/focus.ts';
+import type { SharingService } from '../sharing/service.ts';
+import { registerSharing } from '../sharing/routes.ts';
 
 export interface RouteDeps {
   db: Db;
@@ -64,6 +66,8 @@ export interface RouteDeps {
   jobs: JobRunner;
   /** Sintesi su richiesta, fuori dalla coda. */
   summarizeNow: (conversationId: string) => Promise<void>;
+  /** Uso su più PC (assente nei test). */
+  sharing?: SharingService;
 }
 
 function parse<T>(schema: ZodType<T>, body: unknown): T {
@@ -71,6 +75,7 @@ function parse<T>(schema: ZodType<T>, body: unknown): T {
 }
 
 export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
+  if (deps.sharing) registerSharing(app, deps.sharing);
   const accountsSvc = new AccountService(deps.db);
   const settingsSvc = new SettingsService(deps.db);
   const conversationsSvc = new ConversationService(deps.db);

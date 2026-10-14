@@ -152,7 +152,48 @@ export type ServerEvent =
   | { type: 'projects' }
   | { type: 'activities' }
   | { type: 'people' }
-  | { type: 'tasks' };
+  | { type: 'tasks' }
+  | { type: 'sharing' };
+
+// ─── Uso su più PC (docs/03-uso-su-piu-pc.md) ────────────────────────────────
+
+/**
+ * disabled = nessuna cartella condivisa (si usa come sempre); holder = questo PC ha il database;
+ * waiting = in uso altrove (sola lettura); syncing = libero, ma Google Drive non ha ancora scaricato
+ * l'ultima versione consegnata.
+ */
+export type SharingState = 'disabled' | 'holder' | 'waiting' | 'syncing';
+
+export interface SharingLeaseDto {
+  holderId: string | null;
+  holderName: string | null;
+  since: number | null;
+  heartbeat: number | null;
+  version: number;
+  /** Un altro PC chiede il rilascio. */
+  releaseRequestedBy: string | null;
+}
+
+export interface SharingStatusDto {
+  state: SharingState;
+  folder: string | null;
+  machineId: string;
+  machineName: string;
+  idleReleaseMinutes: number;
+  lease: SharingLeaseDto | null;
+  /** Versione dei dati personali importata o consegnata da questo PC. */
+  localVersion: number;
+  lastDeliveryAt: number | null;
+  /** Il PC che ha il database non dà segni da troppo: si può prendere comunque. */
+  holderStale: boolean;
+  error: string | null;
+}
+
+export interface SharingFolderInput {
+  folder: string | null;
+  /** Copia il contenuto della cartella attuale nella nuova. */
+  copy?: boolean;
+}
 
 // ─── Conversazioni ───────────────────────────────────────────────────────────
 

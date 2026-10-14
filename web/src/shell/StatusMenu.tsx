@@ -10,6 +10,8 @@ import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { useSyncStatuses } from '../events.ts';
 import { ActivitiesPanel } from '../activities/ActivitiesPanel.tsx';
+import { useSharingStatus } from './Sharing.tsx';
+import { useToast } from '../ui/toast.tsx';
 
 const PHASE: Record<SyncStatusDto['phase'], string> = {
   stopped: 'fermo',
@@ -47,6 +49,17 @@ export function StatusMenu() {
   });
   const [open, setOpen] = useState(false);
   const [activitiesOpen, setActivitiesOpen] = useState(false);
+  const { data: sharing } = useSharingStatus();
+  const toast = useToast();
+  const release = async () => {
+    try {
+      await api.sharingRelease();
+      toast({ text: "Database consegnato: ora l'altro PC può prenderlo" });
+    } catch (e) {
+      toast({ text: (e as Error).message });
+    }
+    void qc.invalidateQueries({ queryKey: ['sharing'] });
+  };
   const ref = useRef<HTMLDivElement>(null);
 
   const queued = activities?.activities.filter((a) => a.status === 'pending' || a.status === 'running').length ?? 0;
@@ -114,6 +127,26 @@ export function StatusMenu() {
               </div>
             </div>
           </div>
+          {sharing && sharing.state !== 'disabled' && (
+            <div className="pm-statuspanel__row">
+              <span className={`pm-dot pm-dot--${sharing.state === 'holder' ? 'ok' : 'warn'}`} aria-hidden="true" />
+              <div className="pm-statuspanel__text">
+                <div className="pm-statuspanel__name">Uso su più PC · {sharing.machineName}</div>
+                <div className="pm-statuspanel__sub">
+                  {sharing.state === 'holder'
+                    ? `questo PC ha il database · versione ${sharing.localVersion}${sharing.lastDeliveryAt ? ` · consegnata alle ${time(sharing.lastDeliveryAt)}` : ''}`
+                    : sharing.lease?.holderName
+                      ? `in uso su ${sharing.lease.holderName} · qui sola lettura`
+                      : 'database libero'}
+                </div>
+              </div>
+              {sharing.state === 'holder' && (
+                <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" onClick={() => void release()}>
+                  Rilascia
+                </button>
+              )}
+            </div>
+          )}
           {jobs && (
             <div className="pm-statuspanel__row">
               <Ic icon={jobs.paused ? Pause : Play} size={15} />

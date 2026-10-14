@@ -6,6 +6,7 @@ import { RichEditor } from '../ui/RichEditor.tsx';
 import { api } from '../api.ts';
 import { useNavigate } from 'react-router-dom';
 import { useEscBack } from '../ui/useEscBack.ts';
+import { useToast } from '../ui/toast.tsx';
 
 /** Finestra dell'analisi con l'IA (0 = tutta la posta). */
 const AI_WINDOWS = [
@@ -28,6 +29,7 @@ export function SettingsPage() {
       <div className="pm-settings">
       <SystemStatus />
       <Accounts />
+      <MultiPc />
       <AutoSort />
       <SenderRules />
       <Compose />
@@ -360,6 +362,127 @@ function General() {
           </button>
         </div>
       </form>
+    </Section>
+  );
+}
+
+// ─── Uso su più PC ───────────────────────────────────────────────────────────
+
+/**
+ * Cartella condivisa (es. Google Drive) per usare l'app su più Mac a turno: qui il nome di questo PC, la
+ * cartella (cambiandola si può copiare il contenuto nella nuova), il rilascio dopo N minuti senza uso.
+ */
+function MultiPc() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { data: st } = useQuery({ queryKey: ['sharing'], queryFn: api.sharingStatus });
+  const { data: suggested = [] } = useQuery({ queryKey: ['sharing-folders'], queryFn: api.sharingSuggestedFolders });
+  const [name, setName] = useState<string | null>(null);
+  const [folder, setFolder] = useState<string | null>(null);
+  const [copy, setCopy] = useState(true);
+  const [busy, setBusy] = useState(false);
+  if (!st) return null;
+  const refresh = () => qc.invalidateQueries();
+  const run = async (fn: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      await refresh();
+      toast({ text: done });
+    } catch (e) {
+      toast({ text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const target = folder ?? st.folder ?? '';
+  const stateText =
+    st.state === 'disabled'
+      ? 'Non attivo: i dati stanno solo su questo PC.'
+      : st.state === 'holder'
+        ? `Questo PC ha il database (versione ${st.localVersion}${st.lastDeliveryAt ? `, consegnata alle ${new Date(st.lastDeliveryAt).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : ''}).`
+        : st.lease?.holderName
+          ? `Il database è in uso su ${st.lease.holderName}: qui sola lettura.`
+          : st.state === 'syncing'
+            ? 'In attesa che Google Drive scarichi l\'ultima versione.'
+            : 'Il database è libero.';
+  return (
+    <Section title="Uso su più PC">
+      <div className={card}>
+        <p className="pm-row__sub" style={{ margin: 0 }}>
+          Con una cartella condivisa (per esempio su Google Drive) puoi usare l'app su più Mac, uno alla volta. Viaggiano solo i dati personali
+          (progetti, task, note, regole…), pochi MB; la posta ogni PC la scarica da Gmail.
+        </p>
+        <div className="pm-settings__grid">
+          <label className="pm-field">
+            <span className="pm-muted">Nome di questo PC</span>
+            <input
+              className={input}
+              value={name ?? st.machineName}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => name !== null && name !== st.machineName && void run(() => api.sharingMachine({ name }), 'Nome salvato')}
+            />
+          </label>
+          <label className="pm-field">
+            <span className="pm-muted">Rilascia il database dopo</span>
+            <select className={input} value={st.idleReleaseMinutes} onChange={(e) => void run(() => api.sharingMachine({ idleReleaseMinutes: Number(e.target.value) }), 'Salvato')}>
+              {[5, 10, 15, 30, 60].map((m) => (
+                <option key={m} value={m}>{m} minuti senza uso</option>
+              ))}
+              <option value={0}>Mai (solo alla chiusura o a mano)</option>
+            </select>
+          </label>
+        </div>
+        <label className="pm-field">
+          <span className="pm-muted">Cartella condivisa</span>
+          <input className={input} placeholder="Nessuna" value={target} onChange={(e) => setFolder(e.target.value)} />
+        </label>
+        {suggested.length > 0 && (
+          <div className="pm-row__sub">
+            Google Drive su questo Mac:{' '}
+            {suggested.map((f) => (
+              <button key={f} type="button" className="pm-linkbtn" onClick={() => setFolder(f)}>
+                {f.replace(/^.*\/CloudStorage\//, '')}
+              </button>
+            ))}
+          </div>
+        )}
+        {st.folder && folder !== null && folder !== st.folder && (
+          <label className="pm-field pm-field--check">
+            <input type="checkbox" checked={copy} onChange={(e) => setCopy(e.target.checked)} />
+            <span>Copia nella nuova cartella il contenuto di quella attuale</span>
+          </label>
+        )}
+        <span className="pm-row__sub">
+          Se la cartella è già usata da un altro PC, prendendo il database i dati personali di questo PC vengono sostituiti da quelli consegnati là.
+        </span>
+        <div className="pm-inlineform__actions">
+          <span className="pm-muted" style={{ flex: 1 }}>{st.error ?? stateText}</span>
+          {st.folder && (
+            <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" disabled={busy} onClick={() => void run(() => api.sharingFolder({ folder: null }), 'Uso su più PC disattivato su questo PC')}>
+              Smetti di usare la cartella
+            </button>
+          )}
+          {st.state === 'holder' && (
+            <>
+              <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" disabled={busy} onClick={() => void run(api.sharingDeliver, 'Dati consegnati')}>
+                Consegna ora
+              </button>
+              <button type="button" className="pm-btn pm-btn--secondary pm-btn--sm" disabled={busy} onClick={() => void run(api.sharingRelease, 'Database rilasciato')}>
+                Rilascia
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className="pm-btn pm-btn--primary pm-btn--sm"
+            disabled={busy || !target.trim() || target === st.folder}
+            onClick={() => void run(() => api.sharingFolder({ folder: target, copy }), 'Cartella condivisa impostata').then(() => setFolder(null))}
+          >
+            Usa questa cartella
+          </button>
+        </div>
+      </div>
     </Section>
   );
 }

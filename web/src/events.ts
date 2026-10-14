@@ -50,6 +50,8 @@ export function useServerEvents() {
         inv(['people']);
         inv(['directory']);
         inv(['project-members']);
+      } else if (event.type === 'sharing') {
+        void qc.invalidateQueries({ queryKey: ['sharing'] });
       } else if (event.type === 'tasks') {
         inv(['tasks']);
         inv(['projects']); // badge dei task nella barra

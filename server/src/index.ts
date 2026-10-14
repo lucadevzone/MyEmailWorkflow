@@ -6,17 +6,53 @@ import { buildServices } from './services.ts';
 import { runRepairs } from './maintenance/repair.ts';
 import { applyAiWindow } from './ai/window.ts';
 import { enqueueMissingAnalysis } from './ai/missing.ts';
+import { SharingService, type Writers } from './sharing/service.ts';
 
 const { db, sqlite } = openDb();
 runMigrations(db);
 
 const services = buildServices(db, sqlite, config.blobDir);
-const app = buildApp({ ...services, port: config.port });
+// Processi che scrivono sul database (posta, analisi, coda attività): con la cartella condivisa (uso su più
+// PC) girano solo sul PC che ha il database.
+let firstStart = true;
+const writers: Writers = {
+  start() {
+    services.runner.start();
+    services.jobs.start();
+    // Coda allineata alla finestra dell'analisi (solo posta recente) e lavori mancanti rimessi in coda, in
+    // un'unica transazione: con migliaia di conversazioni è molto più veloce.
+    const pruned = applyAiWindow(db, sqlite, () => enqueueMissingAnalysis(db));
+    if (pruned) app.log.info(`Analisi: ${pruned} lavori sulla posta fuori dalla finestra tolti dalla coda`);
+    if (firstStart) {
+      firstStart = false;
+      // Password ancora in variabili d'ambiente (env:...): si spostano nel Portachiavi.
+      try {
+        const moved = services.accounts.migrateEnvCredentials();
+        if (moved.length) app.log.info(`Password spostate nel Portachiavi per: ${moved.join(', ')}`);
+      } catch (err) {
+        app.log.error(`Spostamento delle password nel Portachiavi non riuscito: ${(err as Error).message}`);
+      }
+      // Correzioni retroattive sulla posta già importata (una volta sola, in background).
+      void runRepairs(services, (m) => app.log.info(m)).catch((err) => app.log.error(`Manutenzione non riuscita: ${(err as Error).message}`));
+    }
+    for (const account of services.accounts.list()) services.sync.start(account);
+  },
+  async stop() {
+    services.runner.stop();
+    services.jobs.stop();
+    await services.sync.stopAll();
+  },
+};
+const sharing = new SharingService({ sqlite, dataDir: config.dataDir, writers, log: (m) => app.log.info(m) });
+const app = buildApp({ ...services, sharing, port: config.port });
 
 const shutdown = async () => {
-  services.runner.stop();
-  services.jobs.stop();
-  await services.sync.stopAll();
+  try {
+    await sharing.shutdown();
+  } catch (err) {
+    app.log.error(`Rilascio del database non riuscito: ${(err as Error).message}`);
+    await writers.stop();
+  }
   await app.close();
   sqlite.close();
   process.exit(0);
@@ -25,20 +61,4 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
 await app.listen({ host: config.host, port: config.port });
-
-services.runner.start();
-services.jobs.start();
-// Coda allineata alla finestra dell'analisi (solo posta recente) e lavori mancanti rimessi in coda, in
-// un'unica transazione: con migliaia di conversazioni è molto più veloce.
-const pruned = applyAiWindow(db, sqlite, () => enqueueMissingAnalysis(db));
-if (pruned) console.log(`Analisi: ${pruned} lavori sulla posta fuori dalla finestra tolti dalla coda`);
-// Password ancora in variabili d'ambiente (env:...): si spostano nel Portachiavi.
-try {
-  const moved = services.accounts.migrateEnvCredentials();
-  if (moved.length) app.log.info(`Password spostate nel Portachiavi per: ${moved.join(', ')}`);
-} catch (err) {
-  app.log.error(`Spostamento delle password nel Portachiavi non riuscito: ${(err as Error).message}`);
-}
-for (const account of services.accounts.list()) services.sync.start(account);
-// Correzioni retroattive sulla posta già importata (una volta sola, in background).
-void runRepairs(services, (m) => app.log.info(m)).catch((err) => app.log.error(`Manutenzione non riuscita: ${(err as Error).message}`));
+await sharing.init();

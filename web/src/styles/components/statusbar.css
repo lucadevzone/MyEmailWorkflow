@@ -39,3 +39,10 @@
 .pm-activity__status--running { background: var(--accent-soft); color: var(--accent); }
 .pm-activity__status--failed { background: #FBE9EC; color: var(--danger); }
 .pm-activity__status--done { background: var(--task-bg); color: var(--task-heading); }
+
+/* Uso su più PC: fascia sul PC che non ha il database */
+.pm-sharebar {
+  display: flex; align-items: center; gap: 10px; flex: none; min-height: 44px; padding: 4px 16px;
+  background: #FDF6EC; border-bottom: 1px solid #E8C9A0; color: #6B4A12; font-size: var(--fs-md);
+}
+.pm-sharebar__text { min-width: 0; }

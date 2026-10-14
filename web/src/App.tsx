@@ -5,6 +5,7 @@ import { useServerEvents } from './events.ts';
 import { TopBar } from './shell/TopBar.tsx';
 import { Sidebar, useSidebarState } from './shell/Sidebar.tsx';
 import { ManageSidebar } from './shell/ManageSidebar.tsx';
+import { SharingBanner, SharingPresence } from './shell/Sharing.tsx';
 import { paths, projectKeyOf, SYSTEM_INBOX } from './shell/paths.ts';
 import { ProjectPage } from './project/ProjectPage.tsx';
 import { ContactsPage } from './people/ContactsPage.tsx';
@@ -45,6 +46,8 @@ export function App() {
           showTitle={!mailMode}
         />
       )}
+      {!welcome && <SharingBanner />}
+      <SharingPresence />
       <div className="pm-shell">
         {editing.mode === 'projects' && <ManageSidebar onDone={() => editing.setMode(null)} />}
         {!welcome && editing.mode !== 'projects' && !fullPage && <Sidebar open={sidebarOpen} onNewProject={newProject} onEditProject={editProject} />}
