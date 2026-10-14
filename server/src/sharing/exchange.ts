@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import type Database from 'better-sqlite3';
 import { normalizeSubject } from '../ingest/clean-text.ts';
+import { personalBlobShas } from './files.ts';
 
 export const EXCHANGE_FORMAT = 1;
 
@@ -163,8 +164,9 @@ export function exportPersonal(sqlite: Database.Database, file: string, info: Ex
       // Contatti confermati: i loro indirizzi.
       sqlite.exec(`create table x.contact_emails as select email, contact_id, display_name from main.contact_addresses where contact_id is not null`);
       // Metadati dei file a cui i dati personali fanno riferimento (i file viaggiano a parte).
-      sqlite.exec(`create table x.blob_rows as select * from main.blobs where sha256 in (
-        select blob_sha from main.resources where blob_sha is not null union select avatar_blob_sha from main.contacts where avatar_blob_sha is not null)`);
+      sqlite.exec(`create table x.blob_rows as select * from main.blobs where 0`);
+      const insBlob = sqlite.prepare('insert into x.blob_rows select * from main.blobs where sha256 = ?');
+      for (const sha of personalBlobShas(sqlite)) insBlob.run(sha);
 
       // Coda delle attività ancora da eseguire (es. invii): con i messaggi in uscita che servono.
       sqlite.exec(`create table x.activities as select * from main.activities where status in ('pending', 'running', 'failed')`);

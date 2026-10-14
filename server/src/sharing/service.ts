@@ -14,6 +14,8 @@ import path from 'node:path';
 import type Database from 'better-sqlite3';
 import type { SharingFolderInput, SharingLeaseDto, SharingState, SharingStatusDto } from '@mmw/shared';
 import { exportPersonal, importPersonal } from './exchange.ts';
+import { downloadFiles, fetchFile, uploadFiles } from './files.ts';
+import type { BlobStore } from '../store/blobs.ts';
 import { forgetAiWindow } from '../ai/window.ts';
 import { bus } from '../events/bus.ts';
 
@@ -58,8 +60,13 @@ export class SharingService {
   private lastDeliveryAt: number | null = null;
   private timer: NodeJS.Timeout | null = null;
   private busy: Promise<unknown> = Promise.resolve();
+  /** File caricati sull'altro PC che Google Drive non ha ancora portato qui: si riprova a ogni giro. */
+  private missingFiles = 0;
 
-  constructor(private deps: { sqlite: Database.Database; dataDir: string; writers: Writers; log: (msg: string) => void }) {}
+  constructor(private deps: { sqlite: Database.Database; dataDir: string; writers: Writers; log: (msg: string) => void; blobs?: BlobStore }) {
+    const blobs = deps.blobs;
+    blobs?.setFallback((sha) => (this.folder ? fetchFile(blobs, this.folder, sha) : false));
+  }
 
   // ─── Impostazioni di questo PC (non viaggiano) ─────────────────────────────
 
@@ -280,6 +287,7 @@ export class SharingService {
       } finally {
         fs.rmSync(local, { force: true });
       }
+      this.fetchFiles();
       forgetAiWindow();
       for (const type of ['projects', 'tasks', 'people', 'activities'] as const) bus.publish({ type });
       bus.publish({ type: 'conversations', ids: [] });
@@ -332,6 +340,11 @@ export class SharingService {
    */
   private doDeliver(keepHolder: boolean): number {
     const folder = this.folder!;
+    // Prima i file, poi i dati che li citano: chi prende trova già tutto.
+    if (this.deps.blobs) {
+      const n = uploadFiles(this.deps.sqlite, this.deps.blobs, folder);
+      if (n) this.deps.log(`Uso su più PC: ${n} file messi nella cartella condivisa`);
+    }
     const lease = this.readLease() ?? emptyLease();
     const tmpLocal = path.join(this.deps.dataDir, 'in-consegna.sqlite');
     const next = Math.max(lease.version, this.localVersion) + 1;
@@ -363,6 +376,17 @@ export class SharingService {
     this.pruneOldVersions(folder, next);
     this.deps.log(`Uso su più PC: consegnata la versione ${next} (${(size / 1e6).toFixed(1)} MB)`);
     return next;
+  }
+
+  /** Porta qui i file caricati sull'altro PC (risorse, foto, allegati) che mancano. */
+  private fetchFiles() {
+    if (!this.deps.blobs || !this.folder) return;
+    const r = downloadFiles(this.deps.sqlite, this.deps.blobs, this.folder);
+    if (r.copied) {
+      this.deps.log(`Uso su più PC: ${r.copied} file presi dalla cartella condivisa`);
+      bus.publish({ type: 'people' });
+    }
+    this.missingFiles = r.missing;
   }
 
   private pruneOldVersions(folder: string, current: number) {
@@ -448,6 +472,7 @@ export class SharingService {
           await this.doRelease();
           return;
         }
+        if (this.missingFiles) this.fetchFiles();
         if (now - (this.lastDeliveryAt ?? 0) > SAFETY_DELIVERY_MS) this.doDeliver(true);
         if (now - this.lastHeartbeat > HEARTBEAT_MS && lease) {
           this.writeLease({ ...lease, heartbeat: now });

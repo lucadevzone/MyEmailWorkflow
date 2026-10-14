@@ -10,6 +10,12 @@ import { now } from '../lib/ids.ts';
 export class BlobStore {
   constructor(private db: Db, private dir: string) {}
 
+  /** Uso su più PC: se il file non c'è qui, si prova a prenderlo dalla cartella condivisa. */
+  private fallback: ((sha: string) => boolean) | null = null;
+  setFallback(fn: ((sha: string) => boolean) | null) {
+    this.fallback = fn;
+  }
+
   pathFor(sha: string): string {
     return path.join(this.dir, sha.slice(0, 2), sha);
   }
@@ -28,6 +34,8 @@ export class BlobStore {
   }
 
   read(sha: string): Buffer {
-    return fs.readFileSync(this.pathFor(sha));
+    const file = this.pathFor(sha);
+    if (!fs.existsSync(file)) this.fallback?.(sha);
+    return fs.readFileSync(file);
   }
 }

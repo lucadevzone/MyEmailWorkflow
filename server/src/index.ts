@@ -43,7 +43,7 @@ const writers: Writers = {
     await services.sync.stopAll();
   },
 };
-const sharing = new SharingService({ sqlite, dataDir: config.dataDir, writers, log: (m) => app.log.info(m) });
+const sharing = new SharingService({ sqlite, dataDir: config.dataDir, writers, log: (m) => app.log.info(m), blobs: services.blobs });
 const app = buildApp({ ...services, sharing, port: config.port });
 
 const shutdown = async () => {

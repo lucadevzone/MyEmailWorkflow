@@ -21,7 +21,7 @@ function pc(name: string) {
     },
   });
   const writers = { on: false, start() { this.on = true; }, async stop() { this.on = false; } };
-  const sharing = new SharingService({ sqlite, dataDir: dir, writers, log: () => {} });
+  const sharing = new SharingService({ sqlite, dataDir: dir, writers, log: () => {}, blobs: s.blobs });
   sharing.setMachine({ name });
   return { s, sharing, writers, projects: new ProjectService(db) };
 }
@@ -112,5 +112,35 @@ describe('semaforo nella cartella condivisa', () => {
     await B.sharing.setFolder({ folder: shared });
     expect(B.sharing.status().state).toBe('syncing');
     expect(B.writers.on).toBe(false);
+  });
+  it('i file caricati (risorse, foto, allegati delle bozze) viaggiano nella cartella files/', async () => {
+    const shared = tmp();
+    const A = pc('A');
+    const accountId = A.s.accounts.create({ name: 'Luca', email: 'me@gmail.com', provider: 'gmail', credentialRef: 'keychain:x' }).id;
+    const project = A.projects.create({ name: 'Gare', outgoingAccountId: accountId });
+    await A.sharing.init();
+    await A.sharing.setFolder({ folder: shared });
+    const res = A.s.notes.addFile({ projectId: project.id }, 'capitolato.pdf', Buffer.from('PDF capitolato'), 'application/pdf');
+    const contact = A.s.people.createContact({ name: 'Mario Rossi', emails: ['mario@x.it'] });
+    const photo = A.s.blobs.put(Buffer.from('foto di Mario'), 'image/jpeg');
+    A.s.sqlite.prepare('update contacts set avatar_blob_sha = ? where id = ?').run(photo, contact.contactId);
+    const att = A.s.blobs.put(Buffer.from('allegato della bozza'), 'text/plain');
+    A.s.sqlite
+      .prepare("insert into drafts (id, project_id, attachments, created_at, updated_at) values ('d1', ?, ?, 1, 1)")
+      .run(project.id, JSON.stringify([{ id: 'x', blobSha: att, filename: 'nota.txt', mime: 'text/plain', size: 20 }]));
+    await A.sharing.release();
+    const sha = (A.s.sqlite.prepare('select blob_sha as s from resources where id = ?').get(res.id) as { s: string }).s;
+    for (const f of [sha, photo, att]) expect(fs.existsSync(path.join(shared, 'files', f))).toBe(true);
+
+    const B = pc('B');
+    await B.sharing.init();
+    await B.sharing.setFolder({ folder: shared });
+    expect(B.sharing.status().state).toBe('holder');
+    for (const f of [sha, photo, att]) expect(fs.existsSync(B.s.blobs.pathFor(f))).toBe(true);
+    expect(B.s.blobs.read(sha).toString()).toBe('PDF capitolato');
+
+    // File arrivato su Drive dopo la presa: lo si prende quando serve.
+    fs.rmSync(B.s.blobs.pathFor(photo));
+    expect(B.s.blobs.read(photo).toString()).toBe('foto di Mario');
   });
 });
