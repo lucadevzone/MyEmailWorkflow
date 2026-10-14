@@ -1,6 +1,6 @@
 # Uso alternato su più PC — progetto
 
-Versione 0.3 — 2026-10-14 · stato: **approvato** · fase 1 fatta
+Versione 0.3 — 2026-10-14 · stato: **approvato** · fasi 1–3 fatte
 
 ## 1. Obiettivo e vincoli
 
@@ -101,7 +101,7 @@ Indice di ricerca e vettori (indicizzazione locale, veloce), classificazioni e s
 
 1. **Identità e mappa**: chiave stabile dei messaggi, esportazione/importazione dei dati personali in un file, con test di andata e ritorno su due database.
 2. **Semaforo e modalità attesa**: cartella condivisa nelle impostazioni, semaforo con segnale di vita, sola lettura, fascia e pulsanti, rilascio alla chiusura/inattività/richiesta, consegna periodica.
-3. **Posta che arriva dopo l'import**: aggancio dei messaggi alla mappa durante l'importazione da Gmail.
+3. **Posta che arriva dopo l'import**: aggancio dei messaggi alla mappa durante l'importazione da Gmail. Un messaggio già visto sull'altro PC va nella conversazione decisa lì (che nasce con il suo stato e non si riapre se era archiviata); task, note, annotazioni e bozze che lo aspettavano lo ritrovano subito.
 4. **File condivisi**: risorse e foto nella cartella `files/`.
 5. **Secondo PC da zero**: procedura di benvenuto "Ho già l'app su un altro PC", password degli account.
 

@@ -40,7 +40,7 @@ const PLAIN_TABLES = [
  * Tabelle personali con riferimenti alla posta: colonna → tipo di riferimento. I messaggi viaggiano come
  * chiave stabile; conversazioni e file (blob) con il loro codice, ma localmente possono mancare.
  */
-const REF_TABLES: Record<string, Record<string, 'message' | 'conversation' | 'blob'>> = {
+export const REF_TABLES: Record<string, Record<string, 'message' | 'conversation' | 'blob'>> = {
   annotations: { message_id: 'message' },
   tasks: { conversation_id: 'conversation', message_id: 'message' },
   notes: { conversation_id: 'conversation', message_id: 'message' },
@@ -52,7 +52,7 @@ const REF_TABLES: Record<string, Record<string, 'message' | 'conversation' | 'bl
 const INSERT_ORDER = [...PLAIN_TABLES, 'annotations', 'tasks', 'notes', 'resources', 'drafts'];
 
 /** Stato personale di una conversazione (il resto, come oggetto e data, viene dalla posta locale). */
-const CONV_STATE_COLS = [
+export const CONV_STATE_COLS = [
   'id',
   'project_id',
   'summary',
@@ -339,56 +339,56 @@ export function importPersonal(sqlite: Database.Database, file: string): ImportR
   }
 }
 
-/**
- * Inserisce le righe di una tabella con riferimenti alla posta, traducendo le chiavi dei messaggi nei
- * codici locali. Un riferimento che qui non si risolve diventa NULL e resta in sospeso; se la colonna è
- * obbligatoria, l'intera riga resta in sospeso.
- */
+/** Inserisce le righe di una tabella con riferimenti alla posta (vedi placeRow). */
 function insertWithRefs(sqlite: Database.Database, t: string) {
-  const refs = REF_TABLES[t]!;
-  const mainCols = cols(sqlite, 'main', t);
-  const notNull = new Set(
-    (sqlite.prepare(`pragma main.table_info(${t})`).all() as { name: string; notnull: number }[]).filter((c) => c.notnull).map((c) => c.name),
-  );
   const keyToId = sqlite.prepare('select id from temp.local_keys where k = ?');
+  const idOf = (k: string) => (keyToId.get(k) as { id: string } | undefined)?.id;
+  for (const row of sqlite.prepare(`select * from x.${t}`).all() as Record<string, unknown>[]) placeRow(sqlite, t, row, idOf);
+}
+
+/**
+ * Inserisce una riga con riferimenti alla posta, traducendo le chiavi dei messaggi nei codici locali
+ * (idOf). Un riferimento che qui non si risolve diventa NULL e resta in sospeso; se la colonna è
+ * obbligatoria, l'intera riga resta in sospeso. Restituisce true se la riga è stata inserita.
+ */
+export function placeRow(sqlite: Database.Database, t: string, row: Record<string, unknown>, idOf: (key: string) => string | undefined): boolean {
+  const refs = REF_TABLES[t]!;
+  const info = sqlite.prepare(`pragma main.table_info(${t})`).all() as { name: string; notnull: number }[];
+  const mainCols = info.map((c) => c.name);
+  const notNull = new Set(info.filter((c) => c.notnull).map((c) => c.name));
   const convExists = sqlite.prepare('select 1 from main.conversations where id = ? and deleted_at is null');
   const blobExists = sqlite.prepare('select 1 from main.blobs where sha256 = ?');
-  const rowExists = (tbl: string, id: string) => !!sqlite.prepare(`select 1 from main.${tbl} where id = ?`).get(id);
-  const ins = sqlite.prepare(`insert into main.${t} (${mainCols.map(q).join(', ')}) values (${mainCols.map(() => '?').join(', ')})`);
-  const pendRef = sqlite.prepare('insert or replace into main.shared_pending_refs (tbl, row_id, col, kind, ref) values (?, ?, ?, ?, ?)');
-  const pendRow = sqlite.prepare('insert or replace into main.shared_pending_rows (tbl, row_id, row_json, ref) values (?, ?, ?, ?)');
-
-  for (const row of sqlite.prepare(`select * from x.${t}`).all() as Record<string, unknown>[]) {
-    const out: Record<string, unknown> = { ...row };
-    const pending: { col: string; kind: string; ref: string }[] = [];
-    let wholeRowPending: string | null = null;
-    for (const [col, kind] of Object.entries(refs)) {
-      const v = row[col] as string | null;
-      if (v == null) continue;
-      const ok = kind === 'message' ? (keyToId.get(v) as { id: string } | undefined)?.id : kind === 'conversation' ? (convExists.get(v) ? v : undefined) : blobExists.get(v) ? v : undefined;
-      if (ok) {
-        out[col] = ok;
-        continue;
-      }
-      if (notNull.has(col)) wholeRowPending = v;
-      out[col] = null;
-      pending.push({ col, kind, ref: v });
-    }
-    // Annotazione rimasta in sospeso: anche chi la usa la perde finché non arriva il messaggio.
-    for (const c of ['annotation_id']) {
-      const v = out[c] as string | null | undefined;
-      if (v && !rowExists('annotations', v)) {
-        out[c] = null;
-        pending.push({ col: c, kind: 'annotation', ref: v });
-      }
-    }
-    if (wholeRowPending) {
-      pendRow.run(t, row.id as string, JSON.stringify(row), wholeRowPending);
+  const out: Record<string, unknown> = { ...row };
+  const pending: { col: string; kind: string; ref: string }[] = [];
+  let wholeRowPending: string | null = null;
+  for (const [col, kind] of Object.entries(refs)) {
+    const v = row[col] as string | null;
+    if (v == null) continue;
+    const ok = kind === 'message' ? idOf(v) : kind === 'conversation' ? (convExists.get(v) ? v : undefined) : blobExists.get(v) ? v : undefined;
+    if (ok) {
+      out[col] = ok;
       continue;
     }
-    ins.run(...mainCols.map((c) => out[c] as never));
-    for (const p of pending) pendRef.run(t, row.id as string, p.col, p.kind, p.ref);
+    if (notNull.has(col)) wholeRowPending = v;
+    out[col] = null;
+    pending.push({ col, kind, ref: v });
   }
+  // Annotazione rimasta in sospeso: anche chi la usa la perde finché non arriva il messaggio.
+  for (const c of ['annotation_id']) {
+    const v = out[c] as string | null | undefined;
+    if (v && !sqlite.prepare('select 1 from main.annotations where id = ?').get(v)) {
+      out[c] = null;
+      pending.push({ col: c, kind: 'annotation', ref: v });
+    }
+  }
+  if (wholeRowPending) {
+    sqlite.prepare('insert or replace into main.shared_pending_rows (tbl, row_id, row_json, ref) values (?, ?, ?, ?)').run(t, row.id as string, JSON.stringify(row), wholeRowPending);
+    return false;
+  }
+  sqlite.prepare(`insert or replace into main.${t} (${mainCols.map(q).join(', ')}) values (${mainCols.map(() => '?').join(', ')})`).run(...mainCols.map((c) => out[c] as never));
+  const pendRef = sqlite.prepare('insert or replace into main.shared_pending_refs (tbl, row_id, col, kind, ref) values (?, ?, ?, ?, ?)');
+  for (const p of pending) pendRef.run(t, row.id as string, p.col, p.kind, p.ref);
+  return true;
 }
 
 /** Comprime e decomprime il file di scambio per il viaggio nel cloud. */

@@ -33,6 +33,7 @@ import { clearReplySuggestion, completeReplyTasks, enqueueTaskExtraction } from 
 import { clearActionSuggestions, enqueueActionSuggestion } from '../ai/suggest-actions.ts';
 import { FRESH_MS, PRIORITY } from '../jobs/queue.ts';
 import { stableKeyOf } from '../sharing/keys.ts';
+import { ensureMappedConversation, mappedConversation, resolveArrival } from '../sharing/arrivals.ts';
 
 export interface RawFetched {
   uid: number | null;
@@ -121,22 +122,29 @@ export async function ingestMessage(
   const references = referencesOf(parsed);
   const t = now();
 
+  const messageId = newId();
+  const stableKey = stableKeyOf(account.id, rfcMessageId, raw.gmMsgid ?? null, messageId);
+  // Uso su più PC: un messaggio già visto sull'altro PC va nella conversazione decisa lì.
+  const mapped = mappedConversation(ctx.sqlite, stableKey);
+
   // 3. Scrittura atomica
   const result = ctx.db.transaction((tx) => {
-    const conversationId = resolveConversation(tx as unknown as Db, {
-      gmThreadId: raw.gmThreadId ?? null,
-      rfcMessageId,
-      // Dal genitore diretto al più lontano: serve a scegliere tra conversazioni staccate a mano.
-      parentIds: [...new Set([inReplyTo, ...[...references].reverse()].filter((x): x is string => !!x))],
-      subject: parsed.subject ?? null,
-      date,
-      archived: !inInbox,
-      // Le regole dell'utente sul mittente vincono sul filtro automatico.
-      rule: ruleFor(tx as unknown as Db, from?.email ?? null),
-      noise: () => detectNoise({ headers: parsed.headers, fromAddress: from?.email ?? null, subject: parsed.subject ?? null }).isNoise,
-    });
+    const conversationId =
+      mapped && ensureMappedConversation(ctx.sqlite, mapped.id, { subject: parsed.subject ?? null, gmThreadId: raw.gmThreadId ?? null })
+        ? mapped.id
+        : resolveConversation(tx as unknown as Db, {
+          gmThreadId: raw.gmThreadId ?? null,
+          rfcMessageId,
+          // Dal genitore diretto al più lontano: serve a scegliere tra conversazioni staccate a mano.
+          parentIds: [...new Set([inReplyTo, ...[...references].reverse()].filter((x): x is string => !!x))],
+          subject: parsed.subject ?? null,
+          date,
+          archived: !inInbox,
+          // Le regole dell'utente sul mittente vincono sul filtro automatico.
+          rule: ruleFor(tx as unknown as Db, from?.email ?? null),
+          noise: () => detectNoise({ headers: parsed.headers, fromAddress: from?.email ?? null, subject: parsed.subject ?? null }).isNoise,
+        });
 
-    const messageId = newId();
     tx.insert(messages)
       .values({
         id: messageId,
@@ -144,7 +152,7 @@ export async function ingestMessage(
         accountId: account.id,
         direction,
         rfcMessageId,
-        stableKey: stableKeyOf(account.id, rfcMessageId, raw.gmMsgid ?? null, messageId),
+        stableKey,
         inReplyTo,
         references: JSON.stringify(references),
         gmMsgid: raw.gmMsgid ?? null,
@@ -211,8 +219,9 @@ export async function ingestMessage(
     tx.update(conversations)
       .set({
         lastMessageAt: sql`max(${conversations.lastMessageAt}, ${date})`,
-        // Posta nuova in arrivo riporta in vista una conversazione archiviata o cestinata (come Gmail).
-        ...(direction === 'in' && inInbox ? { archivedAt: null, trashedAt: null } : {}),
+        // Posta nuova in arrivo riporta in vista una conversazione archiviata o cestinata (come Gmail); non
+        // quella già vista sull'altro PC, dove è stata sistemata.
+        ...(direction === 'in' && inInbox && !mapped ? { archivedAt: null, trashedAt: null } : {}),
         updatedAt: t,
       })
       .where(eq(conversations.id, conversationId))
@@ -220,6 +229,11 @@ export async function ingestMessage(
 
     return { messageId, conversationId, created: true };
   });
+  if (mapped) {
+    const done = resolveArrival(ctx.sqlite, { keyHash: mapped.keyHash, messageId, conversationId: result.conversationId });
+    if (done.tables.has('tasks')) bus.publish({ type: 'tasks' });
+    if (done.resolved) bus.publish({ type: 'conversations', ids: [result.conversationId] });
+  }
 
   // Lavori in background (non per il rumore): sintesi, embedding e, se è in Da smistare, classificazione.
   // La posta vecchia (backfill) va in coda con priorità bassa.

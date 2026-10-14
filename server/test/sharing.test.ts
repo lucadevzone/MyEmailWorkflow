@@ -162,4 +162,53 @@ describe('scambio dei dati personali tra PC', () => {
     expect(m).toMatchObject({ c: sent.conversationId, st: 'queued' });
     expect(m.body).toContain('Ecco il preventivo');
   });
+  it('la posta che arriva dopo i dati personali va subito al suo posto (senza un nuovo import)', async () => {
+    const A = pc();
+    const accountId = A.s.accounts.create({ name: 'Luca', email: 'me@gmail.com', provider: 'gmail', credentialRef: 'keychain:x' }).id;
+    await importMail(A, accountId);
+    const project = A.projects.create({ name: 'Gare', outgoingAccountId: accountId });
+    A.s.actions.move(convOf(A, '<a1@x>').c, project.id);
+    A.s.actions.archive(convOf(A, '<b1@x>').c);
+    const merged = A.s.actions.merge([convOf(A, '<c1@x>').c, convOf(A, '<d1@x>').c]).conversationId;
+    const task = A.s.tasks.create({ projectId: project.id, title: 'Rispondere', conversationId: convOf(A, '<a1@x>').c, messageId: msgOf(A, '<a2@x>') });
+    A.s.sqlite.prepare("insert into annotations (id, message_id, quote_exact, created_at, updated_at) values ('an1', ?, 'Testo', 1, 1)").run(msgOf(A, '<a2@x>'));
+    A.s.sqlite
+      .prepare("insert into notes (id, project_id, conversation_id, annotation_id, message_id, body, created_at, updated_at) values ('n1', ?, ?, 'an1', ?, 'Prezzo alto', 1, 1)")
+      .run(project.id, convOf(A, '<a1@x>').c, msgOf(A, '<a2@x>'));
+    const file = path.join(tmp(), 'p.sqlite');
+    exportPersonal(A.s.sqlite, file, { version: 1, machine: 'A', exportedAt: Date.now() });
+
+    // B: prima i dati personali, poi la posta da Gmail.
+    const B = pc();
+    importPersonal(B.s.sqlite, file);
+    expect(B.s.sqlite.prepare('select message_id from tasks where id = ?').get(task.id)).toEqual({ message_id: null });
+    await importMail(B, accountId);
+    expect(convOf(B, '<a1@x>').c).toBe(convOf(A, '<a1@x>').c);
+    expect(convOf(B, '<a2@x>').c).toBe(convOf(A, '<a1@x>').c);
+    expect(B.conv.list({ view: 'project', projectId: project.id }).map((c) => c.id)).toEqual([convOf(A, '<a1@x>').c]);
+    // Archiviata sull'altro PC: resta archiviata anche se su Gmail è ancora in Posta in arrivo.
+    expect(B.conv.list({ view: 'inbox', archived: true }).map((c) => c.id)).toEqual([convOf(A, '<b1@x>').c]);
+    expect(convOf(B, '<c1@x>').c).toBe(merged);
+    expect(convOf(B, '<d1@x>').c).toBe(merged);
+    expect(B.conv.get(merged)!.subject).toBeTruthy();
+    // Task, annotazione e nota ritrovano il messaggio.
+    expect(B.s.tasks.get(task.id)).toMatchObject({ messageId: msgOf(B, '<a2@x>') });
+    expect(B.s.sqlite.prepare("select message_id as m from annotations where id = 'an1'").get()).toEqual({ m: msgOf(B, '<a2@x>') });
+    expect(B.s.sqlite.prepare("select annotation_id as a, message_id as m from notes where id = 'n1'").get()).toEqual({ a: 'an1', m: msgOf(B, '<a2@x>') });
+    expect(B.s.sqlite.prepare('select count(*) as n from shared_pending_refs').get()).toEqual({ n: 0 });
+    expect(B.s.sqlite.prepare('select count(*) as n from shared_pending_rows').get()).toEqual({ n: 0 });
+    // Una risposta nuova (mai vista dall'altro PC) segue la sua conversazione, nel progetto.
+    await ingestMessage(B.s, { id: accountId, email: 'me@gmail.com' }, {
+      uid: 99,
+      mailbox: 'All',
+      source: eml({ id: '<a3@x>', subject: 'Re: Preventivo', inReplyTo: '<a2@x>' }),
+      flags: [],
+      labels: ['\\Inbox'],
+      gmMsgid: 'gm-a3',
+      gmThreadId: 'T1',
+    });
+    expect(convOf(B, '<a3@x>').c).toBe(convOf(A, '<a1@x>').c);
+    // Nessuna conversazione in più.
+    expect(B.s.sqlite.prepare('select count(*) as n from conversations where deleted_at is null').get()).toEqual({ n: 3 });
+  });
 });
