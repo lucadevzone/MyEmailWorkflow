@@ -192,26 +192,39 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
 
   // ─── Conversazioni ─────────────────────────────────────────────────────────
 
-  app.get<{
-    Querystring: { view?: string; projectId?: string; person?: string; archived?: string; important?: string; unread?: string; before?: string; limit?: string };
-  }>(
-    '/api/conversations',
-    async (req, reply) => {
-      const view = (req.query.view ?? 'inbox') as ConversationView;
-      if (!['inbox', 'noise', 'spam', 'project', 'person'].includes(view)) return reply.code(400).send({ error: 'view non valida' });
-      return conversationsSvc.list({
-        view,
-        projectId: req.query.projectId,
-        person: req.query.person,
-        personAddressIds: req.query.person ? deps.people.addressIdsFor(req.query.person) : undefined,
-        archived: req.query.archived === '1',
-        important: req.query.important === '1',
-        unread: req.query.unread === 'only' || req.query.unread === 'exclude' ? req.query.unread : undefined,
-        before: req.query.before ? Number(req.query.before) : undefined,
-        limit: req.query.limit ? Number(req.query.limit) : undefined,
-      });
-    },
-  );
+  type ListQuerystring = {
+    view?: string; projectId?: string; person?: string; archived?: string; important?: string; unread?: string; before?: string; after?: string; limit?: string;
+  };
+  /** Filtri della lista dalla querystring (condivisi tra elenco e gruppi per data). */
+  const listQuery = (qs: ListQuerystring) => {
+    const view = (qs.view ?? 'inbox') as ConversationView;
+    if (!['inbox', 'noise', 'spam', 'project', 'person'].includes(view)) return null;
+    return {
+      view,
+      projectId: qs.projectId,
+      person: qs.person,
+      personAddressIds: qs.person ? deps.people.addressIdsFor(qs.person) : undefined,
+      archived: qs.archived === '1',
+      important: qs.important === '1',
+      unread: qs.unread === 'only' || qs.unread === 'exclude' ? qs.unread : undefined,
+      before: qs.before ? Number(qs.before) : undefined,
+      after: qs.after ? Number(qs.after) : undefined,
+      limit: qs.limit ? Number(qs.limit) : undefined,
+    } as const;
+  };
+
+  app.get<{ Querystring: ListQuerystring }>('/api/conversations', async (req, reply) => {
+    const q = listQuery(req.query);
+    if (!q) return reply.code(400).send({ error: 'view non valida' });
+    return conversationsSvc.list(q);
+  });
+
+  // Intestazioni dei gruppi per data (con il numero di conversazioni), per la lista a gruppi chiusi.
+  app.get<{ Querystring: ListQuerystring }>('/api/conversations/date-groups', async (req, reply) => {
+    const q = listQuery(req.query);
+    if (!q) return reply.code(400).send({ error: 'view non valida' });
+    return conversationsSvc.dateGroups(q);
+  });
 
   app.get('/api/conversations/counts', async () => conversationsSvc.counts());
   app.get('/api/conversations/important-counts', async () => conversationsSvc.importantCounts());

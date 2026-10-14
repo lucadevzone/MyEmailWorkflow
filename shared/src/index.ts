@@ -426,6 +426,8 @@ export interface ConversationQuery {
   important?: boolean;
   /** Solo quelle con messaggi da leggere (gruppo "Da leggere"), oppure tutte le altre. */
   unread?: 'only' | 'exclude';
+  /** Solo quelle con data d'ordine da questo momento in poi (insieme a before: un gruppo per data). */
+  after?: number;
   before?: number;
 }
 
@@ -690,4 +692,44 @@ export interface RelatedMoveDto {
     /** Perché è proposta: "stesso mittente", "contenuto simile", "suggerita per questo progetto", "archiviazione suggerita". */
     reasons: string[];
   }[];
+}
+
+// ─── Gruppi per data della lista ─────────────────────────────────────────────
+// Oggi, Ieri, Questa settimana, Questo mese, poi i mesi dell'anno in corso uno per uno, poi gli anni
+// interi: ci si ricorda di una mail come "era di settembre" o "era dell'anno scorso".
+
+export interface DateGroup {
+  /** Chiave stabile (per ricordare i gruppi aperti): today, yesterday, week, month, m-2026-09, y-2025. */
+  key: string;
+  label: string;
+  /** Intervallo [from, to) sulla data d'ordine della conversazione; to null = nessun limite. */
+  from: number;
+  to: number | null;
+}
+
+/** Un gruppo per data con quante conversazioni contiene (intestazioni dei gruppi chiusi). */
+export interface DateGroupCount extends DateGroup {
+  count: number;
+}
+
+const MONTH_NAMES = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+
+export function dateGroupOf(ts: number, now: Date = new Date()): DateGroup {
+  const day = 86_400_000;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yesterday = today - day;
+  // La settimana comincia il lunedì.
+  const weekStart = today - ((now.getDay() + 6) % 7) * day;
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  if (ts >= today) return { key: 'today', label: 'Oggi', from: today, to: null };
+  if (ts >= yesterday) return { key: 'yesterday', label: 'Ieri', from: yesterday, to: today };
+  if (ts >= weekStart) return { key: 'week', label: 'Questa settimana', from: weekStart, to: yesterday };
+  if (ts >= monthStart) return { key: 'month', label: 'Questo mese', from: monthStart, to: Math.min(weekStart, yesterday) };
+  const d = new Date(ts);
+  if (d.getFullYear() === now.getFullYear()) {
+    const from = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+    const to = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
+    return { key: `m-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: MONTH_NAMES[d.getMonth()]!, from, to };
+  }
+  return { key: `y-${d.getFullYear()}`, label: String(d.getFullYear()), from: new Date(d.getFullYear(), 0, 1).getTime(), to: new Date(d.getFullYear() + 1, 0, 1).getTime() };
 }

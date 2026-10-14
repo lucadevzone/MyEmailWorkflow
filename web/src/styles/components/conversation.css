@@ -157,3 +157,4 @@
 .pm-crow__markbtn:hover { background: var(--surface-chip); }
 .pm-crow__markbtn:hover .pm-crow__mark:not(.pm-crow__mark--on) { color: var(--ink-2); }
 .pm-crow__markbtn--large { width: 36px; height: 36px; }
+.pm-cgroup__loading { min-height: 8px; padding: 4px 8px; font-size: var(--fs-sm); color: var(--ink-muted); }

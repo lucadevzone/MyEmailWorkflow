@@ -11,6 +11,7 @@ import { ConversationService } from '../src/conversations/service.ts';
 import { ProjectService } from '../src/projects/service.ts';
 import { conversations, messages } from '../src/db/schema.ts';
 import { buildApp } from '../src/app.ts';
+import { dateGroupOf } from '@mmw/shared';
 import type { MailProviderClient } from '../src/mail/provider.ts';
 
 // ─── Server di posta e SMTP finti ────────────────────────────────────────────
@@ -152,6 +153,28 @@ describe('gruppo Da leggere', () => {
     s.actions.markRead(b);
     expect(conv().list({ view: 'inbox', unread: 'only' }).map((c) => c.id)).toEqual([a]);
     expect(conv().list({ view: 'inbox', unread: 'exclude' }).map((c) => c.id)).toEqual([b]);
+  });
+});
+
+describe('gruppi per data', () => {
+  it('Oggi, Ieri, Questa settimana, Questo mese, i mesi dell\'anno, gli anni; con i conteggi per le intestazioni', async () => {
+    const now = new Date(2026, 9, 14, 12); // mercoledì 14 ottobre 2026
+    const at = (y: number, m: number, d: number) => new Date(y, m - 1, d, 10).getTime();
+    expect(dateGroupOf(at(2026, 10, 14), now).label).toBe('Oggi');
+    expect(dateGroupOf(at(2026, 10, 13), now).label).toBe('Ieri');
+    expect(dateGroupOf(at(2026, 10, 12), now).label).toBe('Questa settimana'); // lunedì
+    expect(dateGroupOf(at(2026, 10, 2), now).label).toBe('Questo mese');
+    expect(dateGroupOf(at(2026, 9, 30), now)).toMatchObject({ key: 'm-2026-09', label: 'Settembre' });
+    expect(dateGroupOf(at(2025, 3, 1), now)).toMatchObject({ key: 'y-2025', label: '2025' });
+    const g = dateGroupOf(at(2026, 10, 2), now);
+    expect(at(2026, 10, 2) >= g.from && at(2026, 10, 2) < g.to!).toBe(true);
+
+    await incoming('<g1@x>', 1);
+    await incoming('<g2@x>', 2);
+    const groups = conv().dateGroups({ view: 'inbox' });
+    expect(groups.reduce((n, x) => n + x.count, 0)).toBe(2);
+    const first = groups[0]!;
+    expect(conv().list({ view: 'inbox', after: first.from, before: first.to ?? undefined })).toHaveLength(first.count);
   });
 });
 

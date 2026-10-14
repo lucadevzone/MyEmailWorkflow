@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Bookmark, Ellipsis, MailCheck, Send, Signature, X } from 'lucide-react';
 import type { ConversationListItem, ConversationQuery, ProjectDto } from '@mmw/shared';
@@ -16,10 +16,9 @@ import { ConversationItem } from './ConversationItem.tsx';
 import { TasksSidebar } from './TasksSidebar.tsx';
 import { NewMailMenu } from './NewMailMenu.tsx';
 import { BulkBar } from './BulkBar.tsx';
-import { groupByDate, readCollapsedGroups, writeCollapsedGroups } from './dateGroups.ts';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { readOpenGroups, writeOpenGroups } from './dateGroups.ts';
+import { DateGroupSection, GroupHead } from './DateGroupSection.tsx';
 
-const PAGE = 50;
 const focusKey = (projectKey: string) => `mmw.focus.${projectKey}`;
 const readFocus = (k: string) => {
   try {
@@ -102,42 +101,52 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
     queryKey: ['conversations', query, 'unread'],
     queryFn: () => api.conversations({ ...query, unread: 'only', limit: 200 }),
   });
-  const list = useInfiniteQuery({
-    queryKey: ['conversations', query, 'rest'],
-    queryFn: ({ pageParam }) => api.conversations({ ...query, unread: 'exclude', before: pageParam }),
-    initialPageParam: undefined as number | undefined,
-    getNextPageParam: (last) => (last.length < PAGE ? undefined : last[last.length - 1]!.sortAt),
+  // Il resto, per gruppi di data: si chiedono solo le intestazioni con i conteggi; ogni gruppo carica le
+  // sue conversazioni quando lo si apre.
+  const groupsQuery = useQuery({
+    queryKey: ['conversations', query, 'groups'],
+    queryFn: () => api.dateGroups({ ...query, unread: 'exclude' }),
   });
-  const restAll = list.data?.pages.flat() ?? [];
+  const dateGroups = groupsQuery.data ?? [];
+  const [groupItems, setGroupItems] = useState<Record<string, ConversationListItem[]>>({});
+  const onGroupItems = useCallback((key: string, list: ConversationListItem[]) => {
+    setGroupItems((cur) => (cur[key] === list || (!cur[key]?.length && !list.length) ? cur : { ...cur, [key]: list }));
+  }, []);
+  useEffect(() => setGroupItems({}), [query]);
   const unreadItems = unreadList.data ?? [];
 
   // La conversazione aperta mentre era da leggere resta in "Da leggere" finché è aperta: se saltasse nel
   // suo gruppo per data, la lista si muoverebbe sotto il mouse mentre la si legge.
   const [stickyId, setStickyId] = useState<string | null>(null);
-  const lastSticky = useRef<ConversationListItem | null>(null);
   useEffect(() => {
     if (conversationId && unreadItems.some((c) => c.id === conversationId)) setStickyId(conversationId);
     else if (conversationId !== stickyId) setStickyId(null);
   }, [conversationId, unreadItems]); // eslint-disable-line react-hooks/exhaustive-deps
-  const restOldest = restAll.at(-1)?.sortAt ?? Infinity;
-  const stickyFresh = stickyId ? (unreadItems.find((c) => c.id === stickyId) ?? restAll.find((c) => c.id === stickyId)) : undefined;
-  if (stickyFresh) lastSticky.current = stickyFresh;
-  // Sparita da entrambe le liste dove dovrebbe esserci (archiviata, spostata): non la si tiene più.
-  const stickyGone = !stickyFresh && lastSticky.current && (lastSticky.current.sortAt >= restOldest || !list.hasNextPage);
-  const sticky = stickyId && lastSticky.current?.id === stickyId && !stickyGone ? (stickyFresh ?? lastSticky.current) : undefined;
+  const stickyItemQuery = useQuery({
+    queryKey: ['conversation-item', stickyId],
+    queryFn: () => api.conversationItem(stickyId!),
+    enabled: !!stickyId && !unreadItems.some((c) => c.id === stickyId),
+  });
+  // Resta solo finché appartiene ancora a questa vista (non archiviata, non spostata altrove).
+  const belongsHere = (c: ConversationListItem) =>
+    c.isSpam === (projectKey === SYSTEM_SPAM) &&
+    (projectKey === SYSTEM_SPAM || (c.projectId ?? null) === (isProject ? projectKey : null)) &&
+    (projectKey === SYSTEM_SPAM || isProject || c.isNoise === (projectKey === SYSTEM_NEWS)) &&
+    (view === 'important' || c.archived === archived);
+  const sticky = stickyId
+    ? (unreadItems.find((c) => c.id === stickyId) ?? (stickyItemQuery.data && belongsHere(stickyItemQuery.data) ? stickyItemQuery.data : undefined))
+    : undefined;
   const unreadShown = sticky && !unreadItems.some((c) => c.id === sticky.id) ? [...unreadItems, sticky].sort((a, b) => b.sortAt - a.sortAt) : unreadItems;
-  const rest = sticky ? restAll.filter((c) => c.id !== sticky.id) : restAll;
-  /** Tutte le righe nell'ordine in cui compaiono (per Maiusc+clic e "Seleziona tutte"). */
-  const items = [...unreadShown, ...rest];
+  /** Tutte le righe caricate nell'ordine in cui compaiono (per Maiusc+clic e "Seleziona tutte"). */
+  const items = [...unreadShown, ...dateGroups.flatMap((g) => groupItems[g.key] ?? [])];
 
-  // Gruppi chiusi (ricordati nel browser, per tutte le viste).
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(readCollapsedGroups);
+  // Gruppi aperti (ricordati nel browser, per tutte le viste): di base solo "Da leggere".
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(readOpenGroups);
+  const isOpen = (key: string) => openGroups[key] ?? key === 'unread';
   const toggleGroup = (key: string) => {
-    const next = new Set(collapsedGroups);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    setCollapsedGroups(next);
-    writeCollapsedGroups(next);
+    const next = { ...openGroups, [key]: !isOpen(key) };
+    setOpenGroups(next);
+    writeOpenGroups(next);
   };
 
   // Selezione multipla (caselle a sinistra delle righe): azioni cumulative nella barra sotto l'intestazione.
@@ -210,11 +219,11 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
   // Il focus si ricorda per progetto: tornando sulla tab si ritrova (§2.3, regola 1).
   useEffect(() => {
     if (conversationId) writeFocus(projectKey, conversationId);
-    else if (!list.isLoading && !draftId) {
+    else if (!unreadList.isLoading && !groupsQuery.isLoading && !draftId) {
       const remembered = readFocus(projectKey);
       if (remembered && items.some((c) => c.id === remembered)) navigate(paths.conversation(projectKey, remembered), { replace: true });
     }
-  }, [conversationId, draftId, projectKey, list.isLoading, items, navigate]);
+  }, [conversationId, draftId, projectKey, unreadList.isLoading, groupsQuery.isLoading, items, navigate]);
 
   // Arrivando da un link (ricerca, contatti, task) la conversazione in focus può stare molto più in basso,
   // o non stare in questa vista (es. archiviata): la si carica da sola e la si mostra in cima.
@@ -435,8 +444,8 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
               </button>
             </div>
           )}
-          {(list.isLoading || unreadList.isLoading) && !pinned && <div className="pm-empty">Caricamento…</div>}
-          {!list.isLoading && !unreadList.isLoading && items.length === 0 && (
+          {(groupsQuery.isLoading || unreadList.isLoading) && !pinned && <div className="pm-empty">Caricamento…</div>}
+          {!groupsQuery.isLoading && !unreadList.isLoading && unreadShown.length === 0 && dateGroups.length === 0 && (
             <div className="pm-empty">
               {view === 'important'
                 ? 'Nessuna conversazione importante: segna un messaggio con il segnalibro.'
@@ -447,29 +456,26 @@ export function ProjectPage({ projectKey, conversationId, messageId, draftId, on
                     : 'Nessuna conversazione.'}
             </div>
           )}
-          {[
-            ...(unreadShown.length ? [{ group: { key: 'unread', label: 'Da leggere' }, items: unreadShown, count: unreadShown.length }] : []),
-            ...groupByDate(rest, (c) => c.sortAt).map((g) => ({ ...g, count: undefined as number | undefined })),
-          ].map(({ group, items: groupItems, count }) => {
-            const closed = collapsedGroups.has(group.key);
-            // In un gruppo chiuso resta visibile solo la conversazione aperta.
-            const shown = closed ? groupItems.filter((c) => c.id === conversationId) : groupItems;
-            return (
-              <section key={group.key} className="pm-cgroup" aria-label={group.label}>
-                <button type="button" className="pm-cgroup__head" aria-expanded={!closed} onClick={() => toggleGroup(group.key)}>
-                  <Ic icon={closed ? ChevronRight : ChevronDown} size={15} />
-                  <span>{group.label}</span>
-                  {count !== undefined && <span className="pm-cgroup__count">{count}</span>}
-                </button>
-                {shown.length > 0 && <div className="pm-clist">{shown.map(row)}</div>}
-              </section>
-            );
-          })}
-          {list.hasNextPage && (
-            <button type="button" className="pm-btn pm-btn--secondary" style={{ alignSelf: 'center' }} onClick={() => list.fetchNextPage()} disabled={list.isFetchingNextPage}>
-              {list.isFetchingNextPage ? 'Caricamento…' : 'Carica altre'}
-            </button>
+          {unreadShown.length > 0 && (
+            <section className="pm-cgroup" aria-label="Da leggere">
+              <GroupHead label="Da leggere" count={unreadShown.length} open={isOpen('unread')} onToggle={() => toggleGroup('unread')} />
+              {(isOpen('unread') ? unreadShown : unreadShown.filter((c) => c.id === conversationId)).length > 0 && (
+                <div className="pm-clist">{(isOpen('unread') ? unreadShown : unreadShown.filter((c) => c.id === conversationId)).map(row)}</div>
+              )}
+            </section>
           )}
+          {dateGroups.map((g) => (
+            <DateGroupSection
+              key={`${g.key}-${g.from}`}
+              group={g}
+              query={query}
+              open={isOpen(g.key)}
+              onToggle={() => toggleGroup(g.key)}
+              hiddenId={sticky?.id ?? null}
+              onItems={onGroupItems}
+              row={row}
+            />
+          ))}
         </div>
       </section>
       {hasTasks && tasksOpen && <TasksSidebar projectId={projectKey} onClose={() => setTasksOpen(false)} />}

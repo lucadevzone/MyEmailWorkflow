@@ -8,8 +8,10 @@ import type {
   PersonRef,
   SuggestionDto,
   TaskSuggestionDto,
+  DateGroupCount,
   UnreadCountsDto,
 } from '@mmw/shared';
+import { dateGroupOf } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
 import {
   accounts,
@@ -46,6 +48,38 @@ export class ConversationService {
   /** personAddressIds: indirizzi della persona di q.person, risolti dal chiamante (PeopleService). */
   list(q: ConversationQuery & { limit?: number; personAddressIds?: string[]; onlyId?: string }): ConversationListItem[] {
     const limit = Math.min(q.limit ?? 50, 200);
+    const f = this.filters(q);
+    if (!f) return [];
+    const rows = this.db
+      .select()
+      .from(conversations)
+      .where(and(...f.where))
+      .orderBy(desc(f.sortAt))
+      .limit(limit)
+      .all();
+    return this.decorate(rows);
+  }
+
+  /**
+   * Gruppi per data (Oggi, Ieri, … i mesi, gli anni) con quante conversazioni contengono, per mostrarne
+   * le intestazioni senza caricarle: si leggono solo le date d'ordine.
+   */
+  dateGroups(q: ConversationQuery & { personAddressIds?: string[] }): DateGroupCount[] {
+    const f = this.filters(q);
+    if (!f) return [];
+    const rows = this.db.select({ t: f.sortAt }).from(conversations).where(and(...f.where)).orderBy(desc(f.sortAt)).all();
+    const now = new Date();
+    const out: DateGroupCount[] = [];
+    for (const r of rows) {
+      const last = out[out.length - 1];
+      if (last && r.t >= last.from && (last.to === null || r.t < last.to)) last.count++;
+      else out.push({ ...dateGroupOf(r.t, now), count: 1 });
+    }
+    return out;
+  }
+
+  /** Condizioni della lista (vista, persona, importanti, archiviate, da leggere, intervallo di date). */
+  private filters(q: ConversationQuery & { personAddressIds?: string[]; onlyId?: string }) {
     const where = [isNull(conversations.deletedAt), isNull(conversations.trashedAt)];
     if (q.onlyId) {
       // Una conversazione precisa (es. aperta dalla ricerca), ovunque si trovi.
@@ -56,16 +90,16 @@ export class ConversationService {
       if (q.view === 'spam') {
         // tutte, di qualunque provenienza
       } else if (q.view === 'project') {
-        if (!q.projectId) return [];
+        if (!q.projectId) return null;
         where.push(eq(conversations.projectId, q.projectId));
       } else if (q.view === 'person') {
-        if (!q.person) return [];
+        if (!q.person) return null;
       } else {
         where.push(isNull(conversations.projectId), eq(conversations.isNoise, q.view === 'noise'));
       }
       if (q.person) {
         const ids = q.personAddressIds ?? [];
-        if (!ids.length) return [];
+        if (!ids.length) return null;
         where.push(
           inArray(
             conversations.id,
@@ -102,15 +136,8 @@ export class ConversationService {
     // Ordine: ultimo messaggio, ma una conversazione appena staccata sta in cima finché non arriva altro.
     const sortAt = sql<number>`max(${conversations.lastMessageAt}, coalesce(${conversations.splitAt}, 0))`;
     if (q.before) where.push(sql`${sortAt} < ${q.before}`);
-
-    const rows = this.db
-      .select()
-      .from(conversations)
-      .where(and(...where))
-      .orderBy(desc(sortAt))
-      .limit(limit)
-      .all();
-    return this.decorate(rows);
+    if (q.after) where.push(sql`${sortAt} >= ${q.after}`);
+    return { where, sortAt };
   }
 
   private decorate(rows: (typeof conversations.$inferSelect)[]): ConversationListItem[] {

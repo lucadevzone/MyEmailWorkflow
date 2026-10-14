@@ -5,6 +5,7 @@ import type {
   ConversationDetail,
   ConversationListItem,
   ConversationQuery,
+  DateGroupCount,
   ContactInput,
   NoteDto,
   PeopleDirectoryDto,
@@ -50,6 +51,20 @@ async function upload(url: string, file: File): Promise<ResourceDto> {
   });
   if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`);
   return (await res.json()) as ResourceDto;
+}
+
+/** Querystring dei filtri della lista. */
+function listParams(q: ConversationQuery & { limit?: number }) {
+  const p = new URLSearchParams({ view: q.view });
+  if (q.projectId) p.set('projectId', q.projectId);
+  if (q.person) p.set('person', q.person);
+  if (q.archived) p.set('archived', '1');
+  if (q.important) p.set('important', '1');
+  if (q.unread) p.set('unread', q.unread);
+  if (q.before) p.set('before', String(q.before));
+  if (q.after) p.set('after', String(q.after));
+  if (q.limit) p.set('limit', String(q.limit));
+  return p;
 }
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
@@ -112,17 +127,8 @@ export const api = {
   syncStatus: () => request<SyncStatusDto[]>('GET', '/api/sync/status'),
   syncNow: () => request<SyncStatusDto[]>('POST', '/api/sync/now'),
   jobsStatus: () => request<JobQueueStatusDto>('GET', '/api/jobs/status'),
-  conversations: (q: ConversationQuery & { limit?: number }) => {
-    const p = new URLSearchParams({ view: q.view });
-    if (q.projectId) p.set('projectId', q.projectId);
-    if (q.person) p.set('person', q.person);
-    if (q.archived) p.set('archived', '1');
-    if (q.important) p.set('important', '1');
-    if (q.unread) p.set('unread', q.unread);
-    if (q.limit) p.set('limit', String(q.limit));
-    if (q.before) p.set('before', String(q.before));
-    return request<ConversationListItem[]>('GET', `/api/conversations?${p}`);
-  },
+  conversations: (q: ConversationQuery & { limit?: number }) => request<ConversationListItem[]>('GET', `/api/conversations?${listParams(q)}`),
+  dateGroups: (q: ConversationQuery) => request<DateGroupCount[]>('GET', `/api/conversations/date-groups?${listParams(q)}`),
   conversationItem: (id: string) => request<ConversationListItem>('GET', `/api/conversations/${id}/item`),
   conversationCounts: () => request<UnreadCountsDto>('GET', '/api/conversations/counts'),
   importantCounts: () => request<Record<string, number>>('GET', '/api/conversations/important-counts'),
