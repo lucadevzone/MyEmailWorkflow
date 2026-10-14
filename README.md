@@ -1,47 +1,108 @@
-# my mail workflow
+# My Email Workflow
 
-Client di posta personale organizzato per progetti e persone, con analisi AI locale (Ollama).
+Client di posta personale **organizzato per progetti**, non per cartelle. Ogni conversazione sta in un progetto (o in *Da smistare*), insieme alle persone, ai task, alle note e ai file che la riguardano. Un modello linguistico **locale** ([Ollama](https://ollama.com)) riassume le conversazioni, propone dove smistarle e quali task nascono dalle mail: nessun dato esce dal computer.
 
-- Requisiti: [docs/01-requisiti.md](docs/01-requisiti.md)
-- Design: [docs/02-system-design.md](docs/02-system-design.md)
+> Progetto personale in sviluppo attivo, pensato per macOS (le password stanno nel Portachiavi). Interfaccia in italiano.
+
+## Cosa fa
+
+**Progetti e smistamento**
+- Barra laterale con i progetti raggruppati per **categorie**, comprimibile; *Da smistare* in cima, *News* e *Spam* in fondo.
+- L'assistente propone in quale progetto spostare una conversazione; con lo **smistamento automatico** lo fa da solo quando la regola si è dimostrata affidabile.
+- Dopo uno spostamento o un'archiviazione propone le **conversazioni simili** (stesso mittente, contenuto simile).
+- Filtro **News** (newsletter e pubblicità) e **Spam**, con **regole per mittente** applicabili anche alla posta già arrivata.
+- **Selezione multipla** con azioni cumulative: letta/da leggere, sposta, **unisci**, archivia.
+
+**Conversazioni**
+- Righe compatte di una sola riga; la conversazione aperta mostra sintesi, struttura dei messaggi, suggerimenti dell'assistente, task e note, risorse.
+- **Allegati versionati**: le nuove versioni di uno stesso file si riconoscono e si consultano in linea.
+- Viste *Attive*, *Importanti* (segnalibro, sincronizzato con la stella di Gmail) e *Archiviate*.
+- **Stacca** un messaggio in una conversazione nuova, o **unisci** più conversazioni.
+
+**Task**
+- Ogni progetto, e anche *Da smistare*, ha la sua lista di task ordinabile, con scadenze.
+- Task suggeriti dall'assistente e *Ricordami di rispondere*, che si chiude da solo quando rispondi.
+
+**Scrittura e invio**
+- Vista Email a carosello sull'intera conversazione, con la bozza in fondo.
+- Composizione in HTML o testo, **firme** scelte per progetto, account di uscita per progetto.
+- Gli invii e le modifiche su Gmail passano da una **coda di attività** eseguita a intervalli: c'è tempo per ripensarci (*Blocca invio*).
+
+**Assistente (LLM locale)**
+- Chat sulla conversazione o sulla bozza: riassumere, cosa richiede risposta, estrarre task, tradurre, riformulare (anche solo un pezzo selezionato).
+- Ricerca unica su conversazioni, persone, allegati, task e note, anche **per significato**; l'assistente risponde citando le mail.
+- L'analisi in background si fa solo sulla **posta recente** (90 giorni, impostabile fino a "tutta"); per la posta più vecchia la sintesi si genera su richiesta. Può essere messa **in pausa**: la posta appena ricevuta e le conversazioni che apri si analizzano comunque.
+
+## Requisiti
+
+- **macOS** (le password degli account sono salvate nel Portachiavi)
+- **Node.js 26** (`nvm use`) e **pnpm 12** (`npm install -g pnpm`)
+- **Ollama** con i due modelli predefiniti:
+  ```bash
+  ollama pull llama3.1:8b
+  ollama pull bge-m3
+  ```
+  Su un Mac con 16 GB di memoria si consiglia un solo modello linguistico alla volta.
+- Un account **Gmail** con la verifica in due passaggi e una **password per le app** (Account Google → Sicurezza → Password per le app). Si può aggiungere anche un account IMAP/SMTP generico (Impostazioni → Account), meno provato.
+
+## Avvio
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Il backend ascolta su `127.0.0.1:4310`, l'interfaccia su <http://localhost:5173>. Al primo avvio la **procedura di benvenuto** chiede l'account di posta (la password va nel Portachiavi, mai nel database o in git) e aiuta a creare i primi progetti; l'importazione della posta parte subito, dai messaggi più recenti.
+
+Le migrazioni del database si applicano da sole all'avvio del server.
+
+### Configurazione facoltativa
+
+Copia `.env.example` in `.env.local` (escluso da git) solo se vuoi cambiare i valori predefiniti:
+
+| Variabile | Predefinito | |
+|---|---|---|
+| `MMW_PORT` | `4310` | porta del backend (ascolta solo su 127.0.0.1) |
+| `MMW_DATA_DIR` | `./data` | database SQLite e file degli allegati |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | |
+| `OLLAMA_LLM_MODEL` | `llama3.1:8b` | modello linguistico (si cambia anche dalle Impostazioni) |
+| `OLLAMA_EMBED_MODEL` | `bge-m3` | modello per la ricerca per significato |
+| `OLLAMA_NUM_CTX` | `16384` | contesto del modello |
+| `MMW_TEST_EMAIL`, `MMW_TEST_APP_PASSWORD` | | solo per `pnpm check:imap` |
+
+## Dati e privacy
+
+- Tutto resta in locale: posta, progetti, task, note e analisi stanno in `data/` (database SQLite + allegati deduplicati), esclusa da git.
+- L'LLM gira in Ollama sullo stesso computer.
+- La posta resta anche sul server di posta: cancellando `data/` viene reimportata.
+- `pnpm reset:all` (con il server fermo) riporta l'app allo stato iniziale spostando i dati in una copia datata `data-backup-…` (anch'essa esclusa da git); con `--delete` li cancella insieme alle password nel Portachiavi.
 
 ## Struttura
 
 ```
-server/   backend Node + Fastify + SQLite (drizzle, sqlite-vec, imapflow)
-web/      interfaccia React + Vite + Tailwind
+server/   backend: Node + Fastify, SQLite (drizzle, FTS5, sqlite-vec), imapflow, nodemailer, Ollama
+web/      interfaccia: React 19 + Vite, TanStack Query, TipTap, CSS a componenti
 shared/   tipi condivisi (DTO dell'API)
-data/     database e blob (creata al primo avvio, esclusa da git)
+docs/     requisiti e system design
+data/     database e allegati (creata al primo avvio, esclusa da git)
 ```
-
-## Avvio
-
-Requisiti: Node 26 (`nvm use`), pnpm 12 (`npm install -g pnpm`), Ollama con `llama3.1:8b` e `bge-m3`.
-
-```bash
-pnpm install
-cp .env.example .env.local   # poi compila MMW_TEST_EMAIL e MMW_TEST_APP_PASSWORD
-pnpm check:imap              # verifica la connessione all'account di prova
-pnpm dev                     # backend su :4310, interfaccia su http://127.0.0.1:5173
-```
-
-Le migrazioni del database vengono applicate all'avvio del server.
-
-### App password Gmail (account di prova)
-
-1. Attiva la verifica in due passaggi sull'account Google.
-2. Genera una app password: Account Google → Sicurezza → Password per le app.
-3. Copiala in `.env.local` come `MMW_TEST_APP_PASSWORD`.
-4. In Impostazioni → Account aggiungi l'account con credenziale `env:MMW_TEST_APP_PASSWORD`.
-
-Le credenziali non vanno mai nel database né in git: il DB conserva solo il riferimento (`env:NOME`).
 
 ## Comandi
 
 | Comando | |
 |---|---|
-| `pnpm dev` | backend + interfaccia in watch |
-| `pnpm test` | test |
+| `pnpm dev` | backend + interfaccia con ricaricamento automatico |
+| `pnpm test` | test (vitest) |
 | `pnpm typecheck` | controllo dei tipi su tutti i pacchetti |
 | `pnpm db:generate` | genera una migrazione dopo aver modificato `server/src/db/schema.ts` |
-| `pnpm check:imap` | test di connessione IMAP all'account di prova |
+| `pnpm check:imap` | prova la connessione IMAP con le variabili `MMW_TEST_*` |
+| `pnpm db:reset-mail` | cancella la posta importata (account e impostazioni restano); al riavvio si reimporta |
+| `pnpm reset:all` | riporta l'app allo stato iniziale (vedi sopra) |
+| `pnpm --filter @mmw/server eval:assistant` | banco di prova dell'assistente sulla posta di prova (`--model`, `--case`, `--runs`) |
+| `pnpm --filter @mmw/server try:summary` | stampa le sintesi che l'LLM produrrebbe, senza salvarle |
+| `pnpm --filter @mmw/server try:classify` | prova la classificazione su uno scenario sintetico in memoria |
+
+## Documentazione
+
+- [Requisiti](docs/01-requisiti.md)
+- [System design](docs/02-system-design.md)
