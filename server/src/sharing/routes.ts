@@ -38,7 +38,7 @@ export function registerSharing(app: FastifyInstance, sharing: SharingService) {
     return { ok: true };
   });
   app.put('/api/sharing/folder', async (req, reply) => {
-    const body = z.object({ folder: z.string().nullable(), copy: z.boolean().optional() }).safeParse(req.body);
+    const body = z.object({ folder: z.string().nullable(), copy: z.boolean().optional(), join: z.boolean().optional() }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: 'Cartella non valida' });
     return handle(() => sharing.setFolder(body.data), reply);
   });

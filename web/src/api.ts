@@ -1,4 +1,5 @@
 import type {
+  AccountCredentialDto,
   AccountDto,
   ActivityQueueDto,
   ComposeInput,
@@ -135,6 +136,7 @@ export const api = {
   sharingFolder: (input: SharingFolderInput) => request<SharingStatusDto>('PUT', '/api/sharing/folder', input),
   sharingMachine: (input: { name?: string; idleReleaseMinutes?: number }) => request<SharingStatusDto>('PUT', '/api/sharing/machine', input),
   sharingSuggestedFolders: () => request<string[]>('GET', '/api/sharing/suggested-folders'),
+  accountCredentials: () => request<AccountCredentialDto[]>('GET', '/api/accounts/credentials'),
   syncStatus: () => request<SyncStatusDto[]>('GET', '/api/sync/status'),
   syncNow: () => request<SyncStatusDto[]>('POST', '/api/sync/now'),
   jobsStatus: () => request<JobQueueStatusDto>('GET', '/api/jobs/status'),

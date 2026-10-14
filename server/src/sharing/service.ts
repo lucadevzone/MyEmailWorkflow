@@ -427,6 +427,9 @@ export class SharingService {
           throw new SharingError('Nella cartella non si può scrivere');
         }
       }
+      if (folder && input.join && !fs.existsSync(path.join(folder, LEASE_FILE))) {
+        throw new SharingError("In questa cartella non ci sono i dati dell'altro PC. Se Google Drive la sta ancora scaricando, riprova tra poco.");
+      }
       if (folder === old) return this.status();
       if (folder && old && input.copy && fs.existsSync(old)) copyFolderContent(old, folder);
       this.setSetting('machine.sharedFolder', folder);

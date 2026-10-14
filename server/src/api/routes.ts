@@ -7,8 +7,8 @@ import type { JobRunner } from '../jobs/runner.ts';
 import type { JobQueueStatusDto } from '@mmw/shared';
 import { autoSortStats } from '../ai/auto-sort-log.ts';
 import { SignatureError, SignatureService, signatureInputSchema } from '../signatures/service.ts';
-import { CredentialError } from '../mail/credentials.ts';
-import type { HealthDto } from '@mmw/shared';
+import { CredentialError, hasSecret } from '../mail/credentials.ts';
+import type { AccountCredentialDto, HealthDto } from '@mmw/shared';
 import type { Db } from '../db/client.ts';
 import type Database from 'better-sqlite3';
 import { config } from '../config.ts';
@@ -140,6 +140,9 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDeps) {
     await deps.sync.stop(req.params.id);
     return accountsSvc.remove(req.params.id) ? reply.code(204).send() : reply.code(404).send({ error: 'Account non trovato' });
   });
+
+  // Quali account hanno la password su questo PC (il secondo PC riceve gli account, non le password).
+  app.get('/api/accounts/credentials', async (): Promise<AccountCredentialDto[]> => accountsSvc.list().map((a) => ({ id: a.id, hasPassword: hasSecret(a.credentialRef) })));
 
   app.post<{ Params: { id: string } }>('/api/accounts/:id/test', async (req) => accountsSvc.testConnection(req.params.id));
 

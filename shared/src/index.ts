@@ -193,6 +193,14 @@ export interface SharingFolderInput {
   folder: string | null;
   /** Copia il contenuto della cartella attuale nella nuova. */
   copy?: boolean;
+  /** Secondo PC: la cartella deve già contenere i dati dell'altro PC (non se ne inaugura una vuota). */
+  join?: boolean;
+}
+
+/** Account con o senza password su questo PC (sul secondo PC le password vanno reinserite). */
+export interface AccountCredentialDto {
+  id: string;
+  hasPassword: boolean;
 }
 
 // ─── Conversazioni ───────────────────────────────────────────────────────────

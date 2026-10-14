@@ -1,6 +1,6 @@
 # Uso alternato su più PC — progetto
 
-Versione 0.3 — 2026-10-14 · stato: **approvato** · fasi 1–4 fatte
+Versione 0.3 — 2026-10-14 · stato: **approvato** · realizzato (fasi 1–5)
 
 ## 1. Obiettivo e vincoli
 
@@ -103,7 +103,7 @@ Indice di ricerca e vettori (indicizzazione locale, veloce), classificazioni e s
 2. **Semaforo e modalità attesa**: cartella condivisa nelle impostazioni, semaforo con segnale di vita, sola lettura, fascia e pulsanti, rilascio alla chiusura/inattività/richiesta, consegna periodica.
 3. **Posta che arriva dopo l'import**: aggancio dei messaggi alla mappa durante l'importazione da Gmail. Un messaggio già visto sull'altro PC va nella conversazione decisa lì (che nasce con il suo stato e non si riapre se era archiviata); task, note, annotazioni e bozze che lo aspettavano lo ritrovano subito.
 4. **File condivisi**: risorse, foto dei contatti, allegati delle bozze e degli invii in coda nella cartella `files/`, copiati alla consegna (prima dei dati che li citano) e ripresi alla presa; un file non ancora scaricato da Drive si riprende a ogni giro o quando serve.
-5. **Secondo PC da zero**: procedura di benvenuto "Ho già l'app su un altro PC", password degli account.
+5. **Secondo PC da zero**: procedura di benvenuto "Ho già l'app su un altro PC", password degli account. La cartella scelta deve già contenere il semaforo (una cartella vuota non si inaugura per sbaglio); se il database è in uso altrove si può chiederlo da lì; le password si salvano nel Portachiavi di questo Mac.
 
 ## 12. Rischi e limiti
 

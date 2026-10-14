@@ -320,6 +320,10 @@ a.pm-infochip, button.pm-infochip { text-decoration: underline; text-underline-o
 .pm-welcome__item { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .pm-welcome__sync { font-size: var(--fs-sm); color: var(--ink-muted); padding-left: 24px; }
 .pm-welcome__form { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.pm-welcome__password { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pm-welcome__password .pm-input { flex: 1 1 180px; min-width: 0; }
+.pm-welcome__password .pm-error { flex-basis: 100%; }
+.pm-welcome__who { display: flex; gap: 6px; align-items: baseline; min-width: 0; flex: 0 1 auto; }
 .pm-welcome__form button { align-self: flex-start; }
 .pm-welcome__proposals { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .pm-welcomehint {

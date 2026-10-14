@@ -1,24 +1,31 @@
 // Procedura di benvenuto: si apre da sola quando non c'è ancora nessun account. Quattro passi:
 // cos'è l'app, un account di posta, i primi progetti (così lo smistamento parte già "intelligente"), fatto.
 // Riusa il modulo dell'account delle impostazioni e la creazione dei progetti: niente di nuovo sul server.
+// Ramo «Ho già l'app su un altro PC» (docs/03-uso-su-piu-pc.md §8): cartella condivisa, presa dei dati
+// personali consegnati dall'altro PC, password degli account (nel Portachiavi di questo Mac), posta da Gmail.
 
 import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Check, FolderPlus, Inbox, Mail, Sparkles } from 'lucide-react';
+import { Check, FolderPlus, Inbox, KeyRound, Laptop, Mail, Sparkles } from 'lucide-react';
 import type { SyncStatusDto } from '@mmw/shared';
 import { api } from '../api.ts';
 import { Ic } from '../ui/Ic.tsx';
 import { AccountForm } from '../settings/SettingsPage.tsx';
 import { paths, SYSTEM_INBOX } from '../shell/paths.ts';
+import { useSharingStatus } from '../shell/Sharing.tsx';
+import { useToast } from '../ui/toast.tsx';
 
 const STEPS = ['Benvenuto', 'Account', 'Progetti', 'Pronto'] as const;
+const JOIN_STEPS = ['Benvenuto', 'Cartella condivisa', 'Password', 'Pronto'] as const;
 
 export function WelcomePage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const step = Math.min(STEPS.length - 1, Math.max(0, Number(params.get('step') ?? 0)));
-  const go = (n: number) => setParams(n ? { step: String(n) } : {});
+  const join = params.get('mode') === 'join';
+  const steps = join ? JOIN_STEPS : STEPS;
+  const step = Math.min(steps.length - 1, Math.max(0, Number(params.get('step') ?? 0)));
+  const go = (n: number, asJoin = join) => setParams(n ? { step: String(n), ...(asJoin ? { mode: 'join' } : {}) } : {});
   const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const active = projects.filter((p) => !p.archived);
@@ -28,7 +35,7 @@ export function WelcomePage() {
   return (
     <div className="pm-welcome">
       <ol className="pm-welcome__steps" aria-label="Passi">
-        {STEPS.map((label, i) => (
+        {steps.map((label, i) => (
           <li key={label} className={i === step ? 'is-current' : i < step ? 'is-done' : ''} aria-current={i === step ? 'step' : undefined}>
             <span className="pm-welcome__dot">{i < step ? <Ic icon={Check} size={13} /> : i + 1}</span>
             {label}
@@ -48,13 +55,32 @@ export function WelcomePage() {
             </ul>
             <p className="pm-muted">Bastano due passi per iniziare: collegare un account e creare i primi progetti.</p>
             <div className="pm-welcome__actions">
-              <span />
-              <button type="button" className="pm-btn pm-btn--primary" onClick={() => go(1)}>Iniziamo</button>
+              <button type="button" className="pm-btn pm-btn--ghost" onClick={() => go(1, true)}>
+                <Ic icon={Laptop} size={15} /> Ho già l'app su un altro PC
+              </button>
+              <button type="button" className="pm-btn pm-btn--primary" onClick={() => go(1, false)}>Iniziamo</button>
             </div>
           </>
         )}
 
-        {step === 1 && (
+        {join && step === 1 && <JoinFolder onBack={() => go(0)} onNext={() => go(2)} />}
+        {join && step === 2 && <JoinPasswords onBack={() => go(1)} onNext={() => go(3)} />}
+        {join && step === 3 && (
+          <>
+            <h1>Tutto pronto</h1>
+            <ul className="pm-welcome__points">
+              <li><Ic icon={FolderPlus} size={16} /><span>Progetti, task, note e regole sono quelli dell'altro PC.</span></li>
+              <li><Ic icon={Inbox} size={16} /><span>La posta arriva da Gmail, prima la più recente: ogni conversazione compare <strong>già nel suo progetto</strong>. Lo storico completo può richiedere qualche ora.</span></li>
+              <li><Ic icon={Laptop} size={16} /><span>Un PC alla volta: quando smetti di usare questo, il database passa all'altro da solo dopo qualche minuto (o subito con <strong>Rilascia</strong> nel menu Stato).</span></li>
+            </ul>
+            <div className="pm-welcome__actions">
+              <button type="button" className="pm-btn pm-btn--ghost" onClick={() => go(2)}>Indietro</button>
+              <button type="button" className="pm-btn pm-btn--primary" onClick={finish}>Vai alla posta</button>
+            </div>
+          </>
+        )}
+
+        {!join && step === 1 && (
           <>
             <h1>Collega un account di posta</h1>
             <p>La posta recente viene importata subito, quella più vecchia poco alla volta in background.</p>
@@ -78,7 +104,7 @@ export function WelcomePage() {
           </>
         )}
 
-        {step === 2 && (
+        {!join && step === 2 && (
           <>
             <h1>Crea i tuoi progetti</h1>
             <p>
@@ -105,7 +131,7 @@ export function WelcomePage() {
           </>
         )}
 
-        {step === 3 && (
+        {!join && step === 3 && (
           <>
             <h1>Tutto pronto</h1>
             <ul className="pm-welcome__points">
@@ -226,5 +252,186 @@ function ProjectStep({ accountId, existing }: { accountId: string; existing: str
         {create.error && <div className="pm-error">{(create.error as Error).message}</div>}
       </form>
     </>
+  );
+}
+
+/** Secondo PC: scelta della cartella condivisa e presa dei dati personali consegnati dall'altro PC. */
+function JoinFolder({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { data: st } = useSharingStatus();
+  const { data: suggested = [] } = useQuery({ queryKey: ['sharing-folders'], queryFn: api.sharingSuggestedFolders });
+  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: api.projects, enabled: st?.state === 'holder' });
+  const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts, enabled: st?.state === 'holder' });
+  const [name, setName] = useState<string | null>(null);
+  const [folder, setFolder] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (!st) return null;
+  const target = folder ?? st.folder ?? suggested[0] ?? '';
+  const connected = st.state !== 'disabled';
+  const run = async (fn: () => Promise<unknown>, done?: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      await qc.invalidateQueries();
+      if (done) toast({ text: done });
+    } catch (e) {
+      toast({ text: (e as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const connect = () =>
+    run(async () => {
+      if (name !== null && name.trim() && name !== st.machineName) await api.sharingMachine({ name: name.trim() });
+      await api.sharingFolder({ folder: target, join: true });
+    });
+  return (
+    <>
+      <h1>Collega questo PC all'altro</h1>
+      <p>
+        Scegli la cartella condivisa che usi sull'altro PC (su Google Drive). Da lì arrivano progetti, task, note, regole e contatti: pochi
+        MB. La posta invece la scarica questo PC da Gmail.
+      </p>
+      <div className="pm-welcome__form">
+        <label className="pm-field">
+          <span className="pm-muted">Nome di questo PC (lo vedrai sull'altro)</span>
+          <input className="pm-input" value={name ?? st.machineName} onChange={(e) => setName(e.target.value)} disabled={connected} />
+        </label>
+        <label className="pm-field">
+          <span className="pm-muted">Cartella condivisa</span>
+          <input className="pm-input" placeholder="…/Google Drive/Il mio Drive/MyEmailWorkflow" value={target} onChange={(e) => setFolder(e.target.value)} disabled={connected} />
+        </label>
+        {!connected && suggested.length > 0 && (
+          <div className="pm-row__sub">
+            Google Drive su questo Mac:{' '}
+            {suggested.map((f) => (
+              <button key={f} type="button" className="pm-linkbtn" onClick={() => setFolder(f)}>
+                {f.replace(/^.*\/CloudStorage\//, '')}
+              </button>
+            ))}
+          </div>
+        )}
+        {!connected && suggested.length === 0 && (
+          <p className="pm-muted">Non trovo Google Drive per desktop su questo Mac: installalo e accedi con lo stesso account dell'altro PC, oppure scrivi il percorso della cartella.</p>
+        )}
+      </div>
+
+      {connected && (
+        <div className="pm-welcome__list">
+          {st.error ? (
+            <div className="pm-error">{st.error}</div>
+          ) : st.state === 'holder' ? (
+            <div className="pm-welcome__item">
+              <Ic icon={Check} size={16} className="pm-ok" /> Dati arrivati: <strong>{projects.filter((p) => !p.archived).length} progetti</strong>,{' '}
+              {accounts.length} account
+            </div>
+          ) : st.state === 'syncing' ? (
+            <div className="pm-welcome__sync">Google Drive sta ancora scaricando i dati dell'altro PC (versione {st.lease?.version ?? '?'})…</div>
+          ) : st.lease?.holderName ? (
+            <div className="pm-welcome__sync">
+              Il database è in uso su <strong>{st.lease.holderName}</strong>
+              {st.lease.releaseRequestedBy ? ': richiesta inviata, arriva appena lo consegna.' : '. Chiudi l\'app lì, oppure chiedi qui di passarlo.'}
+              {!st.lease.releaseRequestedBy && (
+                <button type="button" className="pm-linkbtn" disabled={busy} onClick={() => void run(api.sharingRequestRelease, `Richiesta inviata a ${st.lease?.holderName}`)}>
+                  Chiedi il database a {st.lease.holderName}
+                </button>
+              )}
+              {st.holderStale && (
+                <button type="button" className="pm-linkbtn" disabled={busy} onClick={() => void run(() => api.sharingAcquire(true))}>
+                  {st.lease.holderName} non dà segni: prendi comunque
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="pm-welcome__sync">Presa dei dati in corso…</div>
+          )}
+        </div>
+      )}
+
+      <div className="pm-welcome__actions">
+        {connected ? (
+          <button type="button" className="pm-btn pm-btn--ghost" disabled={busy} onClick={() => void run(() => api.sharingFolder({ folder: null }))}>
+            Cambia cartella
+          </button>
+        ) : (
+          <button type="button" className="pm-btn pm-btn--ghost" onClick={onBack}>Indietro</button>
+        )}
+        {connected ? (
+          <button type="button" className="pm-btn pm-btn--primary" disabled={st.state !== 'holder'} onClick={onNext}>Avanti</button>
+        ) : (
+          <button type="button" className="pm-btn pm-btn--primary" disabled={busy || !target.trim()} onClick={() => void connect()}>Collegati</button>
+        )}
+      </div>
+    </>
+  );
+}
+
+/** Secondo PC: gli account arrivano dall'altro PC, le password no (stanno nel Portachiavi di ciascun Mac). */
+function JoinPasswords({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+  const { data: accounts = [] } = useQuery({ queryKey: ['accounts'], queryFn: api.accounts });
+  const { data: creds = [] } = useQuery({ queryKey: ['account-credentials'], queryFn: api.accountCredentials });
+  const has = new Map(creds.map((c) => [c.id, c.hasPassword]));
+  const missing = accounts.filter((a) => has.get(a.id) === false).length;
+  return (
+    <>
+      <h1>Password degli account</h1>
+      <p>
+        Le password non viaggiano tra i PC: inseriscile qui una volta. Vengono salvate nel Portachiavi di questo Mac; poi parte l'importazione
+        della posta.
+      </p>
+      <div className="pm-welcome__list">
+        {accounts.map((a) => (has.get(a.id) ? (
+          <div key={a.id} className="pm-welcome__item">
+            <Ic icon={Check} size={16} className="pm-ok" /> <strong>{a.name}</strong> <span className="pm-muted">{a.email}</span>
+          </div>
+        ) : (
+          <PasswordRow key={a.id} id={a.id} name={a.name} email={a.email} gmail={a.provider === 'gmail'} />
+        )))}
+        {accounts.length > 0 && <SyncProgress />}
+      </div>
+      <div className="pm-welcome__actions">
+        <button type="button" className="pm-btn pm-btn--ghost" onClick={onBack}>Indietro</button>
+        <button type="button" className="pm-btn pm-btn--primary" onClick={onNext}>{missing ? 'Più tardi' : 'Avanti'}</button>
+      </div>
+    </>
+  );
+}
+
+function PasswordRow({ id, name, email, gmail }: { id: string; name: string; email: string; gmail: boolean }) {
+  const qc = useQueryClient();
+  const [password, setPassword] = useState('');
+  const save = useMutation({
+    mutationFn: () => api.setAccountPassword(id, password),
+    onSuccess: () => {
+      setPassword('');
+      void qc.invalidateQueries({ queryKey: ['account-credentials'] });
+      void qc.invalidateQueries({ queryKey: ['sync'] });
+    },
+  });
+  return (
+    <form
+      className="pm-welcome__password"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (password) save.mutate();
+      }}
+    >
+      <Ic icon={KeyRound} size={16} />
+      <span className="pm-welcome__who">
+        <strong>{name}</strong> <span className="pm-muted">{email}</span>
+      </span>
+      <input
+        className="pm-input"
+        type="password"
+        autoComplete="new-password"
+        placeholder={gmail ? 'App password di Google' : 'Password'}
+        aria-label={`Password di ${email}`}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <button type="submit" className="pm-btn pm-btn--secondary pm-btn--sm" disabled={!password || save.isPending}>Salva</button>
+      {save.error && <div className="pm-error">{(save.error as Error).message}</div>}
+    </form>
   );
 }

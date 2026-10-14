@@ -42,10 +42,12 @@ describe('semaforo nella cartella condivisa', () => {
     expect(A.sharing.status()).toMatchObject({ state: 'holder', localVersion: 1, lease: { holderName: 'MacBook-ufficio', version: 1 } });
     expect(fs.existsSync(path.join(shared, 'personale-1.sqlite'))).toBe(true);
 
-    // B si collega: il database è occupato, quindi aspetta in sola lettura.
+    // B si collega: il database è occupato, quindi aspetta in sola lettura. Una cartella vuota non va bene.
     const B = pc('MacBook-casa');
     await B.sharing.init();
-    await B.sharing.setFolder({ folder: shared });
+    await expect(B.sharing.setFolder({ folder: tmp(), join: true })).rejects.toThrow("non ci sono i dati dell'altro PC");
+    expect(B.sharing.status().state).toBe('disabled');
+    await B.sharing.setFolder({ folder: shared, join: true });
     expect(B.sharing.status()).toMatchObject({ state: 'waiting', holderStale: false });
     expect(B.sharing.writable).toBe(false);
     expect(B.writers.on).toBe(false);

@@ -61,6 +61,15 @@ export function resolveSecret(ref: string): string {
   throw new CredentialError(`Schema di credenziale non supportato: "${scheme}"`);
 }
 
+/** Il segreto c'è (senza leggerlo fuori da qui)? */
+export function hasSecret(ref: string): boolean {
+  try {
+    return !!resolveSecret(ref);
+  } catch {
+    return false;
+  }
+}
+
 export function isValidCredentialRef(ref: string): boolean {
   return /^env:[A-Za-z_][A-Za-z0-9_]*$/.test(ref) || /^keychain:[A-Za-z0-9]+$/.test(ref);
 }
