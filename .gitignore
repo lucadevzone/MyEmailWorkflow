@@ -1,6 +1,9 @@
 node_modules/
 dist/
 data/
+# Copie dei dati fatte da `pnpm reset:all` (contengono la posta)
+data-backup-*/
+data*-backup-*/
 .env.local
 .DS_Store
 *.tsbuildinfo
