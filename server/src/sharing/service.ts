@@ -89,7 +89,7 @@ export class SharingService {
     return id;
   }
   private get machineName(): string {
-    return this.getSetting<string | null>('machine.name', null) ?? os.hostname().replace(/\.local$/, '');
+    return this.getSetting<string | null>('machine.name', null)?.trim() || os.hostname().replace(/\.local$/, '').trim() || 'PC senza nome';
   }
   private get folder(): string | null {
     return this.getSetting<string | null>('machine.sharedFolder', null);
@@ -138,7 +138,8 @@ export class SharingService {
     }
     const dto: SharingLeaseDto | null = lease && {
       holderId: lease.holderId,
-      holderName: lease.holderName,
+      // Occupato ma senza nome (semaforo scritto da un PC senza nome): l'interfaccia deve comunque saperlo.
+      holderName: lease.holderId ? lease.holderName?.trim() || "l'altro PC" : null,
       since: lease.since,
       heartbeat: lease.heartbeat,
       version: lease.version,

@@ -55,7 +55,8 @@ Client di posta personale **organizzato per progetti**, non per cartelle. Ogni c
 
 ```bash
 pnpm install
-pnpm dev
+pnpm start      # uso di tutti i giorni
+pnpm dev        # sviluppo: il server si riavvia a ogni modifica del codice
 ```
 
 Il backend ascolta su `127.0.0.1:4310`, l'interfaccia su <http://localhost:5173>. Al primo avvio la **procedura di benvenuto** chiede l'account di posta (la password va nel Portachiavi, mai nel database o in git) e aiuta a creare i primi progetti; l'importazione della posta parte subito, dai messaggi più recenti.
@@ -100,7 +101,8 @@ data/     database e allegati (creata al primo avvio, esclusa da git)
 
 | Comando | |
 |---|---|
-| `pnpm dev` | backend + interfaccia con ricaricamento automatico |
+| `pnpm start` | backend + interfaccia per l'uso di tutti i giorni: alla chiusura (Ctrl-C) consegna e libera il database dell'uso su più PC |
+| `pnpm dev` | backend + interfaccia con ricaricamento automatico (con Ctrl-C il server viene chiuso di colpo: il database non si libera, lo riprende al prossimo avvio o l'altro PC dopo 5 minuti) |
 | `pnpm test` | test (vitest) |
 | `pnpm typecheck` | controllo dei tipi su tutti i pacchetti |
 | `pnpm db:generate` | genera una migrazione dopo aver modificato `server/src/db/schema.ts` |

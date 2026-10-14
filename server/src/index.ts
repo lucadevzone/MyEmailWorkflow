@@ -46,7 +46,13 @@ const writers: Writers = {
 const sharing = new SharingService({ sqlite, dataDir: config.dataDir, writers, log: (m) => app.log.info(m), blobs: services.blobs });
 const app = buildApp({ ...services, sharing, port: config.port });
 
+// Con Ctrl-C il segnale arriva più volte (dal terminale e da pnpm): si chiude una volta sola, lasciando
+// il tempo di consegnare e liberare il database. Nota: «tsx watch» (pnpm dev) al secondo segnale uccide il
+// processo senza aspettare; per l'uso di tutti i giorni c'è pnpm start.
+let stopping = false;
 const shutdown = async () => {
+  if (stopping) return;
+  stopping = true;
   try {
     await sharing.shutdown();
   } catch (err) {
