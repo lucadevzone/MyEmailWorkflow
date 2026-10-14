@@ -59,3 +59,11 @@
 .pm-modal { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(27, 26, 23, .3); }
 .pm-modal__card { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 14px; padding: 22px 24px; background: var(--surface); border-radius: var(--r-2xl); box-shadow: var(--shadow-pop); box-sizing: border-box; }
 .pm-modal__title { margin: 0; font-size: var(--fs-xl); font-weight: 600; }
+
+/* Cartella condivisa: campo con «Scegli…» e finestra di conferma */
+.pm-folderfield { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.pm-folderfield .pm-input { flex: 1; min-width: 0; }
+.pm-folderconfirm { max-width: 520px; }
+.pm-folderconfirm__path { display: block; padding: 6px 10px; border-radius: var(--r-md); background: var(--surface-chip); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.pm-folderconfirm__list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-md); line-height: 1.45; }
+.pm-folderconfirm__list code { overflow-wrap: anywhere; }

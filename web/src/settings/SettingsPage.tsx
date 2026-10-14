@@ -7,6 +7,7 @@ import { api } from '../api.ts';
 import { useNavigate } from 'react-router-dom';
 import { useEscBack } from '../ui/useEscBack.ts';
 import { useToast } from '../ui/toast.tsx';
+import { FolderConfirmDialog, FolderField } from './SharedFolder.tsx';
 
 /** Finestra dell'analisi con l'IA (0 = tutta la posta). */
 const AI_WINDOWS = [
@@ -376,11 +377,11 @@ function MultiPc() {
   const qc = useQueryClient();
   const toast = useToast();
   const { data: st } = useQuery({ queryKey: ['sharing'], queryFn: api.sharingStatus });
-  const { data: suggested = [] } = useQuery({ queryKey: ['sharing-folders'], queryFn: api.sharingSuggestedFolders });
   const [name, setName] = useState<string | null>(null);
   const [folder, setFolder] = useState<string | null>(null);
   const [copy, setCopy] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   if (!st) return null;
   const refresh = () => qc.invalidateQueries();
   const run = async (fn: () => Promise<unknown>, done: string) => {
@@ -433,20 +434,10 @@ function MultiPc() {
             </select>
           </label>
         </div>
-        <label className="pm-field">
+        <div className="pm-field">
           <span className="pm-muted">Cartella condivisa</span>
-          <input className={input} placeholder="Nessuna" value={target} onChange={(e) => setFolder(e.target.value)} />
-        </label>
-        {suggested.length > 0 && (
-          <div className="pm-row__sub">
-            Google Drive su questo Mac:{' '}
-            {suggested.map((f) => (
-              <button key={f} type="button" className="pm-linkbtn" onClick={() => setFolder(f)}>
-                {f.replace(/^.*\/CloudStorage\//, '')}
-              </button>
-            ))}
-          </div>
-        )}
+          <FolderField value={target} onChange={setFolder} />
+        </div>
         {st.folder && folder !== null && folder !== st.folder && (
           <label className="pm-field pm-field--check">
             <input type="checkbox" checked={copy} onChange={(e) => setCopy(e.target.checked)} />
@@ -477,12 +468,25 @@ function MultiPc() {
             type="button"
             className="pm-btn pm-btn--primary pm-btn--sm"
             disabled={busy || !target.trim() || target === st.folder}
-            onClick={() => void run(() => api.sharingFolder({ folder: target, copy }), 'Cartella condivisa impostata').then(() => setFolder(null))}
+            onClick={() => setConfirming(true)}
           >
             Usa questa cartella
           </button>
         </div>
       </div>
+      {confirming && (
+        <FolderConfirmDialog
+          folder={target}
+          copy={!!st.folder && copy}
+          onClose={() => setConfirming(false)}
+          onConfirm={() =>
+            run(() => api.sharingFolder({ folder: target, copy }), 'Cartella condivisa impostata').then(() => {
+              setFolder(null);
+              setConfirming(false);
+            })
+          }
+        />
+      )}
     </Section>
   );
 }

@@ -11,10 +11,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import BetterSqlite3 from 'better-sqlite3';
 import type Database from 'better-sqlite3';
-import type { SharingFolderInput, SharingLeaseDto, SharingState, SharingStatusDto } from '@mmw/shared';
+import type { SharingFolderInput, SharingFolderPreviewDto, SharingLeaseDto, SharingState, SharingStatusDto } from '@mmw/shared';
 import { exportPersonal, importPersonal } from './exchange.ts';
-import { downloadFiles, fetchFile, uploadFiles } from './files.ts';
+import { downloadFiles, fetchFile, personalBlobShas, uploadFiles } from './files.ts';
 import type { BlobStore } from '../store/blobs.ts';
 import { forgetAiWindow } from '../ai/window.ts';
 import { bus } from '../events/bus.ts';
@@ -416,7 +417,7 @@ export class SharingService {
   setFolder(input: SharingFolderInput): Promise<SharingStatusDto> {
     return this.serial(async () => {
       const old = this.folder;
-      const folder = input.folder?.trim() ? path.resolve(input.folder.trim().replace(/^~(?=$|\/)/, os.homedir())) : null;
+      const folder = resolveFolder(input.folder);
       if (folder) {
         // La sottocartella proposta (es. …/Il mio Drive/MyEmailWorkflow) si crea, se esiste quella che la contiene.
         if (!fs.existsSync(folder) && fs.existsSync(path.dirname(folder))) fs.mkdirSync(folder);
@@ -442,6 +443,65 @@ export class SharingService {
       await this.join();
       return this.status();
     });
+  }
+
+  /**
+   * Cosa succederebbe scegliendo questa cartella, per chiedere conferma: dati di un altro PC già presenti
+   * (che sostituiranno quelli di qui), contenuto della cartella attuale da copiare, oppure dati di questo PC
+   * da scrivere (si esporta per misurarli).
+   */
+  previewFolder(input: SharingFolderInput): SharingFolderPreviewDto {
+    const folder = resolveFolder(input.folder);
+    if (!folder) throw new SharingError('Nessuna cartella');
+    const base = { folder, create: !fs.existsSync(folder), holderName: null, version: null, from: null, dataBytes: 0 };
+    if (!base.create && !fs.statSync(folder).isDirectory()) throw new SharingError('Non è una cartella');
+    if (base.create && !fs.existsSync(path.dirname(folder))) throw new SharingError('La cartella non esiste');
+    const leaseFile = path.join(folder, LEASE_FILE);
+    if (fs.existsSync(leaseFile)) {
+      let lease: LeaseFile | null = null;
+      try {
+        lease = JSON.parse(fs.readFileSync(leaseFile, 'utf8')) as LeaseFile;
+      } catch {
+        /* semaforo illeggibile: si mostra quel che si sa */
+      }
+      const data = lease?.file ? path.join(folder, lease.file) : null;
+      const present = !!data && fs.existsSync(data);
+      // Database libero: il semaforo non dice più chi l'aveva, lo dice il file consegnato.
+      let holderName = lease?.holderName ?? null;
+      if (!holderName && present) {
+        try {
+          const db = new BetterSqlite3(data, { readonly: true, fileMustExist: true });
+          try {
+            holderName = (db.prepare("select value from meta where key = 'machine'").get() as { value: string } | undefined)?.value || null;
+          } finally {
+            db.close();
+          }
+        } catch {
+          /* file non ancora scaricato del tutto */
+        }
+      }
+      return { ...base, mode: 'join', bytes: present ? fs.statSync(data).size : (lease?.size ?? 0), files: 1, holderName, version: lease?.version ?? null };
+    }
+    const old = this.folder;
+    if (old && old !== folder && input.copy && fs.existsSync(old)) {
+      const { bytes, files } = folderContentSize(old, folder);
+      return { ...base, mode: 'copy', bytes, files, from: old };
+    }
+    const tmp = path.join(this.deps.dataDir, 'stima.sqlite');
+    try {
+      exportPersonal(this.deps.sqlite, tmp, { version: 0, machine: this.machineName, exportedAt: Date.now() });
+      const dataBytes = fs.statSync(tmp).size;
+      let fileBytes = 0;
+      let files = 0;
+      const size = this.deps.sqlite.prepare('select size from blobs where sha256 = ?');
+      for (const sha of personalBlobShas(this.deps.sqlite)) {
+        files++;
+        fileBytes += (size.get(sha) as { size: number } | undefined)?.size ?? 0;
+      }
+      return { ...base, mode: 'new', bytes: dataBytes + fileBytes, files, dataBytes };
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
   }
 
   // ─── Giro periodico ────────────────────────────────────────────────────────
@@ -513,9 +573,30 @@ function contentHash(sqlite: Database.Database, file: string): string {
   }
 }
 
+const resolveFolder = (raw: string | null | undefined): string | null =>
+  raw?.trim() ? path.resolve(raw.trim().replace(/^~(?=$|\/)/, os.homedir())) : null;
+
+const copied = (f: string) => f === LEASE_FILE || /^personale-\d+\.sqlite$/.test(f) || f === 'files';
+
+/** Byte e file che copyFolderContent copierebbe. */
+function folderContentSize(from: string, to: string): { bytes: number; files: number } {
+  let bytes = 0;
+  let files = 0;
+  const walk = (p: string) => {
+    const st = fs.statSync(p);
+    if (st.isDirectory()) for (const f of fs.readdirSync(p)) walk(path.join(p, f));
+    else {
+      bytes += st.size;
+      files++;
+    }
+  };
+  for (const f of fs.readdirSync(from)) if (copied(f) && !fs.existsSync(path.join(to, f))) walk(path.join(from, f));
+  return { bytes, files };
+}
+
 function copyFolderContent(from: string, to: string) {
   for (const f of fs.readdirSync(from)) {
-    if (f !== LEASE_FILE && !/^personale-\d+\.sqlite$/.test(f) && f !== 'files') continue;
+    if (!copied(f)) continue;
     const src = path.join(from, f);
     const dest = path.join(to, f);
     if (fs.existsSync(dest)) continue;

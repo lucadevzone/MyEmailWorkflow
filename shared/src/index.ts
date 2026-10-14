@@ -197,6 +197,30 @@ export interface SharingFolderInput {
   join?: boolean;
 }
 
+/** Cosa succede scegliendo una cartella condivisa (per la finestra di conferma). */
+export interface SharingFolderPreviewDto {
+  /** Percorso completo, come verrà usato. */
+  folder: string;
+  /** La cartella non esiste ancora e verrà creata. */
+  create: boolean;
+  /**
+   * join: contiene già i dati di un altro PC (quelli di questo PC verranno sostituiti);
+   * copy: si copia il contenuto della cartella attuale; new: si scrivono i dati di questo PC.
+   */
+  mode: 'join' | 'copy' | 'new';
+  /** Byte che verranno scritti nella cartella (per join: quelli del file dei dati già presente). */
+  bytes: number;
+  /** Quanti file (per new: i file caricati da te, oltre al file dei dati). */
+  files: number;
+  /** Per new: dimensione del solo file dei dati personali. */
+  dataBytes: number;
+  /** Per join: chi ha consegnato i dati e quale versione. */
+  holderName: string | null;
+  version: number | null;
+  /** Per copy: la cartella attuale (che non viene cancellata). */
+  from: string | null;
+}
+
 /** Account con o senza password su questo PC (sul secondo PC le password vanno reinserite). */
 export interface AccountCredentialDto {
   id: string;

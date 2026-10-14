@@ -15,6 +15,7 @@ import { AccountForm } from '../settings/SettingsPage.tsx';
 import { paths, SYSTEM_INBOX } from '../shell/paths.ts';
 import { useSharingStatus } from '../shell/Sharing.tsx';
 import { useToast } from '../ui/toast.tsx';
+import { FolderField } from '../settings/SharedFolder.tsx';
 
 const STEPS = ['Benvenuto', 'Account', 'Progetti', 'Pronto'] as const;
 const JOIN_STEPS = ['Benvenuto', 'Cartella condivisa', 'Password', 'Pronto'] as const;
@@ -298,20 +299,10 @@ function JoinFolder({ onBack, onNext }: { onBack: () => void; onNext: () => void
           <span className="pm-muted">Nome di questo PC (lo vedrai sull'altro)</span>
           <input className="pm-input" value={name ?? st.machineName} onChange={(e) => setName(e.target.value)} disabled={connected} />
         </label>
-        <label className="pm-field">
+        <div className="pm-field">
           <span className="pm-muted">Cartella condivisa</span>
-          <input className="pm-input" placeholder="…/Google Drive/Il mio Drive/MyEmailWorkflow" value={target} onChange={(e) => setFolder(e.target.value)} disabled={connected} />
-        </label>
-        {!connected && suggested.length > 0 && (
-          <div className="pm-row__sub">
-            Google Drive su questo Mac:{' '}
-            {suggested.map((f) => (
-              <button key={f} type="button" className="pm-linkbtn" onClick={() => setFolder(f)}>
-                {f.replace(/^.*\/CloudStorage\//, '')}
-              </button>
-            ))}
-          </div>
-        )}
+          <FolderField value={target} onChange={setFolder} disabled={connected} />
+        </div>
         {!connected && suggested.length === 0 && (
           <p className="pm-muted">Non trovo Google Drive per desktop su questo Mac: installalo e accedi con lo stesso account dell'altro PC, oppure scrivi il percorso della cartella.</p>
         )}
